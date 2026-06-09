@@ -458,10 +458,11 @@ export default function Sales() {
     if (!barcode.trim()) return;
     try {
       // Call the barcode lookup directly via fetch since useLookupBarcode is a query
-      const res = await fetch(`/api/sales/lookup-barcode?barcode=${encodeURIComponent(barcode.trim())}`);
+      const authHeaders = { "Authorization": `Bearer ${localStorage.getItem("gym_token") ?? ""}` };
+      const res = await fetch(`/api/sales/lookup-barcode?barcode=${encodeURIComponent(barcode.trim())}`, { headers: authHeaders });
       if (!res.ok) {
         toast({ title: t("sales.toast.barcodeNotFound"), variant: "destructive" });
-        await fetch(`/api/activity-logs`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "barcode_not_found", entity: "product", details: { barcode } }) }).catch(() => null);
+        await fetch(`/api/activity-logs`, { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders }, body: JSON.stringify({ action: "barcode_not_found", entity: "product", details: { barcode } }) }).catch(() => null);
         return;
       }
       const product = await res.json() as {
@@ -526,7 +527,7 @@ export default function Sales() {
 
   const searchProducts = useCallback(async (q: string) => {
     if (!q.trim()) { setSearchResults([]); return; }
-    const res = await fetch(`/api/stock?search=${encodeURIComponent(q)}&limit=10`).catch(() => null);
+    const res = await fetch(`/api/stock?search=${encodeURIComponent(q)}&limit=10`, { headers: { "Authorization": `Bearer ${localStorage.getItem("gym_token") ?? ""}` } }).catch(() => null);
     if (!res?.ok) return;
     const data = await res.json() as { items: Array<{ id: number; name: string; currency: string; sellingPrice: number; costPrice: number; quantity: number; status: string }> };
     setSearchResults(data.items.filter((p) => p.status === "active" && p.quantity > 0));
