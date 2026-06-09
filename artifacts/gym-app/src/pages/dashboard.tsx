@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 function fmtMoney(n: number) {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  return `$${n.toFixed(2)}`;
+  return n % 1 === 0 ? `$${n}` : `$${n.toFixed(2)}`;
 }
 
 function TrendPill({ pct }: { pct: number }) {

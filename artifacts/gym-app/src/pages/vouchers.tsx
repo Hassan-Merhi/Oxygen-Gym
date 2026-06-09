@@ -3,6 +3,7 @@ import { useI18n } from "@/lib/i18n";
 import { useGetMe } from "@/hooks/use-me";
 import {
   useListVouchers,
+  useListMembers,
   useCreateVoucher,
   useDeleteVoucher,
   useGetVoucher,
@@ -63,6 +64,7 @@ type VoucherForm = {
   paidTo: string;
   receivedFrom: string;
   linkedEntityName: string;
+  linkedEntityId: number | null;
   amount: string;
   currency: string;
   exchangeRate: string;
@@ -77,6 +79,7 @@ const emptyForm = (): VoucherForm => ({
   paidTo: "",
   receivedFrom: "",
   linkedEntityName: "",
+  linkedEntityId: null,
   amount: "",
   currency: "USD",
   exchangeRate: "1",
@@ -84,6 +87,9 @@ const emptyForm = (): VoucherForm => ({
   description: "",
   account: "cash",
 });
+
+const CASH_ACCOUNTS = ["Cash", "Bank", "Mobile Money", "Other"] as const;
+const EXPENSE_ACCOUNTS = ["Utilities", "Rent", "Salaries", "Supplies", "Equipment", "Marketing", "Maintenance", "Other"] as const;
 
 export default function Vouchers() {
   const { t } = useI18n();
@@ -132,6 +138,9 @@ export default function Vouchers() {
 
   const canManage = me?.role === "admin" || me?.permissions?.viewAccounting;
 
+  const membersQuery = useListMembers({ page: 1, limit: 200, status: "active" });
+  const membersList = membersQuery.data?.items ?? [];
+
   function handleSearchChange(v: string) {
     setSearch(v);
     clearTimeout((window as unknown as Record<string, ReturnType<typeof setTimeout>>)._vchSearchTimer);
@@ -147,6 +156,8 @@ export default function Vouchers() {
       voucherDate: form.voucherDate || undefined,
       paidTo: form.paidTo || undefined,
       receivedFrom: form.receivedFrom || undefined,
+      linkedEntity: form.linkedEntityId ? "member" : undefined,
+      linkedEntityId: form.linkedEntityId ?? undefined,
       linkedEntityName: form.linkedEntityName || undefined,
       amount: parseFloat(form.amount) || 0,
       currency: form.currency as "USD" | "CDF",
@@ -219,9 +230,11 @@ export default function Vouchers() {
     }, 800);
   }
 
-  function fmt(n: number | null | undefined, cur?: string) {
+  function fmt(n: number | null | undefined) {
     if (n === null || n === undefined) return "—";
-    return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (cur ? ` ${cur}` : "");
+    return n % 1 === 0
+      ? `$${n.toLocaleString()}`
+      : `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
   function typeBadge(type: string, direction: string) {
@@ -287,15 +300,13 @@ export default function Vouchers() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("vch.col.number")}</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("vch.col.date")}</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("vch.col.type")}</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("vch.col.paidTo")}</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground">{t("vch.col.amount")}</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">{t("vch.col.description")}</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">{t("vch.col.by")}</th>
-                {canManage && <th className="px-4 py-3" />}
+              <tr className="border-b border-border bg-muted/30">
+                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("vch.col.date")}</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("vch.col.type")}</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("vch.col.paidTo")}</th>
+                <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("vch.col.amount")}</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground hidden md:table-cell">{t("vch.col.description")}</th>
+                {canManage && <th className="px-5 py-3.5" />}
               </tr>
             </thead>
             <tbody>
@@ -309,23 +320,20 @@ export default function Vouchers() {
                   </td>
                 </tr>
               ) : items.map((item) => (
-                <tr key={item.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{item.voucherNumber ?? "—"}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                <tr key={item.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors group">
+                  <td className="px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
                     {new Date(item.voucherDate).toLocaleDateString()}
                   </td>
-                  <td className="px-4 py-3">{typeBadge(item.voucherType, item.direction)}</td>
-                  <td className="px-4 py-3 text-sm">
+                  <td className="px-5 py-3.5">{typeBadge(item.voucherType, item.direction)}</td>
+                  <td className="px-5 py-3.5 text-sm font-medium">
                     {item.paidTo ?? item.receivedFrom ?? item.linkedEntityName ?? "—"}
                   </td>
-                  <td className="px-4 py-3 text-right font-semibold">
-                    {fmt(item.amount)} <span className="text-xs font-normal text-muted-foreground">{item.currency}</span>
+                  <td className="px-5 py-3.5 text-right font-semibold tabular-nums">
+                    {fmt(item.amount)}
+                    {item.currency === "CDF" && <span className="text-xs font-normal text-muted-foreground ml-1">FC</span>}
                   </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell max-w-[200px] truncate">
+                  <td className="px-5 py-3.5 text-sm text-muted-foreground hidden md:table-cell max-w-[200px] truncate">
                     {item.description}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground hidden lg:table-cell">
-                    {item.createdBy ?? "—"}
                   </td>
                   {canManage && (
                     <td className="px-4 py-3">
@@ -427,15 +435,70 @@ export default function Vouchers() {
               </div>
             </div>
 
+            {/* Cash Account */}
+            <div className="space-y-1.5">
+              <Label>Cash Account</Label>
+              <Select value={form.account} onValueChange={(v) => setForm({ ...form, account: v })}>
+                <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
+                <SelectContent>
+                  {CASH_ACCOUNTS.map((a) => (
+                    <SelectItem key={a} value={a.toLowerCase().replace(/ /g, "_")}>{a}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Received From / Paid To */}
             {isInVoucher ? (
               <div className="space-y-1.5">
                 <Label>{t("vch.form.receivedFrom")}</Label>
-                <Input value={form.receivedFrom} onChange={(e) => setForm({ ...form, receivedFrom: e.target.value })} />
+                <Select
+                  value={form.linkedEntityId ? String(form.linkedEntityId) : "__manual__"}
+                  onValueChange={(v) => {
+                    if (v === "__manual__") {
+                      setForm({ ...form, linkedEntityId: null, receivedFrom: "", linkedEntityName: "" });
+                    } else {
+                      const m = membersList.find((m) => m.id === Number(v));
+                      setForm({ ...form, linkedEntityId: Number(v), receivedFrom: m?.name ?? "", linkedEntityName: m?.name ?? "" });
+                    }
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select member or enter manually" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__manual__">— Enter manually —</SelectItem>
+                    {membersList.map((m) => (
+                      <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!form.linkedEntityId && (
+                  <Input
+                    className="mt-1"
+                    placeholder="Name"
+                    value={form.receivedFrom}
+                    onChange={(e) => setForm({ ...form, receivedFrom: e.target.value })}
+                  />
+                )}
               </div>
             ) : (
               <div className="space-y-1.5">
                 <Label>{t("vch.form.paidTo")}</Label>
                 <Input value={form.paidTo} onChange={(e) => setForm({ ...form, paidTo: e.target.value })} />
+              </div>
+            )}
+
+            {/* Expense Account (for payment types) */}
+            {!isInVoucher && (
+              <div className="space-y-1.5">
+                <Label>Expense Account</Label>
+                <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select expense account" /></SelectTrigger>
+                  <SelectContent>
+                    {EXPENSE_ACCOUNTS.map((a) => (
+                      <SelectItem key={a} value={a.toLowerCase()}>{a}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
@@ -455,22 +518,11 @@ export default function Vouchers() {
                 <Select value={form.currency} onValueChange={(v) => setForm({ ...form, currency: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="USD">USD</SelectItem>
-                    <SelectItem value="CDF">CDF</SelectItem>
+                    <SelectItem value="USD">$ USD</SelectItem>
+                    <SelectItem value="CDF">FC CDF</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>{t("vch.form.rate")}</Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.exchangeRate}
-                onChange={(e) => setForm({ ...form, exchangeRate: e.target.value })}
-              />
             </div>
 
             <div className="space-y-1.5">
@@ -480,15 +532,6 @@ export default function Vouchers() {
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 rows={2}
                 required
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>{t("vch.form.category")}</Label>
-              <Input
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-                placeholder="e.g. utilities, rent, supplies..."
               />
             </div>
           </div>
