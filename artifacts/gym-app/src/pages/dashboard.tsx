@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import { useGetMe, useGetDashboardKpis } from "@workspace/api-client-react";
+import { useGetMe, useGetDashboardKpis, useListNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import {
   Users, CreditCard, Receipt, CalendarCheck, Clock,
   PackageX, TrendingUp, TrendingDown, ChevronDown, ChevronUp,
-  Lock, Activity,
+  Lock, Activity, Bell, AlertCircle, Package, DollarSign, UserX, Snowflake, Check, CheckCheck,
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -125,6 +126,86 @@ function ExpandableCard({
 }
 
 const CHART_COLORS = { revenue: "#6366f1", expense: "#f43f5e", growth: "#10b981" };
+
+const NTF_ICONS: Record<string, React.ElementType> = {
+  member_expiring: AlertCircle, stock_low: Package, stock_out: Package,
+  payroll_due: DollarSign, member_frozen: Snowflake, member_inactive: UserX,
+};
+const NTF_DOT: Record<string, string> = { high: "bg-red-500", medium: "bg-amber-400", low: "bg-slate-400" };
+
+function NotificationsWidget() {
+  const { t } = useI18n();
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useListNotifications({ read: "unread" } as any, {
+    query: { queryKey: ["listNotifications", "unread"], refetchInterval: 60000 }
+  });
+  const notifications = (data?.items ?? []).slice(0, 6);
+  const unreadCount = data?.unreadCount ?? 0;
+
+  const markRead = useMarkNotificationRead();
+  const markAllRead = useMarkAllNotificationsRead();
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["listNotifications"] });
+
+  const handleMarkRead = (key: string) => markRead.mutate({ key }, { onSuccess: invalidate });
+  const handleMarkAll = () => markAllRead.mutate(undefined, { onSuccess: invalidate });
+
+  return (
+    <Card className="border-border/60 shadow-sm">
+      <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
+        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+          <Bell className="w-4 h-4 text-blue-500" />
+          {t("dashboard.notificationsWidget")}
+          {unreadCount > 0 && (
+            <Badge className="bg-red-500 text-white text-xs px-1.5 py-0 border-0 ml-1">{unreadCount}</Badge>
+          )}
+        </CardTitle>
+        <div className="flex items-center gap-2">
+          {unreadCount > 0 && (
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleMarkAll}>
+              <CheckCheck className="w-3 h-3 mr-1" />
+              {t("notif.markAllRead")}
+            </Button>
+          )}
+          <a href="/notifications" className="text-xs text-primary hover:underline font-medium">
+            {t("dashboard.seeAllNotifications")}
+          </a>
+        </div>
+      </CardHeader>
+      <CardContent className="px-4 pb-4">
+        {isLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
+            <Bell className="w-5 h-5 opacity-30" />
+            <span className="text-sm">{t("notif.empty")}</span>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {notifications.map((n) => {
+              const Icon = NTF_ICONS[n.type] ?? Bell;
+              return (
+                <div key={n.key} className="flex items-center gap-3 py-2 border-b border-border/40 last:border-0">
+                  <div className={cn("w-2 h-2 rounded-full shrink-0", NTF_DOT[n.priority] ?? "bg-slate-400")} />
+                  <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs flex-1 text-foreground truncate">{n.message}</span>
+                  <button
+                    className="text-muted-foreground hover:text-green-500 shrink-0"
+                    onClick={() => handleMarkRead(n.key)}
+                    title={t("notif.markRead")}
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Dashboard() {
   const { t } = useI18n();
@@ -265,6 +346,9 @@ export default function Dashboard() {
           color="text-emerald-500"
         />
       </div>
+
+      {/* Notifications Widget */}
+      <NotificationsWidget />
 
       {/* Charts */}
       <div className="grid gap-6 lg:grid-cols-2">

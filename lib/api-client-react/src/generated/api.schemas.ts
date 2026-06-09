@@ -1057,6 +1057,21 @@ export interface PayrollListResponse {
   limit: number;
 }
 
+export interface AttendanceListItem {
+  id: number;
+  memberId?: number | null;
+  memberName: string;
+  checkedInAt: string;
+  planName?: string | null;
+}
+
+export interface AttendanceListResponse {
+  items: AttendanceListItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export interface AttendanceSummary {
   today: number;
   thisWeek: number;
@@ -1164,6 +1179,15 @@ limit?: number;
 dateFrom?: string;
 dateTo?: string;
 direction?: string;
+};
+
+export type ListAttendanceParams = {
+from?: string;
+to?: string;
+memberSearch?: string;
+planName?: string;
+page?: string;
+limit?: string;
 };
 
 export type GetAttendanceDailyParams = {

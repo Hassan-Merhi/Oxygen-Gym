@@ -549,6 +549,27 @@ const en: Translations = {
   "nav.attendance": "Attendance",
   "nav.notifications": "Notifications",
 
+  "members.profile.tabOverview": "Overview",
+  "members.profile.tabAttendance": "Attendance",
+  "members.profile.tabPayments": "Payments",
+  "members.profile.tabCheckins": "Check-ins",
+
+  "dashboard.notificationsWidget": "Recent Notifications",
+  "dashboard.seeAllNotifications": "See all notifications",
+
+  "att.filters": "Filters",
+  "att.dateFrom": "From",
+  "att.dateTo": "To",
+  "att.memberSearch": "Search Member",
+  "att.planFilter": "Plan",
+  "att.applyFilters": "Apply",
+  "att.clearFilters": "Clear",
+  "att.reportsTitle": "Attendance Reports",
+  "att.noResults": "No results found",
+  "att.plan": "Plan",
+  "att.calendarTitle": "Attendance Calendar (Last 30 Days)",
+  "att.monthlyHistory": "Monthly History",
+
   "att.title": "Attendance Analytics",
   "att.today": "Check-ins Today",
   "att.week": "This Week",
@@ -1135,6 +1156,27 @@ const fr: Translations = {
   "nav.attendance": "Présences",
   "nav.notifications": "Notifications",
 
+  "members.profile.tabOverview": "Aperçu",
+  "members.profile.tabAttendance": "Présences",
+  "members.profile.tabPayments": "Paiements",
+  "members.profile.tabCheckins": "Entrées",
+
+  "dashboard.notificationsWidget": "Notifications Récentes",
+  "dashboard.seeAllNotifications": "Voir toutes les notifications",
+
+  "att.filters": "Filtres",
+  "att.dateFrom": "Du",
+  "att.dateTo": "Au",
+  "att.memberSearch": "Rechercher Membre",
+  "att.planFilter": "Forfait",
+  "att.applyFilters": "Appliquer",
+  "att.clearFilters": "Réinitialiser",
+  "att.reportsTitle": "Rapports de Présence",
+  "att.noResults": "Aucun résultat trouvé",
+  "att.plan": "Forfait",
+  "att.calendarTitle": "Calendrier de Présence (30 Derniers Jours)",
+  "att.monthlyHistory": "Historique Mensuel",
+
   "att.title": "Analytiques des Présences",
   "att.today": "Présences Aujourd'hui",
   "att.week": "Cette Semaine",
@@ -1720,6 +1762,27 @@ const ar: Translations = {
 
   "nav.attendance": "الحضور",
   "nav.notifications": "الإشعارات",
+
+  "members.profile.tabOverview": "نظرة عامة",
+  "members.profile.tabAttendance": "الحضور",
+  "members.profile.tabPayments": "المدفوعات",
+  "members.profile.tabCheckins": "سجل الدخول",
+
+  "dashboard.notificationsWidget": "الإشعارات الأخيرة",
+  "dashboard.seeAllNotifications": "عرض كل الإشعارات",
+
+  "att.filters": "تصفية",
+  "att.dateFrom": "من",
+  "att.dateTo": "إلى",
+  "att.memberSearch": "البحث عن عضو",
+  "att.planFilter": "الخطة",
+  "att.applyFilters": "تطبيق",
+  "att.clearFilters": "مسح",
+  "att.reportsTitle": "تقارير الحضور",
+  "att.noResults": "لا توجد نتائج",
+  "att.plan": "الخطة",
+  "att.calendarTitle": "تقويم الحضور (آخر 30 يوماً)",
+  "att.monthlyHistory": "السجل الشهري",
 
   "att.title": "تحليلات الحضور",
   "att.today": "الحضور اليوم",

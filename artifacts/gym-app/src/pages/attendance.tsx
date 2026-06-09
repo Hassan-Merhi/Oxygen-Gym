@@ -8,16 +8,26 @@ import {
   useGetAttendanceTopMembers,
   useGetAttendanceToday,
   useGetAttendanceWeek,
+  useListAttendance,
+  useListAttendancePlans,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
   LineChart, Line, CartesianGrid, AreaChart, Area,
 } from "recharts";
 import {
   CalendarCheck, Users, TrendingUp, Activity, Clock,
-  Trophy,
+  Trophy, Filter, X, Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -237,6 +247,133 @@ export default function Attendance() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Attendance Reports (filtered) ── */}
+      <AttendanceReports />
     </div>
+  );
+}
+
+function AttendanceReports() {
+  const { t } = useI18n();
+  const today = new Date().toISOString().slice(0, 10);
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+
+  const [from, setFrom] = useState(thirtyDaysAgo);
+  const [to, setTo] = useState(today);
+  const [memberSearch, setMemberSearch] = useState("");
+  const [planName, setPlanName] = useState("");
+  const [page, setPage] = useState(1);
+
+  const [applied, setApplied] = useState({ from: thirtyDaysAgo, to: today, memberSearch: "", planName: "" });
+
+  const { data: plansData = [] } = useListAttendancePlans();
+  const { data: listData, isLoading } = useListAttendance(
+    { from: applied.from, to: applied.to, memberSearch: applied.memberSearch || undefined, planName: applied.planName || undefined, page: String(page), limit: "50" } as any,
+  );
+
+  const items = listData?.items ?? [];
+  const total = listData?.total ?? 0;
+  const totalPages = Math.ceil(total / 50);
+
+  const handleApply = () => { setPage(1); setApplied({ from, to, memberSearch, planName }); };
+  const handleClear = () => {
+    setFrom(thirtyDaysAgo); setTo(today); setMemberSearch(""); setPlanName("");
+    setPage(1); setApplied({ from: thirtyDaysAgo, to: today, memberSearch: "", planName: "" });
+  };
+
+  return (
+    <Card className="border-border/60 shadow-sm">
+      <CardHeader className="px-4 pt-4 pb-3 border-b border-border">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <Filter className="w-4 h-4 text-primary" />
+          {t("att.reportsTitle")}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 pt-4 pb-4 space-y-4">
+        {/* Filter bar */}
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1 min-w-[130px]">
+            <label className="text-xs text-muted-foreground">{t("att.dateFrom")}</label>
+            <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="h-8 text-sm" />
+          </div>
+          <div className="flex flex-col gap-1 min-w-[130px]">
+            <label className="text-xs text-muted-foreground">{t("att.dateTo")}</label>
+            <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="h-8 text-sm" />
+          </div>
+          <div className="flex flex-col gap-1 min-w-[160px]">
+            <label className="text-xs text-muted-foreground">{t("att.memberSearch")}</label>
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Name…" className="h-8 text-sm pl-7" />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1 min-w-[150px]">
+            <label className="text-xs text-muted-foreground">{t("att.planFilter")}</label>
+            <Select value={planName || "_all"} onValueChange={v => setPlanName(v === "_all" ? "" : v)}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="All plans" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_all">All plans</SelectItem>
+                {(plansData as string[]).map((p) => (
+                  <SelectItem key={p} value={p}>{p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex gap-2 pb-0.5">
+            <Button size="sm" className="h-8" onClick={handleApply}>{t("att.applyFilters")}</Button>
+            <Button size="sm" variant="ghost" className="h-8" onClick={handleClear}>
+              <X className="w-3.5 h-3.5 mr-1" />{t("att.clearFilters")}
+            </Button>
+          </div>
+        </div>
+
+        {/* Results */}
+        {isLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+          </div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-10 text-muted-foreground text-sm">{t("att.noResults")}</div>
+        ) : (
+          <>
+            <div className="text-xs text-muted-foreground">{total} result{total !== 1 ? "s" : ""}</div>
+            <div className="rounded-md border border-border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="text-xs">{t("members.table.name")}</TableHead>
+                    <TableHead className="text-xs">{t("att.plan")}</TableHead>
+                    <TableHead className="text-xs">Date / Time</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(items as any[]).map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="text-sm font-medium">{r.memberName}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{r.planName ?? "—"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(r.checkedInAt).toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="h-7" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Prev</Button>
+                  <Button size="sm" variant="outline" className="h-7" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next</Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

@@ -26,6 +26,7 @@ import type {
   AttendanceCheckIn,
   AttendanceDailyEntry,
   AttendanceHourlyEntry,
+  AttendanceListResponse,
   AttendanceMonthlyEntry,
   AttendanceSummary,
   AttendanceTopMember,
@@ -49,6 +50,7 @@ import type {
   LedgerBalance,
   LedgerPage,
   ListActivityLogsParams,
+  ListAttendanceParams,
   ListExpenseEntriesParams,
   ListLedgerParams,
   ListMembersParams,
@@ -3093,6 +3095,167 @@ export function useGetLedgerBalance<TData = Awaited<ReturnType<typeof getLedgerB
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetLedgerBalanceQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListAttendanceUrl = (params?: ListAttendanceParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/attendance/list?${stringifiedParams}` : `/api/attendance/list`
+}
+
+/**
+ * @summary Get filtered attendance list
+ */
+export const listAttendance = async (params?: ListAttendanceParams, options?: RequestInit): Promise<AttendanceListResponse> => {
+
+  return customFetch<AttendanceListResponse>(getListAttendanceUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAttendanceQueryKey = (params?: ListAttendanceParams,) => {
+    return [
+    `/api/attendance/list`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAttendanceQueryOptions = <TData = Awaited<ReturnType<typeof listAttendance>>, TError = ErrorType<unknown>>(params?: ListAttendanceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAttendance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAttendanceQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAttendance>>> = ({ signal }) => listAttendance(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAttendance>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAttendanceQueryResult = NonNullable<Awaited<ReturnType<typeof listAttendance>>>
+export type ListAttendanceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get filtered attendance list
+ */
+
+export function useListAttendance<TData = Awaited<ReturnType<typeof listAttendance>>, TError = ErrorType<unknown>>(
+ params?: ListAttendanceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAttendance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAttendanceQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListAttendancePlansUrl = () => {
+
+
+
+
+  return `/api/attendance/plans`
+}
+
+/**
+ * @summary Get distinct plan names present in attendance data
+ */
+export const listAttendancePlans = async ( options?: RequestInit): Promise<string[]> => {
+
+  return customFetch<string[]>(getListAttendancePlansUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAttendancePlansQueryKey = () => {
+    return [
+    `/api/attendance/plans`
+    ] as const;
+    }
+
+
+export const getListAttendancePlansQueryOptions = <TData = Awaited<ReturnType<typeof listAttendancePlans>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAttendancePlans>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAttendancePlansQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAttendancePlans>>> = ({ signal }) => listAttendancePlans({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAttendancePlans>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAttendancePlansQueryResult = NonNullable<Awaited<ReturnType<typeof listAttendancePlans>>>
+export type ListAttendancePlansQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get distinct plan names present in attendance data
+ */
+
+export function useListAttendancePlans<TData = Awaited<ReturnType<typeof listAttendancePlans>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAttendancePlans>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAttendancePlansQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

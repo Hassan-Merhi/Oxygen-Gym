@@ -1291,6 +1291,39 @@ export const GetLedgerBalanceResponse = zod.object({
 
 
 /**
+ * @summary Get filtered attendance list
+ */
+export const ListAttendanceQueryParams = zod.object({
+  "from": zod.coerce.string().optional(),
+  "to": zod.coerce.string().optional(),
+  "memberSearch": zod.coerce.string().optional(),
+  "planName": zod.coerce.string().optional(),
+  "page": zod.coerce.string().optional(),
+  "limit": zod.coerce.string().optional()
+})
+
+export const ListAttendanceResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "memberId": zod.number().nullish(),
+  "memberName": zod.string(),
+  "checkedInAt": zod.string(),
+  "planName": zod.string().nullish()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Get distinct plan names present in attendance data
+ */
+export const ListAttendancePlansResponseItem = zod.string()
+export const ListAttendancePlansResponse = zod.array(ListAttendancePlansResponseItem)
+
+
+/**
  * @summary Get attendance summary cards
  */
 export const GetAttendanceSummaryResponse = zod.object({

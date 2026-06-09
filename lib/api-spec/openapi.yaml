@@ -827,6 +827,52 @@ paths:
               schema:
                 $ref: "#/components/schemas/LedgerBalance"
 
+  /attendance/list:
+    get:
+      operationId: listAttendance
+      summary: Get filtered attendance list
+      tags: [checkins]
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string }
+        - name: to
+          in: query
+          schema: { type: string }
+        - name: memberSearch
+          in: query
+          schema: { type: string }
+        - name: planName
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Filtered attendance list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceListResponse"
+
+  /attendance/plans:
+    get:
+      operationId: listAttendancePlans
+      summary: Get distinct plan names present in attendance data
+      tags: [checkins]
+      responses:
+        "200":
+          description: List of plan names
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: string }
+
   /attendance/summary:
     get:
       operationId: getAttendanceSummary
@@ -2786,6 +2832,28 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PayrollRecord"
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+      required: [items, total, page, limit]
+
+    AttendanceListItem:
+      type: object
+      properties:
+        id: { type: integer }
+        memberId: { type: integer, nullable: true }
+        memberName: { type: string }
+        checkedInAt: { type: string }
+        planName: { type: string, nullable: true }
+      required: [id, memberName, checkedInAt]
+
+    AttendanceListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceListItem"
         total: { type: integer }
         page: { type: integer }
         limit: { type: integer }

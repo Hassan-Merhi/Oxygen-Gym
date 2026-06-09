@@ -200,6 +200,58 @@ router.get("/week", async (_req: Request, res: Response) => {
   res.json(rows);
 });
 
+// ── Filtered attendance list ──────────────────────────────────────────────────
+router.get("/list", async (req: Request, res: Response) => {
+  const q = req.query as Record<string, string>;
+  const pageNum = Math.max(1, parseInt(q.page ?? "1"));
+  const limitNum = Math.min(200, Math.max(1, parseInt(q.limit ?? "50")));
+  const offset = (pageNum - 1) * limitNum;
+
+  const fromDate = q.from ? new Date(q.from) : daysAgo(30);
+  const toDate = q.to ? (() => { const d = new Date(q.to!); d.setHours(23, 59, 59, 999); return d; })() : endOfDay(new Date());
+
+  const memberSearch = q.memberSearch?.trim() || null;
+  const planName = q.planName?.trim() || null;
+
+  const memberFilter = memberSearch ? sql`AND ci.member_name ILIKE ${"%" + memberSearch + "%"}` : sql``;
+  const planFilter = planName ? sql`AND m.plan_name = ${planName}` : sql``;
+
+  const [rows, countResult] = await Promise.all([
+    db.execute(sql`
+      SELECT ci.id, ci.member_id AS "memberId", ci.member_name AS "memberName",
+             ci.checked_in_at AS "checkedInAt", m.plan_name AS "planName"
+      FROM check_ins ci
+      LEFT JOIN members m ON ci.member_id = m.id
+      WHERE ci.checked_in_at >= ${fromDate} AND ci.checked_in_at <= ${toDate}
+      ${memberFilter} ${planFilter}
+      ORDER BY ci.checked_in_at DESC
+      LIMIT ${limitNum} OFFSET ${offset}
+    `),
+    db.execute(sql`
+      SELECT COUNT(*) AS cnt
+      FROM check_ins ci
+      LEFT JOIN members m ON ci.member_id = m.id
+      WHERE ci.checked_in_at >= ${fromDate} AND ci.checked_in_at <= ${toDate}
+      ${memberFilter} ${planFilter}
+    `),
+  ]);
+
+  const total = Number((countResult.rows as any[])[0]?.cnt ?? 0);
+  res.json({ items: rows.rows as any[], total, page: pageNum, limit: limitNum });
+});
+
+// ── Available plan names (for filter dropdown) ────────────────────────────────
+router.get("/plans", async (_req: Request, res: Response) => {
+  const rows = await db.execute(sql`
+    SELECT DISTINCT m.plan_name AS "planName"
+    FROM check_ins ci
+    JOIN members m ON ci.member_id = m.id
+    WHERE m.plan_name IS NOT NULL
+    ORDER BY m.plan_name
+  `);
+  res.json((rows.rows as any[]).map((r: any) => r.planName));
+});
+
 // ── Member attendance stats ───────────────────────────────────────────────────
 router.get("/member/:id", async (req: Request, res: Response) => {
   const memberId = parseInt(req.params.id as string);
