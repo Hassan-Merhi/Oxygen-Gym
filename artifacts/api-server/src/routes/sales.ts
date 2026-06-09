@@ -188,60 +188,64 @@ router.post("/", async (req: Request, res: Response) => {
   const totalProfitUsd = toUsd(totalProfit);
 
   const saleNumber = await getNextNumber("sale");
-  const paymentNumber = await getNextNumber("payment");
+  const paymentNumber = await getNextNumber("PAY");
   const creator = callerName(req);
-
-  // 1. Create sale record
-  const [sale] = await db.insert(salesTable).values({
-    saleNumber,
-    items: saleItems,
-    totalAmount,
-    totalDiscount,
-    totalCost,
-    totalProfit,
-    totalAmountUsd,
-    totalCostUsd,
-    totalProfitUsd,
-    currency,
-    exchangeRate: rate,
-    paymentAmount,
-    changeDue,
-    notes: notes ?? null,
-    createdBy: creator,
-    status: "completed",
-  }).returning();
-
-  // 2. Deduct stock
-  for (const item of items) {
-    const product = productMap.get(item.productId)!;
-    await db
-      .update(productsTable)
-      .set({ quantity: product.quantity - item.quantity })
-      .where(eq(productsTable.id, item.productId));
-  }
-
-  // 3. Create payment record
   const amountCdf = currency === "CDF" ? totalAmount : totalAmount * rate;
-  const [payment] = await db.insert(paymentsTable).values({
-    paymentNumber,
-    direction: "in",
-    category: "product_sale",
-    type: "product_sale",
-    amount: totalAmountUsd,
-    currency: "USD",
-    exchangeRate: rate,
-    amountUsd: totalAmountUsd,
-    amountCdf,
-    account: "cash",
-    notes: `Sale ${saleNumber}`,
-    createdBy: creator,
-    status: "completed",
-  }).returning();
 
-  // 4. Link payment to sale
-  await db.update(salesTable).set({ paymentId: payment.id }).where(eq(salesTable.id, sale.id));
+  const { sale, payment } = await db.transaction(async (tx) => {
+    // 1. Create sale record
+    const [sale] = await tx.insert(salesTable).values({
+      saleNumber,
+      items: saleItems,
+      totalAmount,
+      totalDiscount,
+      totalCost,
+      totalProfit,
+      totalAmountUsd,
+      totalCostUsd,
+      totalProfitUsd,
+      currency,
+      exchangeRate: rate,
+      paymentAmount,
+      changeDue,
+      notes: notes ?? null,
+      createdBy: creator,
+      status: "completed",
+    }).returning();
 
-  // 5. Cash ledger entry
+    // 2. Deduct stock
+    for (const item of items) {
+      const product = productMap.get(item.productId)!;
+      await tx
+        .update(productsTable)
+        .set({ quantity: product.quantity - item.quantity })
+        .where(eq(productsTable.id, item.productId));
+    }
+
+    // 3. Create payment record
+    const [payment] = await tx.insert(paymentsTable).values({
+      paymentNumber,
+      direction: "in",
+      category: "product_sale",
+      type: "product_sale",
+      amount: totalAmountUsd,
+      currency: "USD",
+      exchangeRate: rate,
+      amountUsd: totalAmountUsd,
+      amountCdf,
+      account: "cash",
+      notes: `Sale ${saleNumber}`,
+      createdBy: creator,
+      status: "completed",
+    }).returning();
+
+    // 4. Link payment to sale
+    await tx.update(salesTable).set({ paymentId: payment.id }).where(eq(salesTable.id, sale.id));
+
+    return { sale, payment };
+  });
+
+  // 5. Cash ledger entry (outside transaction — non-critical)
   await appendLedgerEntry({
     sourceType: "product_sale",
     sourceNumber: saleNumber,
