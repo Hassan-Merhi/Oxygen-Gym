@@ -22,6 +22,7 @@ import type {
 import type {
   ActivityLog,
   CurrentUser,
+  DashboardKpis,
   HealthStatus,
   ListActivityLogsParams,
   PermissionsUpdate,
@@ -784,6 +785,83 @@ export const useUpdateSettings = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getUpdateSettingsMutationOptions(options));
     }
+
+export const getGetDashboardKpisUrl = () => {
+
+
+
+
+  return `/api/dashboard/kpis`
+}
+
+/**
+ * @summary Get all dashboard KPI data and charts
+ */
+export const getDashboardKpis = async ( options?: RequestInit): Promise<DashboardKpis> => {
+
+  return customFetch<DashboardKpis>(getGetDashboardKpisUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDashboardKpisQueryKey = () => {
+    return [
+    `/api/dashboard/kpis`
+    ] as const;
+    }
+
+
+export const getGetDashboardKpisQueryOptions = <TData = Awaited<ReturnType<typeof getDashboardKpis>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardKpis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDashboardKpisQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboardKpis>>> = ({ signal }) => getDashboardKpis({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDashboardKpis>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDashboardKpisQueryResult = NonNullable<Awaited<ReturnType<typeof getDashboardKpis>>>
+export type GetDashboardKpisQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get all dashboard KPI data and charts
+ */
+
+export function useGetDashboardKpis<TData = Awaited<ReturnType<typeof getDashboardKpis>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardKpis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDashboardKpisQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getListActivityLogsUrl = (params?: ListActivityLogsParams,) => {
   const normalizedParams = new URLSearchParams();

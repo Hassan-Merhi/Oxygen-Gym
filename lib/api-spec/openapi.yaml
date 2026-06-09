@@ -18,6 +18,8 @@ tags:
     description: Gym settings
   - name: activity
     description: Activity logs
+  - name: dashboard
+    description: Dashboard KPIs and charts
 paths:
   /healthz:
     get:
@@ -190,6 +192,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Settings"
+
+  /dashboard/kpis:
+    get:
+      operationId: getDashboardKpis
+      tags: [dashboard]
+      summary: Get all dashboard KPI data and charts
+      responses:
+        "200":
+          description: Dashboard KPI data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardKpis"
 
   /activity-logs:
     get:
@@ -459,3 +474,131 @@ components:
         - userName
         - action
         - createdAt
+
+    MonthlyMetric:
+      type: object
+      properties:
+        current: { type: number }
+        previous: { type: number }
+        changePercent: { type: number }
+      required: [current, previous, changePercent]
+
+    ChartPoint:
+      type: object
+      properties:
+        month: { type: string }
+        amount: { type: number }
+      required: [month, amount]
+
+    GrowthPoint:
+      type: object
+      properties:
+        month: { type: string }
+        count: { type: integer }
+      required: [month, count]
+
+    HourlyPoint:
+      type: object
+      properties:
+        hour: { type: integer }
+        count: { type: integer }
+      required: [hour, count]
+
+    ExpiringMember:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        planName:
+          type: ["string", "null"]
+        expiryDate:
+          type: ["string", "null"]
+          format: date-time
+        daysRemaining: { type: integer }
+      required: [id, name, daysRemaining]
+
+    LowStockProduct:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        quantity: { type: integer }
+        alertQuantity: { type: integer }
+      required: [id, name, quantity, alertQuantity]
+
+    DashboardKpis:
+      type: object
+      properties:
+        activeMembers:
+          type: object
+          properties:
+            count: { type: integer }
+          required: [count]
+        monthlyRevenue:
+          allOf:
+            - $ref: "#/components/schemas/MonthlyMetric"
+            - type: object
+              properties:
+                currency: { type: string }
+              required: [currency]
+        monthlyExpenses:
+          $ref: "#/components/schemas/MonthlyMetric"
+        todayCheckins:
+          type: object
+          properties:
+            count: { type: integer }
+            hourly:
+              type: array
+              items:
+                $ref: "#/components/schemas/HourlyPoint"
+          required: [count, hourly]
+        expiringSoon:
+          type: object
+          properties:
+            in7Days:
+              type: array
+              items:
+                $ref: "#/components/schemas/ExpiringMember"
+            in14Days:
+              type: array
+              items:
+                $ref: "#/components/schemas/ExpiringMember"
+            in30Days:
+              type: array
+              items:
+                $ref: "#/components/schemas/ExpiringMember"
+          required: [in7Days, in14Days, in30Days]
+        lowStock:
+          type: array
+          items:
+            $ref: "#/components/schemas/LowStockProduct"
+        profit:
+          $ref: "#/components/schemas/MonthlyMetric"
+        revenueChart:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChartPoint"
+        expenseChart:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChartPoint"
+        membershipGrowth:
+          type: array
+          items:
+            $ref: "#/components/schemas/GrowthPoint"
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityLog"
+      required:
+        - activeMembers
+        - monthlyRevenue
+        - monthlyExpenses
+        - todayCheckins
+        - expiringSoon
+        - lowStock
+        - profit
+        - revenueChart
+        - expenseChart
+        - membershipGrowth
+        - recentActivity

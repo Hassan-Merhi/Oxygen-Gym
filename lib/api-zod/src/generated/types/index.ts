@@ -7,10 +7,21 @@
  */
 
 export * from './activityLog';
+export * from './chartPoint';
 export * from './currentUser';
 export * from './currentUserRole';
+export * from './dashboardKpis';
+export * from './dashboardKpisActiveMembers';
+export * from './dashboardKpisExpiringSoon';
+export * from './dashboardKpisMonthlyRevenue';
+export * from './dashboardKpisTodayCheckins';
+export * from './expiringMember';
+export * from './growthPoint';
 export * from './healthStatus';
+export * from './hourlyPoint';
 export * from './listActivityLogsParams';
+export * from './lowStockProduct';
+export * from './monthlyMetric';
 export * from './pagePermissions';
 export * from './permissionsUpdate';
 export * from './settings';
