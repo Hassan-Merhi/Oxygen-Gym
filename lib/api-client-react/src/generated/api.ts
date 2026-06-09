@@ -23,9 +23,11 @@ import type {
   AccountSummary,
   ActivityLog,
   AddStockPurchaseBody,
+  BarcodeProduct,
   CheckInBody,
   CheckInRecord,
   CheckInResult,
+  CompleteSaleBody,
   CreateProductBody,
   CurrentUser,
   DashboardKpis,
@@ -42,7 +44,9 @@ import type {
   ListPaymentsParams,
   ListProductsParams,
   ListSalesEntriesParams,
+  ListSalesParams,
   ListVouchersParams,
+  LookupBarcodeParams,
   Member,
   MemberInput,
   MemberPayment,
@@ -61,6 +65,8 @@ import type {
   ProductsPage,
   ProfitLoss,
   RenewBody,
+  SaleListResponse,
+  SaleRecord,
   SalesPage,
   Settings,
   SettingsUpdate,
@@ -70,6 +76,7 @@ import type {
   User,
   UserInput,
   UserUpdate,
+  VoidSaleBody,
   VoucherInput,
   VoucherRecord,
   VouchersPage
@@ -3073,6 +3080,394 @@ export function useGetLedgerBalance<TData = Awaited<ReturnType<typeof getLedgerB
 
 
 
+
+export const getLookupBarcodeUrl = (params: LookupBarcodeParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/sales/lookup-barcode?${stringifiedParams}` : `/api/sales/lookup-barcode`
+}
+
+/**
+ * @summary Lookup a product by barcode
+ */
+export const lookupBarcode = async (params: LookupBarcodeParams, options?: RequestInit): Promise<BarcodeProduct> => {
+
+  return customFetch<BarcodeProduct>(getLookupBarcodeUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getLookupBarcodeQueryKey = (params?: LookupBarcodeParams,) => {
+    return [
+    `/api/sales/lookup-barcode`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getLookupBarcodeQueryOptions = <TData = Awaited<ReturnType<typeof lookupBarcode>>, TError = ErrorType<void>>(params: LookupBarcodeParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof lookupBarcode>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getLookupBarcodeQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof lookupBarcode>>> = ({ signal }) => lookupBarcode(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof lookupBarcode>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type LookupBarcodeQueryResult = NonNullable<Awaited<ReturnType<typeof lookupBarcode>>>
+export type LookupBarcodeQueryError = ErrorType<void>
+
+
+/**
+ * @summary Lookup a product by barcode
+ */
+
+export function useLookupBarcode<TData = Awaited<ReturnType<typeof lookupBarcode>>, TError = ErrorType<void>>(
+ params: LookupBarcodeParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof lookupBarcode>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getLookupBarcodeQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListSalesUrl = (params?: ListSalesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/sales?${stringifiedParams}` : `/api/sales`
+}
+
+/**
+ * @summary List sales with pagination and filters
+ */
+export const listSales = async (params?: ListSalesParams, options?: RequestInit): Promise<SaleListResponse> => {
+
+  return customFetch<SaleListResponse>(getListSalesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSalesQueryKey = (params?: ListSalesParams,) => {
+    return [
+    `/api/sales`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListSalesQueryOptions = <TData = Awaited<ReturnType<typeof listSales>>, TError = ErrorType<unknown>>(params?: ListSalesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSales>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSalesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSales>>> = ({ signal }) => listSales(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSales>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSalesQueryResult = NonNullable<Awaited<ReturnType<typeof listSales>>>
+export type ListSalesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List sales with pagination and filters
+ */
+
+export function useListSales<TData = Awaited<ReturnType<typeof listSales>>, TError = ErrorType<unknown>>(
+ params?: ListSalesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSales>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSalesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCompleteSaleUrl = () => {
+
+
+
+
+  return `/api/sales`
+}
+
+/**
+ * @summary Complete a sale (POS checkout)
+ */
+export const completeSale = async (completeSaleBody: CompleteSaleBody, options?: RequestInit): Promise<SaleRecord> => {
+
+  return customFetch<SaleRecord>(getCompleteSaleUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      completeSaleBody,)
+  }
+);}
+
+
+
+
+export const getCompleteSaleMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeSale>>, TError,{data: BodyType<CompleteSaleBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeSale>>, TError,{data: BodyType<CompleteSaleBody>}, TContext> => {
+
+const mutationKey = ['completeSale'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeSale>>, {data: BodyType<CompleteSaleBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  completeSale(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteSaleMutationResult = NonNullable<Awaited<ReturnType<typeof completeSale>>>
+    export type CompleteSaleMutationBody = BodyType<CompleteSaleBody>
+    export type CompleteSaleMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Complete a sale (POS checkout)
+ */
+export const useCompleteSale = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeSale>>, TError,{data: BodyType<CompleteSaleBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completeSale>>,
+        TError,
+        {data: BodyType<CompleteSaleBody>},
+        TContext
+      > => {
+      return useMutation(getCompleteSaleMutationOptions(options));
+    }
+
+export const getGetSaleUrl = (id: number,) => {
+
+
+
+
+  return `/api/sales/${id}`
+}
+
+/**
+ * @summary Get a single sale by ID
+ */
+export const getSale = async (id: number, options?: RequestInit): Promise<SaleRecord> => {
+
+  return customFetch<SaleRecord>(getGetSaleUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSaleQueryKey = (id: number,) => {
+    return [
+    `/api/sales/${id}`
+    ] as const;
+    }
+
+
+export const getGetSaleQueryOptions = <TData = Awaited<ReturnType<typeof getSale>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSale>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSaleQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSale>>> = ({ signal }) => getSale(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSale>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSaleQueryResult = NonNullable<Awaited<ReturnType<typeof getSale>>>
+export type GetSaleQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a single sale by ID
+ */
+
+export function useGetSale<TData = Awaited<ReturnType<typeof getSale>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSale>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSaleQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getVoidSaleUrl = (id: number,) => {
+
+
+
+
+  return `/api/sales/${id}/void`
+}
+
+/**
+ * @summary Void a sale and restore stock
+ */
+export const voidSale = async (id: number,
+    voidSaleBody: VoidSaleBody, options?: RequestInit): Promise<SaleRecord> => {
+
+  return customFetch<SaleRecord>(getVoidSaleUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      voidSaleBody,)
+  }
+);}
+
+
+
+
+export const getVoidSaleMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof voidSale>>, TError,{id: number;data: BodyType<VoidSaleBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof voidSale>>, TError,{id: number;data: BodyType<VoidSaleBody>}, TContext> => {
+
+const mutationKey = ['voidSale'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof voidSale>>, {id: number;data: BodyType<VoidSaleBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  voidSale(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VoidSaleMutationResult = NonNullable<Awaited<ReturnType<typeof voidSale>>>
+    export type VoidSaleMutationBody = BodyType<VoidSaleBody>
+    export type VoidSaleMutationError = ErrorType<void>
+
+    /**
+ * @summary Void a sale and restore stock
+ */
+export const useVoidSale = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof voidSale>>, TError,{id: number;data: BodyType<VoidSaleBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof voidSale>>,
+        TError,
+        {id: number;data: BodyType<VoidSaleBody>},
+        TContext
+      > => {
+      return useMutation(getVoidSaleMutationOptions(options));
+    }
 
 export const getGetStockSummaryUrl = () => {
 

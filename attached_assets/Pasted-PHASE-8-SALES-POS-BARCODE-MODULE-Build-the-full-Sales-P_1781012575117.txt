@@ -1,0 +1,150 @@
+PHASE 8 – SALES / POS / BARCODE MODULE
+
+Build the full Sales/POS page for selling gym products using inventory.
+
+Important:
+- Cash only.
+- Support USD and CDF.
+- Use exchange rate at time of sale.
+- Deduct stock correctly.
+- Add cash ledger entry.
+- Record COGS and profit correctly.
+- Staff without View Cost cannot see cost.
+- Staff without View Profit cannot see profit.
+- Barcode scanner should work like keyboard input for now.
+
+1. Sales Page
+
+Create /sales page with:
+- Barcode input
+- Product search
+- Product cart
+- Quantity controls
+- Discount field
+- Currency selector: USD / CDF
+- Payment amount
+- Change due
+- Complete sale button
+- Print receipt button
+
+2. Barcode Scan
+
+Rules:
+- If barcode is scanned/found, auto-add product to cart
+- If product already exists in cart, increase quantity by 1
+- If barcode not found, show error toast
+- Prevent selling inactive/archived products
+- Prevent selling more than available stock
+
+3. Cart
+
+Cart columns:
+- Product name
+- Quantity
+- Unit price
+- Discount
+- Line total
+
+If user has View Cost/View Profit also show:
+- Cost
+- Profit
+
+4. Complete Sale
+
+When sale is completed:
+- Create sale number: SAL-000001
+- Create sale record
+- Create sale_items records
+- Deduct product stock
+- Record product cost using current average cost
+- Calculate profit
+- Create payment record category Product Sale
+- Create cash ledger entry
+- Update dashboard/account reports automatically
+- Add activity log
+
+5. Sales History
+
+Create sales history table:
+- Sale number
+- Date/time
+- Total
+- Currency
+- Payment amount
+- Change
+- Created by
+- Actions: View, Print Receipt, Cancel/Void
+
+6. Void Sale
+
+Add void/cancel sale action.
+
+Rules:
+- Only Admin/Manager or users with Manage Sales can void
+- Voiding sale must:
+  - Restore stock quantities
+  - Reverse cash ledger with opposite entry
+  - Mark sale as voided
+  - Not delete original sale
+  - Add activity log
+
+7. Receipt Print
+
+Receipt should show:
+- Gym logo
+- Gym name
+- Address
+- Phone
+- Sale number
+- Date/time
+- Cashier
+- Items
+- Qty
+- Price
+- Discount
+- Total
+- Amount paid
+- Change
+- Currency
+- Footer from settings
+
+Use print-to-browser for now.
+
+8. Permissions
+
+Without Sales page access:
+- Cannot open sales page
+
+Without Manage Inventory:
+- Cannot override stock issues
+
+Without View Cost:
+- Hide costs
+
+Without View Profit:
+- Hide profit
+
+Without View Accounting:
+- Hide ledger/payment technical details
+
+9. Activity Logs
+
+Log:
+- Sale created
+- Receipt printed
+- Sale voided
+- Barcode not found
+- Stock insufficient warning
+
+10. UI Requirements
+
+- Clean POS layout
+- Fast barcode input focus
+- Cart on right side or bottom for mobile
+- Large Complete Sale button
+- Toast notifications
+- Loading states
+- Empty states
+- Full EN / FR / AR translations
+
+Stop after Phase 8 and wait for approval.

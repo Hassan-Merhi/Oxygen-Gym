@@ -45,7 +45,7 @@ export async function calculateProfit(from: Date, to: Date): Promise<ProfitBreak
   const salesRows = await db
     .select({
       totalAmount: salesTable.totalAmount,
-      costTotal: salesTable.costTotal,
+      costTotal: salesTable.totalCost,
       currency: salesTable.currency,
     })
     .from(salesTable)

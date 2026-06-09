@@ -905,6 +905,68 @@ export interface ProductHistoryEntry {
   createdAt: string;
 }
 
+export interface BarcodeProduct {
+  id: number;
+  productNumber: string;
+  name: string;
+  category?: string | null;
+  barcode?: string | null;
+  sellingPrice: number;
+  costPrice: number;
+  currency: string;
+  quantity: number;
+  alertQuantity: number;
+  status: string;
+}
+
+export interface SaleItemInput {
+  productId: number;
+  quantity: number;
+  unitPrice: number;
+  discount: number;
+}
+
+export interface CompleteSaleBody {
+  items: SaleItemInput[];
+  currency: string;
+  paymentAmount: number;
+  notes?: string | null;
+}
+
+export interface VoidSaleBody {
+  reason: string;
+}
+
+export interface SaleRecord {
+  id: number;
+  saleNumber?: string | null;
+  items?: unknown;
+  totalAmount: number;
+  totalDiscount: number;
+  totalCost: number;
+  totalProfit: number;
+  totalAmountUsd?: number | null;
+  currency: string;
+  exchangeRate: number;
+  paymentAmount: number;
+  changeDue: number;
+  notes?: string | null;
+  createdBy?: string | null;
+  saleDate: string;
+  status: string;
+  voidedAt?: string | null;
+  voidedBy?: string | null;
+  voidReason?: string | null;
+  createdAt: string;
+}
+
+export interface SaleListResponse {
+  items: SaleRecord[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export type ListActivityLogsParams = {
 limit?: number;
 offset?: number;
@@ -948,6 +1010,20 @@ limit?: number;
 dateFrom?: string;
 dateTo?: string;
 direction?: string;
+};
+
+export type LookupBarcodeParams = {
+barcode: string;
+};
+
+export type ListSalesParams = {
+page?: string;
+limit?: string;
+search?: string;
+status?: string;
+currency?: string;
+dateFrom?: string;
+dateTo?: string;
 };
 
 export type ListProductsParams = {

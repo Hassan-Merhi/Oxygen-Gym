@@ -13,6 +13,7 @@ import vouchersRouter from "./vouchers";
 import ledgerRouter from "./ledger";
 import accountsRouter from "./accounts";
 import stockRouter from "./stock";
+import salesRouter from "./sales";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use("/vouchers", vouchersRouter);
 router.use("/ledger", ledgerRouter);
 router.use("/accounts", accountsRouter);
 router.use("/stock", stockRouter);
+router.use("/sales", salesRouter);
 
 export default router;

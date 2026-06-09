@@ -1291,6 +1291,152 @@ export const GetLedgerBalanceResponse = zod.object({
 
 
 /**
+ * @summary Lookup a product by barcode
+ */
+export const LookupBarcodeQueryParams = zod.object({
+  "barcode": zod.coerce.string()
+})
+
+export const LookupBarcodeResponse = zod.object({
+  "id": zod.number(),
+  "productNumber": zod.string(),
+  "name": zod.string(),
+  "category": zod.string().nullish(),
+  "barcode": zod.string().nullish(),
+  "sellingPrice": zod.number(),
+  "costPrice": zod.number(),
+  "currency": zod.string(),
+  "quantity": zod.number(),
+  "alertQuantity": zod.number(),
+  "status": zod.string()
+})
+
+
+/**
+ * @summary List sales with pagination and filters
+ */
+export const ListSalesQueryParams = zod.object({
+  "page": zod.coerce.string().optional(),
+  "limit": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional(),
+  "currency": zod.coerce.string().optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional()
+})
+
+export const ListSalesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "saleNumber": zod.string().nullish(),
+  "items": zod.unknown().optional(),
+  "totalAmount": zod.number(),
+  "totalDiscount": zod.number(),
+  "totalCost": zod.number(),
+  "totalProfit": zod.number(),
+  "totalAmountUsd": zod.number().nullish(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "paymentAmount": zod.number(),
+  "changeDue": zod.number(),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "saleDate": zod.string(),
+  "status": zod.string(),
+  "voidedAt": zod.string().nullish(),
+  "voidedBy": zod.string().nullish(),
+  "voidReason": zod.string().nullish(),
+  "createdAt": zod.string()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Complete a sale (POS checkout)
+ */
+export const CompleteSaleBody = zod.object({
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "quantity": zod.number(),
+  "unitPrice": zod.number(),
+  "discount": zod.number()
+})),
+  "currency": zod.string(),
+  "paymentAmount": zod.number(),
+  "notes": zod.string().nullish()
+})
+
+
+/**
+ * @summary Get a single sale by ID
+ */
+export const GetSaleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetSaleResponse = zod.object({
+  "id": zod.number(),
+  "saleNumber": zod.string().nullish(),
+  "items": zod.unknown().optional(),
+  "totalAmount": zod.number(),
+  "totalDiscount": zod.number(),
+  "totalCost": zod.number(),
+  "totalProfit": zod.number(),
+  "totalAmountUsd": zod.number().nullish(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "paymentAmount": zod.number(),
+  "changeDue": zod.number(),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "saleDate": zod.string(),
+  "status": zod.string(),
+  "voidedAt": zod.string().nullish(),
+  "voidedBy": zod.string().nullish(),
+  "voidReason": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Void a sale and restore stock
+ */
+export const VoidSaleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const VoidSaleBody = zod.object({
+  "reason": zod.string()
+})
+
+export const VoidSaleResponse = zod.object({
+  "id": zod.number(),
+  "saleNumber": zod.string().nullish(),
+  "items": zod.unknown().optional(),
+  "totalAmount": zod.number(),
+  "totalDiscount": zod.number(),
+  "totalCost": zod.number(),
+  "totalProfit": zod.number(),
+  "totalAmountUsd": zod.number().nullish(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "paymentAmount": zod.number(),
+  "changeDue": zod.number(),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "saleDate": zod.string(),
+  "status": zod.string(),
+  "voidedAt": zod.string().nullish(),
+  "voidedBy": zod.string().nullish(),
+  "voidReason": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
  * @summary Inventory summary cards
  */
 export const GetStockSummaryResponse = zod.object({
