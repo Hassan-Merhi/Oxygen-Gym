@@ -82,7 +82,6 @@ export default function Stock() {
   // ── Filters ────────────────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [category, setCategory] = useState("");
   const [status, setStatus] = useState<ProductStatus>("active");
   const [lowStock, setLowStock] = useState(false);
   const [page, setPage] = useState(1);
@@ -101,7 +100,6 @@ export default function Stock() {
     page,
     limit,
     ...(debouncedSearch && { search: debouncedSearch }),
-    ...(category && { category }),
     ...(status !== "all" && { status }),
     ...(lowStock && { lowStock: "true" }),
   });
@@ -110,9 +108,6 @@ export default function Stock() {
   const products = productsQ.data?.items ?? [];
   const total = productsQ.data?.total ?? 0;
   const totalPages = Math.ceil(total / limit);
-
-  // Categories derived from loaded products
-  const categories = Array.from(new Set(products.map((p) => p.category).filter(Boolean) as string[])).sort();
 
   // Debounce search
   useEffect(() => {
@@ -156,42 +151,38 @@ export default function Stock() {
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">{t("stock.title")}</h1>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{t("stock.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{total} {t("stock.card.total").toLowerCase()}</p>
+        </div>
         {canManage && (
-          <Button onClick={openAdd} className="gap-2">
+          <Button onClick={openAdd} className="gap-2 shadow-sm">
             <Plus className="w-4 h-4" />{t("stock.addProduct")}
           </Button>
         )}
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <SummaryCard icon={<Package className="w-5 h-5 text-indigo-600" />} label={t("stock.card.total")} value={summary?.totalProducts ?? 0} color="indigo" />
-        <SummaryCard icon={<PackageCheck className="w-5 h-5 text-emerald-600" />} label={t("stock.card.active")} value={summary?.activeProducts ?? 0} color="emerald" />
-        <SummaryCard icon={<AlertTriangle className="w-5 h-5 text-amber-600" />} label={t("stock.card.lowStock")} value={summary?.lowStockCount ?? 0} color="amber" danger={Boolean(summary?.lowStockCount && summary.lowStockCount > 0)} />
-        <SummaryCard icon={<Layers className="w-5 h-5 text-blue-600" />} label={t("stock.card.qty")} value={summary?.totalQuantity ?? 0} color="blue" />
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <SummaryCard icon={<Package className="w-5 h-5 text-indigo-500" />} label={t("stock.card.total")} value={summary?.totalProducts ?? 0} color="indigo" />
+        <SummaryCard icon={<PackageCheck className="w-5 h-5 text-emerald-500" />} label={t("stock.card.active")} value={summary?.activeProducts ?? 0} color="emerald" />
+        <SummaryCard icon={<AlertTriangle className="w-5 h-5 text-amber-500" />} label={t("stock.card.lowStock")} value={summary?.lowStockCount ?? 0} color="amber" danger={Boolean(summary?.lowStockCount && summary.lowStockCount > 0)} />
+        <SummaryCard icon={<Layers className="w-5 h-5 text-blue-500" />} label={t("stock.card.qty")} value={summary?.totalQuantity ?? 0} color="blue" />
         {canViewCost ? (
-          <SummaryCard icon={<DollarSign className="w-5 h-5 text-purple-600" />} label={t("stock.card.value")} value={`$${(summary?.totalValueUsd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} color="purple" />
+          <SummaryCard icon={<DollarSign className="w-5 h-5 text-violet-500" />} label={t("stock.card.value")} value={`$${(summary?.totalValueUsd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} color="purple" />
         ) : (
-          <div className="rounded-xl border border-border bg-muted/30 p-4 flex items-center justify-center text-xs text-muted-foreground text-center">{t("acc.restricted")}</div>
+          <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 flex items-center justify-center text-xs text-muted-foreground text-center">{t("acc.restricted")}</div>
         )}
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input className="pl-9" placeholder={t("stock.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="flex flex-wrap gap-2">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Input className="pl-9 h-9 bg-background" placeholder={t("stock.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
-        <Select value={category || "_all"} onValueChange={(v) => { setCategory(v === "_all" ? "" : v); setPage(1); }}>
-          <SelectTrigger className="w-44"><SelectValue placeholder={t("stock.filter.category")} /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_all">{t("stock.filter.category")}</SelectItem>
-            {categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-          </SelectContent>
-        </Select>
         <Select value={status} onValueChange={(v) => { setStatus(v as ProductStatus); setPage(1); }}>
-          <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-32 h-9"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("stock.filter.status")}</SelectItem>
             <SelectItem value="active">{t("stock.status.active")}</SelectItem>
@@ -199,36 +190,36 @@ export default function Stock() {
             <SelectItem value="deleted">{t("stock.status.deleted")}</SelectItem>
           </SelectContent>
         </Select>
-        <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
+        <label className="flex items-center gap-2 cursor-pointer select-none text-sm h-9 px-3 rounded-md border border-input bg-background hover:bg-muted/40 transition-colors">
           <Checkbox checked={lowStock} onCheckedChange={(v) => { setLowStock(Boolean(v)); setPage(1); }} />
           {t("stock.filter.lowStock")}
         </label>
       </div>
 
       {/* Product table */}
-      <div className="rounded-xl border border-border overflow-hidden bg-card">
+      <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("stock.col.name")}</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("stock.col.sellingPrice")}</th>
-                {canViewCost && <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">{t("stock.col.costPrice")}</th>}
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("stock.col.quantity")}</th>
-                {canViewCost && <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden xl:table-cell">{t("stock.col.stockValue")}</th>}
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("stock.col.status")}</th>
-                <th className="px-4 py-3 font-medium text-muted-foreground text-right">{t("stock.col.actions")}</th>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("stock.col.name")}</th>
+                <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("stock.col.sellingPrice")}</th>
+                {canViewCost && <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground hidden lg:table-cell">{t("stock.col.costPrice")}</th>}
+                <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("stock.col.quantity")}</th>
+                {canViewCost && <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground hidden xl:table-cell">{t("stock.col.stockValue")}</th>}
+                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("stock.col.status")}</th>
+                <th className="px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground text-right">{t("stock.col.actions")}</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-border/50">
               {productsQ.isLoading ? (
-                <tr><td colSpan={12} className="text-center py-12 text-muted-foreground">Loading...</td></tr>
+                <tr><td colSpan={12} className="text-center py-14 text-muted-foreground">Loading...</td></tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-16">
-                    <Package className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                  <td colSpan={12} className="text-center py-20">
+                    <Package className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
                     <p className="text-muted-foreground font-medium">{t("stock.empty")}</p>
-                    <p className="text-muted-foreground/60 text-xs mt-1">{t("stock.emptyHint")}</p>
+                    <p className="text-muted-foreground/50 text-xs mt-1">{t("stock.emptyHint")}</p>
                     {canManage && (
                       <Button onClick={openAdd} className="mt-4 gap-2" size="sm">
                         <Plus className="w-4 h-4" />{t("stock.addProduct")}
@@ -237,41 +228,40 @@ export default function Stock() {
                   </td>
                 </tr>
               ) : products.map((p) => (
-                <tr key={p.id} className={`border-b border-border/50 hover:bg-muted/20 transition-colors ${p.isLowStock && p.status === "active" ? "bg-amber-50/40" : ""}`}>
-                  <td className="px-4 py-3">
-                    <div>
+                <tr key={p.id} className={`hover:bg-muted/30 transition-colors group ${p.isLowStock && p.status === "active" ? "bg-amber-50/30 dark:bg-amber-950/10" : ""}`}>
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-2">
                       <span className="font-medium">{p.name}</span>
                       {p.isLowStock && p.status === "active" && (
-                        <span className="ml-2 inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">
-                          <AlertTriangle className="w-3 h-3" />{t("stock.lowStockAlert")}
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full border border-amber-200/60">
+                          <AlertTriangle className="w-3 h-3" />Low
                         </span>
                       )}
                     </div>
-                    {p.description && <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[160px]">{p.description}</p>}
+                    {p.productNumber && <p className="text-xs text-muted-foreground/60 mt-0.5">{p.productNumber}</p>}
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="font-semibold">{fmtMoney(p.sellingPrice, p.currency)}</span>
+                  <td className="px-5 py-3.5 text-right">
+                    <span className="font-semibold tabular-nums">{fmtMoney(p.sellingPrice, p.currency)}</span>
                   </td>
                   {canViewCost && (
-                    <td className="px-4 py-3 hidden lg:table-cell">
-                      <span className="text-muted-foreground text-sm">{fmtMoney(p.costPrice, p.currency)}</span>
+                    <td className="px-5 py-3.5 text-right hidden lg:table-cell">
+                      <span className="text-muted-foreground tabular-nums">{fmtMoney(p.costPrice, p.currency)}</span>
                     </td>
                   )}
-                  <td className="px-4 py-3">
-                    <span className={`font-bold ${p.isLowStock && p.status === "active" ? "text-amber-700" : "text-foreground"}`}>
+                  <td className="px-5 py-3.5 text-right">
+                    <span className={`font-bold tabular-nums text-base ${p.isLowStock && p.status === "active" ? "text-amber-600" : "text-foreground"}`}>
                       {p.quantity}
                     </span>
-                    <span className="text-xs text-muted-foreground ml-1">/ {p.alertQuantity}</span>
                   </td>
                   {canViewCost && (
-                    <td className="px-4 py-3 hidden xl:table-cell">
-                      <span className="text-sm">${p.stockValueUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    <td className="px-5 py-3.5 text-right hidden xl:table-cell">
+                      <span className="tabular-nums text-muted-foreground">${p.stockValueUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </td>
                   )}
-                  <td className="px-4 py-3">
+                  <td className="px-5 py-3.5">
                     <StatusBadge status={p.status} t={t} />
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-5 py-3.5 text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
@@ -774,33 +764,33 @@ function SummaryCard({ icon, label, value, color, danger }: {
   color: "indigo" | "emerald" | "amber" | "blue" | "purple";
   danger?: boolean;
 }) {
-  const bg = {
-    indigo: "bg-indigo-50 border-indigo-100",
-    emerald: "bg-emerald-50 border-emerald-100",
-    amber: danger ? "bg-amber-50 border-amber-200" : "bg-amber-50 border-amber-100",
-    blue: "bg-blue-50 border-blue-100",
-    purple: "bg-purple-50 border-purple-100",
+  const styles = {
+    indigo:  { wrap: "bg-white border-slate-200 shadow-sm", iconWrap: "bg-indigo-50", text: "text-foreground" },
+    emerald: { wrap: "bg-white border-slate-200 shadow-sm", iconWrap: "bg-emerald-50", text: "text-foreground" },
+    amber:   { wrap: danger ? "bg-amber-50 border-amber-200 shadow-sm" : "bg-white border-slate-200 shadow-sm", iconWrap: danger ? "bg-amber-100" : "bg-amber-50", text: danger ? "text-amber-700" : "text-foreground" },
+    blue:    { wrap: "bg-white border-slate-200 shadow-sm", iconWrap: "bg-blue-50", text: "text-foreground" },
+    purple:  { wrap: "bg-white border-slate-200 shadow-sm", iconWrap: "bg-violet-50", text: "text-foreground" },
   }[color];
 
   return (
-    <div className={`rounded-xl border p-4 ${bg}`}>
-      <div className="flex items-center gap-2 mb-2">
-        {icon}
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
+    <div className={`rounded-xl border p-4 ${styles.wrap}`}>
+      <div className="flex items-center justify-between mb-3">
+        <div className={`p-2 rounded-lg ${styles.iconWrap}`}>{icon}</div>
       </div>
-      <p className={`text-2xl font-bold ${danger ? "text-amber-700" : "text-foreground"}`}>{value}</p>
+      <p className={`text-2xl font-bold tabular-nums ${styles.text}`}>{value}</p>
+      <p className="text-xs text-muted-foreground mt-1 font-medium">{label}</p>
     </div>
   );
 }
 
 function StatusBadge({ status, t }: { status: string; t: (k: string) => string }) {
   const map: Record<string, string> = {
-    active: "bg-emerald-100 text-emerald-700",
-    archived: "bg-amber-100 text-amber-700",
-    deleted: "bg-rose-100 text-rose-700",
+    active:   "bg-emerald-100 text-emerald-700 border border-emerald-200/60",
+    archived: "bg-amber-100 text-amber-700 border border-amber-200/60",
+    deleted:  "bg-rose-100 text-rose-700 border border-rose-200/60",
   };
   return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${map[status] ?? "bg-slate-100 text-slate-700"}`}>
+    <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${map[status] ?? "bg-slate-100 text-slate-700"}`}>
       {t(`stock.status.${status}`)}
     </span>
   );
