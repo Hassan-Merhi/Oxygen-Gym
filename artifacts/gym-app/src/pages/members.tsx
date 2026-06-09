@@ -1,0 +1,871 @@
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useI18n } from "@/lib/i18n";
+import { useGetMe } from "@/hooks/use-me";
+import {
+  useListMembers,
+  useCreateMember,
+  useUpdateMember,
+  useDeleteMember,
+  useCheckInMember,
+  useRenewMember,
+  useFreezeMember,
+  useReactivateMember,
+  useSetMemberStatus,
+  useListPlans,
+} from "@workspace/api-client-react";
+import type { Member, Plan } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Plus,
+  Search,
+  MoreHorizontal,
+  Eye,
+  Edit,
+  RefreshCw,
+  LogIn,
+  Snowflake,
+  Play,
+  UserMinus,
+  Archive,
+  ChevronLeft,
+  ChevronRight,
+  AlertTriangle,
+  Users,
+} from "lucide-react";
+
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+function toDateInput(d: string | null | undefined): string {
+  if (!d) return "";
+  return new Date(d).toISOString().split("T")[0];
+}
+function addDays(date: string, days: number): string {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0];
+}
+function fmtDate(d: string | null | undefined): string {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString();
+}
+function fmtCurrency(amount: number | null | undefined, currency: string): string {
+  if (amount == null) return "—";
+  return `${currency} ${amount.toFixed(2)}`;
+}
+function daysUntil(d: string | null | undefined): number | null {
+  if (!d) return null;
+  const diff = new Date(d).getTime() - Date.now();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+// ─── Status badge ─────────────────────────────────────────────────────────────
+function StatusBadge({ status, t }: { status: string; t: (k: string) => string }) {
+  const map: Record<string, string> = {
+    active: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
+    expired: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+    frozen: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+    inactive: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+    archived: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500",
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${map[status] ?? map.inactive}`}>
+      {t(`members.status.${status}`) ?? status}
+    </span>
+  );
+}
+
+// ─── Form schemas ─────────────────────────────────────────────────────────────
+const memberSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  phone: z.string().optional(),
+  email: z.string().optional(),
+  address: z.string().optional(),
+  emergencyContact: z.string().optional(),
+  gender: z.string().optional(),
+  joinDate: z.string().optional(),
+  planId: z.string().optional(),
+  startDate: z.string().optional(),
+  expiryDate: z.string().optional(),
+  status: z.string().default("active"),
+  amountPaid: z.coerce.number().min(0).default(0),
+  discount: z.coerce.number().min(0).default(0),
+  currency: z.enum(["USD", "CDF"]).default("USD"),
+  notes: z.string().optional(),
+  fingerprintId: z.string().optional(),
+  qrCodeId: z.string().optional(),
+});
+type MemberFormValues = z.infer<typeof memberSchema>;
+
+const renewSchema = z.object({
+  planId: z.string().min(1, "Plan is required"),
+  startDate: z.string().min(1, "Start date is required"),
+  expiryDate: z.string().min(1, "Expiry date is required"),
+  amountPaid: z.coerce.number().min(0).default(0),
+  discount: z.coerce.number().min(0).default(0),
+  currency: z.enum(["USD", "CDF"]).default("USD"),
+  notes: z.string().optional(),
+});
+type RenewFormValues = z.infer<typeof renewSchema>;
+
+const freezeSchema = z.object({
+  frozenAt: z.string().min(1),
+  frozenUntil: z.string().min(1),
+  reason: z.string().optional(),
+});
+type FreezeFormValues = z.infer<typeof freezeSchema>;
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+export default function MembersPage() {
+  const { t } = useI18n();
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const me = useGetMe();
+  const canManage = me?.role === "admin" || me?.role === "manager" || me?.permissions?.manageMembers;
+  const canViewAccounting = me?.role === "admin" || me?.permissions?.viewAccounting;
+
+  // ── Filters
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [planFilter, setPlanFilter] = useState("all");
+  const [expiryWindow, setExpiryWindow] = useState("all");
+  const [sortBy, setSortBy] = useState("name");
+  const [sortOrder] = useState("asc");
+  const [page, setPage] = useState(1);
+  const LIMIT = 20;
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // ── Modals
+  const [addOpen, setAddOpen] = useState(false);
+  const [editMember, setEditMember] = useState<Member | null>(null);
+  const [renewMember, setRenewMember] = useState<Member | null>(null);
+  const [freezeMember, setFreezeMember] = useState<Member | null>(null);
+  const [checkInMember, setCheckInMember] = useState<Member | null>(null);
+  const [checkInForce, setCheckInForce] = useState(false);
+  const [reactivateMember, setReactivateMember] = useState<Member | null>(null);
+
+  // ── Queries
+  const { data: membersData, isLoading } = useListMembers({
+    page,
+    limit: LIMIT,
+    ...(debouncedSearch && { search: debouncedSearch }),
+    ...(statusFilter !== "all" && { status: statusFilter }),
+    ...(planFilter !== "all" && { planId: parseInt(planFilter) }),
+    ...(expiryWindow !== "all" && { expiryWindow: parseInt(expiryWindow) }),
+    sortBy,
+    sortOrder,
+  });
+  const { data: plans = [] } = useListPlans();
+
+  const items = membersData?.items ?? [];
+  const total = membersData?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+
+  const invalidateMembers = () => queryClient.invalidateQueries({ queryKey: ["/api/members"] });
+
+  // ── Mutations
+  const createMutation = useCreateMember({ mutation: { onSuccess: () => { invalidateMembers(); setAddOpen(false); toast({ title: t("common.success") }); } } });
+  const updateMutation = useUpdateMember({ mutation: { onSuccess: () => { invalidateMembers(); setEditMember(null); toast({ title: t("common.success") }); } } });
+  const deleteMutation = useDeleteMember({ mutation: { onSuccess: () => { invalidateMembers(); toast({ title: t("common.success") }); } } });
+  const checkInMutation = useCheckInMember({ mutation: {
+    onSuccess: (data) => {
+      if (!data.success && data.alreadyCheckedIn) {
+        setCheckInForce(true);
+      } else {
+        invalidateMembers();
+        setCheckInMember(null);
+        setCheckInForce(false);
+        toast({ title: t("members.checkin.success") });
+      }
+    }
+  }});
+  const renewMutation = useRenewMember({ mutation: { onSuccess: () => { invalidateMembers(); setRenewMember(null); toast({ title: t("common.success") }); } } });
+  const freezeMutation = useFreezeMember({ mutation: { onSuccess: () => { invalidateMembers(); setFreezeMember(null); toast({ title: t("common.success") }); } } });
+  const reactivateMutation = useReactivateMember({ mutation: { onSuccess: () => { invalidateMembers(); setReactivateMember(null); toast({ title: t("common.success") }); } } });
+  const statusMutation = useSetMemberStatus({ mutation: { onSuccess: () => { invalidateMembers(); toast({ title: t("common.success") }); } } });
+
+  // ── Add/Edit form
+  const form = useForm<MemberFormValues>({ resolver: zodResolver(memberSchema) });
+  const [planPrice, setPlanPrice] = useState(0);
+
+  function openAdd() {
+    const today = new Date().toISOString().split("T")[0];
+    form.reset({ status: "active", currency: "USD", amountPaid: 0, discount: 0, joinDate: today, startDate: today });
+    setPlanPrice(0);
+    setAddOpen(true);
+  }
+  function openEdit(m: Member) {
+    form.reset({
+      name: m.name, phone: m.phone ?? "", email: m.email ?? "",
+      address: m.address ?? "", emergencyContact: m.emergencyContact ?? "",
+      gender: m.gender ?? "", joinDate: toDateInput(m.joinDate),
+      planId: m.planId ? String(m.planId) : "",
+      startDate: toDateInput(m.startDate), expiryDate: toDateInput(m.expiryDate),
+      status: m.status, amountPaid: m.amountPaid ?? 0, discount: m.discount ?? 0,
+      currency: (m.currency as "USD" | "CDF") ?? "USD",
+      notes: m.notes ?? "", fingerprintId: m.fingerprintId ?? "", qrCodeId: m.qrCodeId ?? "",
+    });
+    setPlanPrice(m.planPrice ?? 0);
+    setEditMember(m);
+  }
+
+  function watchedPlanId(value: string) {
+    const plan = plans.find((p: Plan) => String(p.id) === value);
+    if (plan) {
+      setPlanPrice(plan.price);
+      const start = form.getValues("startDate");
+      if (start) form.setValue("expiryDate", addDays(start, plan.durationDays));
+    }
+  }
+
+  const amountPaid = form.watch("amountPaid") ?? 0;
+  const discount = form.watch("discount") ?? 0;
+  const balance = planPrice - discount - amountPaid;
+
+  async function onSubmit(values: MemberFormValues) {
+    const payload = {
+      ...values,
+      planId: values.planId ? parseInt(values.planId) : undefined,
+      joinDate: values.joinDate || undefined,
+      startDate: values.startDate || undefined,
+      expiryDate: values.expiryDate || undefined,
+    };
+    if (editMember) {
+      updateMutation.mutate({ id: editMember.id, data: payload });
+    } else {
+      createMutation.mutate({ data: payload });
+    }
+  }
+
+  // ── Renew form
+  const renewForm = useForm<RenewFormValues>({ resolver: zodResolver(renewSchema) });
+  const [renewPlanPrice, setRenewPlanPrice] = useState(0);
+  const renewAmountPaid = renewForm.watch("amountPaid") ?? 0;
+  const renewDiscount = renewForm.watch("discount") ?? 0;
+  const renewBalance = renewPlanPrice - renewDiscount - renewAmountPaid;
+
+  function openRenew(m: Member) {
+    const today = new Date().toISOString().split("T")[0];
+    renewForm.reset({ startDate: today, currency: (m.currency as "USD" | "CDF") ?? "USD", amountPaid: 0, discount: 0 });
+    setRenewPlanPrice(0);
+    setRenewMember(m);
+  }
+
+  function watchRenewPlan(value: string) {
+    const plan = plans.find((p: Plan) => String(p.id) === value);
+    if (plan) {
+      setRenewPlanPrice(plan.price);
+      const start = renewForm.getValues("startDate");
+      if (start) renewForm.setValue("expiryDate", addDays(start, plan.durationDays));
+    }
+  }
+
+  async function onRenewSubmit(values: RenewFormValues) {
+    if (!renewMember) return;
+    renewMutation.mutate({ id: renewMember.id, data: { ...values, planId: parseInt(values.planId) } });
+  }
+
+  // ── Freeze form
+  const freezeForm = useForm<FreezeFormValues>({ resolver: zodResolver(freezeSchema) });
+  const frozenAt = freezeForm.watch("frozenAt") ?? "";
+  const frozenUntil = freezeForm.watch("frozenUntil") ?? "";
+  const frozenDays = frozenAt && frozenUntil
+    ? Math.max(0, Math.round((new Date(frozenUntil).getTime() - new Date(frozenAt).getTime()) / (1000 * 60 * 60 * 24)))
+    : 0;
+
+  function openFreeze(m: Member) {
+    const today = new Date().toISOString().split("T")[0];
+    freezeForm.reset({ frozenAt: today });
+    setFreezeMember(m);
+  }
+
+  async function onFreezeSubmit(values: FreezeFormValues) {
+    if (!freezeMember) return;
+    freezeMutation.mutate({ id: freezeMember.id, data: values });
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{t("members.title")}</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+            {total} {t("members.total")}
+          </p>
+        </div>
+        {canManage && (
+          <Button onClick={openAdd} className="gap-2">
+            <Plus className="h-4 w-4" />
+            {t("members.addMember")}
+          </Button>
+        )}
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Input
+            className="pl-9"
+            placeholder={t("members.searchPlaceholder")}
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder={t("members.filter.status")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("members.filter.status")}</SelectItem>
+            {["active","expired","frozen","inactive","archived"].map(s => (
+              <SelectItem key={s} value={s}>{t(`members.status.${s}`)}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={planFilter} onValueChange={(v) => { setPlanFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder={t("members.filter.plan")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("members.filter.plan")}</SelectItem>
+            {plans.map((p: Plan) => (
+              <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={expiryWindow} onValueChange={(v) => { setExpiryWindow(v); setPage(1); }}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder={t("members.filter.expiry")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("members.filter.expiry")}</SelectItem>
+            <SelectItem value="7">{t("members.filter.expiry7")}</SelectItem>
+            <SelectItem value="14">{t("members.filter.expiry14")}</SelectItem>
+            <SelectItem value="30">{t("members.filter.expiry30")}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="name">{t("members.sort.name")}</SelectItem>
+            <SelectItem value="joinDate">{t("members.sort.joinDate")}</SelectItem>
+            <SelectItem value="expiryDate">{t("members.sort.expiryDate")}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Table */}
+      <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-slate-50 dark:bg-slate-800/50">
+              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.number")}</TableHead>
+              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.name")}</TableHead>
+              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.phone")}</TableHead>
+              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.plan")}</TableHead>
+              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.status")}</TableHead>
+              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.start")}</TableHead>
+              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.expiry")}</TableHead>
+              {canViewAccounting && <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.balance")}</TableHead>}
+              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.lastCheckin")}</TableHead>
+              <TableHead className="text-right font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.actions")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}>
+                  {Array.from({ length: canViewAccounting ? 10 : 9 }).map((_, j) => (
+                    <TableCell key={j}><div className="h-4 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" /></TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : items.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={canViewAccounting ? 10 : 9} className="text-center py-16">
+                  <Users className="h-10 w-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                  <p className="font-medium text-slate-900 dark:text-white">{t("members.empty")}</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t("members.emptyHint")}</p>
+                </TableCell>
+              </TableRow>
+            ) : items.map((m) => {
+              const days = daysUntil(m.expiryDate);
+              const expiryClass =
+                m.status === "expired" || (days !== null && days < 0)
+                  ? "text-red-600 dark:text-red-400 font-medium"
+                  : days !== null && days <= 7
+                  ? "text-orange-600 dark:text-orange-400 font-medium"
+                  : days !== null && days <= 14
+                  ? "text-yellow-600 dark:text-yellow-500 font-medium"
+                  : "text-slate-700 dark:text-slate-300";
+              return (
+                <TableRow key={m.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                  <TableCell className="font-mono text-xs text-slate-500">{m.memberNumber ?? "—"}</TableCell>
+                  <TableCell>
+                    <button
+                      onClick={() => navigate(`/members/${m.id}`)}
+                      className="font-medium text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-left"
+                    >
+                      {m.name}
+                    </button>
+                  </TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-400 text-sm">{m.phone ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-400 text-sm">{m.planName ?? "—"}</TableCell>
+                  <TableCell><StatusBadge status={m.status} t={t} /></TableCell>
+                  <TableCell className="text-slate-600 dark:text-slate-400 text-sm">{fmtDate(m.startDate)}</TableCell>
+                  <TableCell className={`text-sm ${expiryClass}`}>{fmtDate(m.expiryDate)}</TableCell>
+                  {canViewAccounting && (
+                    <TableCell className={`text-sm font-medium ${(m.balance ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                      {(m.balance ?? 0) !== 0 ? fmtCurrency(m.balance, m.currency) : "—"}
+                    </TableCell>
+                  )}
+                  <TableCell className="text-slate-500 dark:text-slate-400 text-sm">{fmtDate(m.lastCheckIn)}</TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => navigate(`/members/${m.id}`)}>
+                          <Eye className="h-4 w-4 mr-2" />{t("members.actions.view")}
+                        </DropdownMenuItem>
+                        {canManage && (
+                          <>
+                            <DropdownMenuItem onClick={() => openEdit(m)}>
+                              <Edit className="h-4 w-4 mr-2" />{t("members.actions.edit")}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => { setCheckInMember(m); setCheckInForce(false); }}>
+                              <LogIn className="h-4 w-4 mr-2" />{t("members.actions.checkin")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openRenew(m)}>
+                              <RefreshCw className="h-4 w-4 mr-2" />{t("members.actions.renew")}
+                            </DropdownMenuItem>
+                            {m.status !== "frozen" ? (
+                              <DropdownMenuItem onClick={() => openFreeze(m)}>
+                                <Snowflake className="h-4 w-4 mr-2" />{t("members.actions.freeze")}
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem onClick={() => setReactivateMember(m)}>
+                                <Play className="h-4 w-4 mr-2" />{t("members.actions.reactivate")}
+                              </DropdownMenuItem>
+                            )}
+                            {m.status === "inactive" && (
+                              <DropdownMenuItem onClick={() => setReactivateMember(m)}>
+                                <Play className="h-4 w-4 mr-2" />{t("members.actions.reactivate")}
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            {m.status !== "inactive" && (
+                              <DropdownMenuItem onClick={() => statusMutation.mutate({ id: m.id, data: { status: "inactive" } })}>
+                                <UserMinus className="h-4 w-4 mr-2" />{t("members.actions.markInactive")}
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              className="text-red-600 dark:text-red-400"
+                              onClick={() => deleteMutation.mutate({ id: m.id })}
+                            >
+                              <Archive className="h-4 w-4 mr-2" />{t("members.actions.archive")}
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
+          <span>{t("common.page")} {page} {t("common.of")} {totalPages}</span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
+              <ChevronLeft className="h-4 w-4 mr-1" />{t("common.previous")}
+            </Button>
+            <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>
+              {t("common.next")}<ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add/Edit Modal ─────────────────────────────────────────────────── */}
+      <Dialog open={addOpen || !!editMember} onOpenChange={(o) => { if (!o) { setAddOpen(false); setEditMember(null); } }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editMember ? t("members.editMember") : t("members.addMember")}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {/* Personal Info */}
+            <div>
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 pb-2 border-b dark:border-slate-700">{t("members.form.personalInfo")}</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label>{t("members.form.name")} *</Label>
+                  <Input {...form.register("name")} className="mt-1" />
+                  {form.formState.errors.name && <p className="text-xs text-red-500 mt-1">{form.formState.errors.name.message}</p>}
+                </div>
+                <div>
+                  <Label>{t("members.form.phone")}</Label>
+                  <Input {...form.register("phone")} className="mt-1" />
+                </div>
+                <div>
+                  <Label>{t("members.form.email")}</Label>
+                  <Input {...form.register("email")} type="email" className="mt-1" />
+                </div>
+                <div className="col-span-2">
+                  <Label>{t("members.form.address")}</Label>
+                  <Input {...form.register("address")} className="mt-1" />
+                </div>
+                <div>
+                  <Label>{t("members.form.emergencyContact")}</Label>
+                  <Input {...form.register("emergencyContact")} className="mt-1" />
+                </div>
+                <div>
+                  <Label>{t("members.form.gender")}</Label>
+                  <Select value={form.watch("gender") ?? ""} onValueChange={(v) => form.setValue("gender", v)}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="—" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="male">{t("members.form.gender.male")}</SelectItem>
+                      <SelectItem value="female">{t("members.form.gender.female")}</SelectItem>
+                      <SelectItem value="other">{t("members.form.gender.other")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* Membership */}
+            <div>
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 pb-2 border-b dark:border-slate-700">{t("members.form.membershipInfo")}</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>{t("members.form.plan")}</Label>
+                  <Select value={form.watch("planId") ?? ""} onValueChange={(v) => { form.setValue("planId", v); watchedPlanId(v); }}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder={t("members.form.selectPlan")} /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">{t("members.form.noPlan")}</SelectItem>
+                      {plans.map((p: Plan) => <SelectItem key={p.id} value={String(p.id)}>{p.name} — {p.currency} {p.price}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>{t("members.form.status")}</Label>
+                  <Select value={form.watch("status")} onValueChange={(v) => form.setValue("status", v)}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {["active","expired","frozen","inactive","archived"].map(s => (
+                        <SelectItem key={s} value={s}>{t(`members.status.${s}`)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>{t("members.form.joinDate")}</Label>
+                  <Input type="date" {...form.register("joinDate")} className="mt-1" />
+                </div>
+                <div>
+                  <Label>{t("members.form.startDate")}</Label>
+                  <Input type="date" {...form.register("startDate")} className="mt-1"
+                    onChange={(e) => {
+                      form.setValue("startDate", e.target.value);
+                      const pid = form.getValues("planId");
+                      if (pid) {
+                        const plan = plans.find((p: Plan) => String(p.id) === pid);
+                        if (plan && e.target.value) form.setValue("expiryDate", addDays(e.target.value, plan.durationDays));
+                      }
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label>{t("members.form.expiryDate")}</Label>
+                  <Input type="date" {...form.register("expiryDate")} className="mt-1" />
+                </div>
+              </div>
+            </div>
+
+            {/* Payment */}
+            <div>
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 pb-2 border-b dark:border-slate-700">{t("members.form.paymentInfo")}</h3>
+              <div className="grid grid-cols-2 gap-4">
+                {planPrice > 0 && (
+                  <div>
+                    <Label>{t("members.form.planPrice")}</Label>
+                    <Input value={planPrice} readOnly className="mt-1 bg-slate-50 dark:bg-slate-800" />
+                  </div>
+                )}
+                <div>
+                  <Label>{t("members.form.amountPaid")}</Label>
+                  <Input type="number" step="0.01" min="0" {...form.register("amountPaid")} className="mt-1" />
+                </div>
+                <div>
+                  <Label>{t("members.form.discount")}</Label>
+                  <Input type="number" step="0.01" min="0" {...form.register("discount")} className="mt-1" />
+                </div>
+                <div>
+                  <Label>{t("members.form.currency")}</Label>
+                  <Select value={form.watch("currency")} onValueChange={(v) => form.setValue("currency", v as "USD" | "CDF")}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="USD">USD</SelectItem>
+                      <SelectItem value="CDF">CDF</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {planPrice > 0 && (
+                  <div>
+                    <Label>{t("members.form.balance")}</Label>
+                    <div className={`mt-1 h-9 flex items-center px-3 rounded-md border text-sm font-medium ${balance > 0 ? "border-red-300 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800" : "border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800"}`}>
+                      {balance.toFixed(2)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <Label>{t("members.form.notes")}</Label>
+              <Textarea {...form.register("notes")} className="mt-1" rows={2} />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => { setAddOpen(false); setEditMember(null); }}>{t("common.cancel")}</Button>
+              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
+                {(createMutation.isPending || updateMutation.isPending) ? t("common.loading") : t("common.save")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Renew Modal ────────────────────────────────────────────────────── */}
+      <Dialog open={!!renewMember} onOpenChange={(o) => { if (!o) setRenewMember(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("members.renew.title")} — {renewMember?.name}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={renewForm.handleSubmit(onRenewSubmit)} className="space-y-4">
+            <div>
+              <Label>{t("members.renew.plan")} *</Label>
+              <Select value={renewForm.watch("planId") ?? ""} onValueChange={(v) => { renewForm.setValue("planId", v); watchRenewPlan(v); }}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder={t("members.form.selectPlan")} /></SelectTrigger>
+                <SelectContent>
+                  {plans.map((p: Plan) => <SelectItem key={p.id} value={String(p.id)}>{p.name} — {p.currency} {p.price}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>{t("members.renew.startDate")}</Label>
+                <Input type="date" {...renewForm.register("startDate")} className="mt-1"
+                  onChange={(e) => {
+                    renewForm.setValue("startDate", e.target.value);
+                    const pid = renewForm.getValues("planId");
+                    if (pid) {
+                      const plan = plans.find((p: Plan) => String(p.id) === pid);
+                      if (plan && e.target.value) renewForm.setValue("expiryDate", addDays(e.target.value, plan.durationDays));
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <Label>{t("members.renew.expiryDate")}</Label>
+                <Input type="date" {...renewForm.register("expiryDate")} className="mt-1" />
+              </div>
+              <div>
+                <Label>{t("members.renew.amountPaid")}</Label>
+                <Input type="number" step="0.01" min="0" {...renewForm.register("amountPaid")} className="mt-1" />
+              </div>
+              <div>
+                <Label>{t("members.renew.discount")}</Label>
+                <Input type="number" step="0.01" min="0" {...renewForm.register("discount")} className="mt-1" />
+              </div>
+              <div>
+                <Label>{t("members.renew.currency")}</Label>
+                <Select value={renewForm.watch("currency")} onValueChange={(v) => renewForm.setValue("currency", v as "USD" | "CDF")}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="CDF">CDF</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {renewPlanPrice > 0 && (
+                <div>
+                  <Label>{t("members.renew.balance")}</Label>
+                  <div className={`mt-1 h-9 flex items-center px-3 rounded-md border text-sm font-medium ${renewBalance > 0 ? "border-red-300 bg-red-50 text-red-700" : "border-emerald-300 bg-emerald-50 text-emerald-700"}`}>
+                    {renewBalance.toFixed(2)}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div>
+              <Label>{t("members.renew.notes")}</Label>
+              <Textarea {...renewForm.register("notes")} className="mt-1" rows={2} />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setRenewMember(null)}>{t("common.cancel")}</Button>
+              <Button type="submit" disabled={renewMutation.isPending}>
+                {renewMutation.isPending ? t("common.loading") : t("members.actions.renew")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Freeze Modal ───────────────────────────────────────────────────── */}
+      <Dialog open={!!freezeMember} onOpenChange={(o) => { if (!o) setFreezeMember(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("members.freeze.title")} — {freezeMember?.name}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={freezeForm.handleSubmit(onFreezeSubmit)} className="space-y-4">
+            <div>
+              <Label>{t("members.freeze.from")}</Label>
+              <Input type="date" {...freezeForm.register("frozenAt")} className="mt-1" />
+            </div>
+            <div>
+              <Label>{t("members.freeze.until")}</Label>
+              <Input type="date" {...freezeForm.register("frozenUntil")} className="mt-1" />
+            </div>
+            {frozenDays > 0 && (
+              <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">
+                {frozenDays} {t("members.freeze.days_count")}
+              </p>
+            )}
+            <div>
+              <Label>{t("members.freeze.reason")}</Label>
+              <Textarea {...freezeForm.register("reason")} className="mt-1" rows={2} />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setFreezeMember(null)}>{t("common.cancel")}</Button>
+              <Button type="submit" disabled={freezeMutation.isPending}>
+                {freezeMutation.isPending ? t("common.loading") : t("members.actions.freeze")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Check-in Dialog ────────────────────────────────────────────────── */}
+      <Dialog open={!!checkInMember} onOpenChange={(o) => { if (!o) { setCheckInMember(null); setCheckInForce(false); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("members.checkin.title")}</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            {checkInForce ? (
+              <div className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200">{checkInMember?.name}</p>
+                  <p className="text-sm text-amber-700 dark:text-amber-300">{t("members.checkin.alreadyDone")}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-slate-700 dark:text-slate-300">
+                {t("members.checkin.confirm")} <strong>{checkInMember?.name}</strong>?
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCheckInMember(null); setCheckInForce(false); }}>{t("common.cancel")}</Button>
+            <Button
+              onClick={() => {
+                if (checkInMember) {
+                  checkInMutation.mutate({ id: checkInMember.id, data: { force: checkInForce } });
+                }
+              }}
+              disabled={checkInMutation.isPending}
+            >
+              {checkInForce ? t("members.checkin.override") : t("common.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Reactivate Dialog ─────────────────────────────────────────────── */}
+      <Dialog open={!!reactivateMember} onOpenChange={(o) => { if (!o) setReactivateMember(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("members.reactivate.title")}</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            <p className="text-slate-700 dark:text-slate-300">
+              {t("members.reactivate.confirm")} <strong>{reactivateMember?.name}</strong>?
+            </p>
+            {(reactivateMember?.frozenDays ?? 0) > 0 && (
+              <p className="text-sm text-blue-600 dark:text-blue-400">
+                +{reactivateMember?.frozenDays} {t("members.reactivate.frozenDays")}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReactivateMember(null)}>{t("common.cancel")}</Button>
+            <Button
+              onClick={() => { if (reactivateMember) reactivateMutation.mutate({ id: reactivateMember.id }); }}
+              disabled={reactivateMutation.isPending}
+            >
+              {reactivateMutation.isPending ? t("common.loading") : t("members.actions.reactivate")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

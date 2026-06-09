@@ -310,8 +310,214 @@ export interface DashboardKpis {
   recentActivity: ActivityLog[];
 }
 
+export interface Plan {
+  id: number;
+  name: string;
+  description?: string | null;
+  durationDays: number;
+  price: number;
+  currency: string;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type PlanInputCurrency = typeof PlanInputCurrency[keyof typeof PlanInputCurrency];
+
+
+export const PlanInputCurrency = {
+  USD: 'USD',
+  CDF: 'CDF',
+} as const;
+
+export type PlanInputStatus = typeof PlanInputStatus[keyof typeof PlanInputStatus];
+
+
+export const PlanInputStatus = {
+  active: 'active',
+  archived: 'archived',
+} as const;
+
+export interface PlanInput {
+  name: string;
+  description?: string | null;
+  durationDays: number;
+  price: number;
+  currency: PlanInputCurrency;
+  status?: PlanInputStatus;
+}
+
+export interface Member {
+  id: number;
+  memberNumber?: string | null;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  emergencyContact?: string | null;
+  gender?: string | null;
+  planId?: number | null;
+  planName?: string | null;
+  planPrice?: number | null;
+  status: string;
+  joinDate: string;
+  startDate?: string | null;
+  expiryDate?: string | null;
+  lastCheckIn?: string | null;
+  amountPaid?: number | null;
+  discount?: number | null;
+  balance?: number | null;
+  currency: string;
+  frozenAt?: string | null;
+  frozenUntil?: string | null;
+  frozenDays?: number | null;
+  photoUrl?: string | null;
+  fingerprintId?: string | null;
+  qrCodeId?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type MemberInputCurrency = typeof MemberInputCurrency[keyof typeof MemberInputCurrency];
+
+
+export const MemberInputCurrency = {
+  USD: 'USD',
+  CDF: 'CDF',
+} as const;
+
+export interface MemberInput {
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  emergencyContact?: string | null;
+  gender?: string | null;
+  joinDate?: string | null;
+  planId?: number | null;
+  startDate?: string | null;
+  expiryDate?: string | null;
+  status: string;
+  amountPaid: number;
+  discount: number;
+  currency: MemberInputCurrency;
+  photoUrl?: string | null;
+  fingerprintId?: string | null;
+  qrCodeId?: string | null;
+  notes?: string | null;
+}
+
+export interface MemberUpdate {
+  name?: string;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  emergencyContact?: string | null;
+  gender?: string | null;
+  joinDate?: string | null;
+  planId?: number | null;
+  startDate?: string | null;
+  expiryDate?: string | null;
+  status?: string | null;
+  amountPaid?: number | null;
+  discount?: number | null;
+  currency?: string | null;
+  photoUrl?: string | null;
+  fingerprintId?: string | null;
+  qrCodeId?: string | null;
+  notes?: string | null;
+}
+
+export interface MembersPage {
+  items: Member[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface CheckInBody {
+  /** Override duplicate same-day check-in */
+  force?: boolean;
+}
+
+export interface CheckInRecord {
+  id: number;
+  memberId: number;
+  memberName: string;
+  memberNumber?: string | null;
+  checkedInAt: string;
+  note?: string | null;
+}
+
+export interface CheckInResult {
+  success: boolean;
+  alreadyCheckedIn: boolean;
+  checkIn?: CheckInRecord;
+}
+
+export type RenewBodyCurrency = typeof RenewBodyCurrency[keyof typeof RenewBodyCurrency];
+
+
+export const RenewBodyCurrency = {
+  USD: 'USD',
+  CDF: 'CDF',
+} as const;
+
+export interface RenewBody {
+  planId: number;
+  startDate: string;
+  expiryDate: string;
+  amountPaid: number;
+  discount: number;
+  currency: RenewBodyCurrency;
+  notes?: string | null;
+}
+
+export interface FreezeBody {
+  frozenAt: string;
+  frozenUntil: string;
+  reason?: string | null;
+}
+
+export type MemberStatusUpdateStatus = typeof MemberStatusUpdateStatus[keyof typeof MemberStatusUpdateStatus];
+
+
+export const MemberStatusUpdateStatus = {
+  active: 'active',
+  inactive: 'inactive',
+  archived: 'archived',
+} as const;
+
+export interface MemberStatusUpdate {
+  status: MemberStatusUpdateStatus;
+}
+
+export interface MemberPayment {
+  id: number;
+  paymentNumber?: string | null;
+  type: string;
+  amount: number;
+  discount: number;
+  currency: string;
+  planName?: string | null;
+  notes?: string | null;
+  createdAt: string;
+}
+
 export type ListActivityLogsParams = {
 limit?: number;
 offset?: number;
+};
+
+export type ListMembersParams = {
+page?: number;
+limit?: number;
+search?: string;
+status?: string;
+planId?: number;
+expiryWindow?: number;
+sortBy?: string;
+sortOrder?: string;
 };
 

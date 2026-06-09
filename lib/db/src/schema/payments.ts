@@ -11,6 +11,7 @@ export const paymentsTable = pgTable("payments", {
   planId: integer("plan_id"),
   planName: text("plan_name"),
   amount: doublePrecision("amount").notNull().default(0),
+  discount: doublePrecision("discount").default(0),
   amountUsd: doublePrecision("amount_usd"),   // normalized for reporting
   currency: text("currency").notNull().default("USD"),
   type: text("type").notNull().default("membership"), // 'membership' | 'other'

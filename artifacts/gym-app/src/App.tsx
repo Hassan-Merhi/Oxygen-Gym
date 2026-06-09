@@ -13,6 +13,8 @@ import Home from "@/pages/home";
 import Dashboard from "@/pages/dashboard";
 import Staff from "@/pages/staff";
 import Settings from "@/pages/settings";
+import Members from "@/pages/members";
+import MemberProfile from "@/pages/member-profile";
 import ComingSoon from "@/pages/coming-soon";
 import NotFound from "@/pages/not-found";
 import { AppLayout } from "@/components/layout/app-layout";
@@ -179,7 +181,19 @@ function ClerkProviderWithRoutes() {
             <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
             <Route path="/staff"><ProtectedRoute component={Staff} /></Route>
             <Route path="/settings"><ProtectedRoute component={Settings} /></Route>
-            <Route path="/members"><ProtectedRoute component={ComingSoon} /></Route>
+            <Route path="/members"><ProtectedRoute component={Members} /></Route>
+            <Route path="/members/:id">{(params) => (
+              <>
+                <Show when="signed-in">
+                  <AppLayout>
+                    <MemberProfile id={Number(params.id)} />
+                  </AppLayout>
+                </Show>
+                <Show when="signed-out">
+                  <Redirect to="/" />
+                </Show>
+              </>
+            )}</Route>
             <Route path="/plans"><ProtectedRoute component={ComingSoon} /></Route>
             <Route path="/payroll"><ProtectedRoute component={ComingSoon} /></Route>
             <Route path="/payments"><ProtectedRoute component={ComingSoon} /></Route>

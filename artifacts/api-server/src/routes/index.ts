@@ -6,6 +6,8 @@ import settingsRouter from "./settings";
 import activityLogsRouter from "./activity-logs";
 import uploadRouter from "./upload";
 import dashboardRouter from "./dashboard";
+import plansRouter from "./plans";
+import membersRouter from "./members";
 
 const router: IRouter = Router();
 
@@ -16,5 +18,7 @@ router.use("/settings", settingsRouter);
 router.use("/activity-logs", activityLogsRouter);
 router.use("/upload", uploadRouter);
 router.use("/dashboard", dashboardRouter);
+router.use("/plans", plansRouter);
+router.use("/members", membersRouter);
 
 export default router;

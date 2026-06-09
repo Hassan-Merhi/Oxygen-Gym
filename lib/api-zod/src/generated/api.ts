@@ -459,3 +459,503 @@ export const ListActivityLogsResponseItem = zod.object({
 export const ListActivityLogsResponse = zod.array(ListActivityLogsResponseItem)
 
 
+/**
+ * @summary List all plans
+ */
+export const ListPlansResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "durationDays": zod.number(),
+  "price": zod.number(),
+  "currency": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string().optional(),
+  "updatedAt": zod.string().optional()
+})
+export const ListPlansResponse = zod.array(ListPlansResponseItem)
+
+
+/**
+ * @summary Create a plan
+ */
+export const CreatePlanBody = zod.object({
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "durationDays": zod.number(),
+  "price": zod.number(),
+  "currency": zod.enum(['USD', 'CDF']),
+  "status": zod.enum(['active', 'archived']).optional()
+})
+
+
+/**
+ * @summary Update a plan
+ */
+export const UpdatePlanParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdatePlanBody = zod.object({
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "durationDays": zod.number(),
+  "price": zod.number(),
+  "currency": zod.enum(['USD', 'CDF']),
+  "status": zod.enum(['active', 'archived']).optional()
+})
+
+export const UpdatePlanResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "durationDays": zod.number(),
+  "price": zod.number(),
+  "currency": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string().optional(),
+  "updatedAt": zod.string().optional()
+})
+
+
+/**
+ * @summary Delete a plan
+ */
+export const DeletePlanParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List members with filters and pagination
+ */
+export const listMembersQueryPageDefault = 1;
+export const listMembersQueryLimitDefault = 20;
+
+export const ListMembersQueryParams = zod.object({
+  "page": zod.coerce.number().default(listMembersQueryPageDefault),
+  "limit": zod.coerce.number().default(listMembersQueryLimitDefault),
+  "search": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional(),
+  "planId": zod.coerce.number().optional(),
+  "expiryWindow": zod.coerce.number().optional(),
+  "sortBy": zod.coerce.string().optional(),
+  "sortOrder": zod.coerce.string().optional()
+})
+
+export const ListMembersResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "memberNumber": zod.string().nullish(),
+  "name": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
+  "gender": zod.string().nullish(),
+  "planId": zod.number().nullish(),
+  "planName": zod.string().nullish(),
+  "planPrice": zod.number().nullish(),
+  "status": zod.string(),
+  "joinDate": zod.string(),
+  "startDate": zod.string().nullish(),
+  "expiryDate": zod.string().nullish(),
+  "lastCheckIn": zod.string().nullish(),
+  "amountPaid": zod.number().nullish(),
+  "discount": zod.number().nullish(),
+  "balance": zod.number().nullish(),
+  "currency": zod.string(),
+  "frozenAt": zod.string().nullish(),
+  "frozenUntil": zod.string().nullish(),
+  "frozenDays": zod.number().nullish(),
+  "photoUrl": zod.string().nullish(),
+  "fingerprintId": zod.string().nullish(),
+  "qrCodeId": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Create a new member
+ */
+export const CreateMemberBody = zod.object({
+  "name": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
+  "gender": zod.string().nullish(),
+  "joinDate": zod.string().nullish(),
+  "planId": zod.number().nullish(),
+  "startDate": zod.string().nullish(),
+  "expiryDate": zod.string().nullish(),
+  "status": zod.string(),
+  "amountPaid": zod.number(),
+  "discount": zod.number(),
+  "currency": zod.enum(['USD', 'CDF']),
+  "photoUrl": zod.string().nullish(),
+  "fingerprintId": zod.string().nullish(),
+  "qrCodeId": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+
+
+/**
+ * @summary Get member by ID
+ */
+export const GetMemberParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetMemberResponse = zod.object({
+  "id": zod.number(),
+  "memberNumber": zod.string().nullish(),
+  "name": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
+  "gender": zod.string().nullish(),
+  "planId": zod.number().nullish(),
+  "planName": zod.string().nullish(),
+  "planPrice": zod.number().nullish(),
+  "status": zod.string(),
+  "joinDate": zod.string(),
+  "startDate": zod.string().nullish(),
+  "expiryDate": zod.string().nullish(),
+  "lastCheckIn": zod.string().nullish(),
+  "amountPaid": zod.number().nullish(),
+  "discount": zod.number().nullish(),
+  "balance": zod.number().nullish(),
+  "currency": zod.string(),
+  "frozenAt": zod.string().nullish(),
+  "frozenUntil": zod.string().nullish(),
+  "frozenDays": zod.number().nullish(),
+  "photoUrl": zod.string().nullish(),
+  "fingerprintId": zod.string().nullish(),
+  "qrCodeId": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Update a member
+ */
+export const UpdateMemberParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateMemberBody = zod.object({
+  "name": zod.string().optional(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
+  "gender": zod.string().nullish(),
+  "joinDate": zod.string().nullish(),
+  "planId": zod.number().nullish(),
+  "startDate": zod.string().nullish(),
+  "expiryDate": zod.string().nullish(),
+  "status": zod.string().nullish(),
+  "amountPaid": zod.number().nullish(),
+  "discount": zod.number().nullish(),
+  "currency": zod.string().nullish(),
+  "photoUrl": zod.string().nullish(),
+  "fingerprintId": zod.string().nullish(),
+  "qrCodeId": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+
+export const UpdateMemberResponse = zod.object({
+  "id": zod.number(),
+  "memberNumber": zod.string().nullish(),
+  "name": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
+  "gender": zod.string().nullish(),
+  "planId": zod.number().nullish(),
+  "planName": zod.string().nullish(),
+  "planPrice": zod.number().nullish(),
+  "status": zod.string(),
+  "joinDate": zod.string(),
+  "startDate": zod.string().nullish(),
+  "expiryDate": zod.string().nullish(),
+  "lastCheckIn": zod.string().nullish(),
+  "amountPaid": zod.number().nullish(),
+  "discount": zod.number().nullish(),
+  "balance": zod.number().nullish(),
+  "currency": zod.string(),
+  "frozenAt": zod.string().nullish(),
+  "frozenUntil": zod.string().nullish(),
+  "frozenDays": zod.number().nullish(),
+  "photoUrl": zod.string().nullish(),
+  "fingerprintId": zod.string().nullish(),
+  "qrCodeId": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Archive (soft-delete) a member
+ */
+export const DeleteMemberParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Check in a member
+ */
+export const CheckInMemberParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CheckInMemberBody = zod.object({
+  "force": zod.boolean().optional().describe('Override duplicate same-day check-in')
+})
+
+export const CheckInMemberResponse = zod.object({
+  "success": zod.boolean(),
+  "alreadyCheckedIn": zod.boolean(),
+  "checkIn": zod.object({
+  "id": zod.number(),
+  "memberId": zod.number(),
+  "memberName": zod.string(),
+  "memberNumber": zod.string().nullish(),
+  "checkedInAt": zod.string(),
+  "note": zod.string().nullish()
+}).optional()
+})
+
+
+/**
+ * @summary Renew a member's membership
+ */
+export const RenewMemberParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RenewMemberBody = zod.object({
+  "planId": zod.number(),
+  "startDate": zod.string(),
+  "expiryDate": zod.string(),
+  "amountPaid": zod.number(),
+  "discount": zod.number(),
+  "currency": zod.enum(['USD', 'CDF']),
+  "notes": zod.string().nullish()
+})
+
+export const RenewMemberResponse = zod.object({
+  "id": zod.number(),
+  "memberNumber": zod.string().nullish(),
+  "name": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
+  "gender": zod.string().nullish(),
+  "planId": zod.number().nullish(),
+  "planName": zod.string().nullish(),
+  "planPrice": zod.number().nullish(),
+  "status": zod.string(),
+  "joinDate": zod.string(),
+  "startDate": zod.string().nullish(),
+  "expiryDate": zod.string().nullish(),
+  "lastCheckIn": zod.string().nullish(),
+  "amountPaid": zod.number().nullish(),
+  "discount": zod.number().nullish(),
+  "balance": zod.number().nullish(),
+  "currency": zod.string(),
+  "frozenAt": zod.string().nullish(),
+  "frozenUntil": zod.string().nullish(),
+  "frozenDays": zod.number().nullish(),
+  "photoUrl": zod.string().nullish(),
+  "fingerprintId": zod.string().nullish(),
+  "qrCodeId": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Freeze a member's membership
+ */
+export const FreezeMemberParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const FreezeMemberBody = zod.object({
+  "frozenAt": zod.string(),
+  "frozenUntil": zod.string(),
+  "reason": zod.string().nullish()
+})
+
+export const FreezeMemberResponse = zod.object({
+  "id": zod.number(),
+  "memberNumber": zod.string().nullish(),
+  "name": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
+  "gender": zod.string().nullish(),
+  "planId": zod.number().nullish(),
+  "planName": zod.string().nullish(),
+  "planPrice": zod.number().nullish(),
+  "status": zod.string(),
+  "joinDate": zod.string(),
+  "startDate": zod.string().nullish(),
+  "expiryDate": zod.string().nullish(),
+  "lastCheckIn": zod.string().nullish(),
+  "amountPaid": zod.number().nullish(),
+  "discount": zod.number().nullish(),
+  "balance": zod.number().nullish(),
+  "currency": zod.string(),
+  "frozenAt": zod.string().nullish(),
+  "frozenUntil": zod.string().nullish(),
+  "frozenDays": zod.number().nullish(),
+  "photoUrl": zod.string().nullish(),
+  "fingerprintId": zod.string().nullish(),
+  "qrCodeId": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Reactivate a frozen or inactive member
+ */
+export const ReactivateMemberParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ReactivateMemberResponse = zod.object({
+  "id": zod.number(),
+  "memberNumber": zod.string().nullish(),
+  "name": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
+  "gender": zod.string().nullish(),
+  "planId": zod.number().nullish(),
+  "planName": zod.string().nullish(),
+  "planPrice": zod.number().nullish(),
+  "status": zod.string(),
+  "joinDate": zod.string(),
+  "startDate": zod.string().nullish(),
+  "expiryDate": zod.string().nullish(),
+  "lastCheckIn": zod.string().nullish(),
+  "amountPaid": zod.number().nullish(),
+  "discount": zod.number().nullish(),
+  "balance": zod.number().nullish(),
+  "currency": zod.string(),
+  "frozenAt": zod.string().nullish(),
+  "frozenUntil": zod.string().nullish(),
+  "frozenDays": zod.number().nullish(),
+  "photoUrl": zod.string().nullish(),
+  "fingerprintId": zod.string().nullish(),
+  "qrCodeId": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Set member status (inactive, archived, active)
+ */
+export const SetMemberStatusParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const SetMemberStatusBody = zod.object({
+  "status": zod.enum(['active', 'inactive', 'archived'])
+})
+
+export const SetMemberStatusResponse = zod.object({
+  "id": zod.number(),
+  "memberNumber": zod.string().nullish(),
+  "name": zod.string(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "emergencyContact": zod.string().nullish(),
+  "gender": zod.string().nullish(),
+  "planId": zod.number().nullish(),
+  "planName": zod.string().nullish(),
+  "planPrice": zod.number().nullish(),
+  "status": zod.string(),
+  "joinDate": zod.string(),
+  "startDate": zod.string().nullish(),
+  "expiryDate": zod.string().nullish(),
+  "lastCheckIn": zod.string().nullish(),
+  "amountPaid": zod.number().nullish(),
+  "discount": zod.number().nullish(),
+  "balance": zod.number().nullish(),
+  "currency": zod.string(),
+  "frozenAt": zod.string().nullish(),
+  "frozenUntil": zod.string().nullish(),
+  "frozenDays": zod.number().nullish(),
+  "photoUrl": zod.string().nullish(),
+  "fingerprintId": zod.string().nullish(),
+  "qrCodeId": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Get payment history for a member
+ */
+export const GetMemberPaymentsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetMemberPaymentsResponseItem = zod.object({
+  "id": zod.number(),
+  "paymentNumber": zod.string().nullish(),
+  "type": zod.string(),
+  "amount": zod.number(),
+  "discount": zod.number(),
+  "currency": zod.string(),
+  "planName": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const GetMemberPaymentsResponse = zod.array(GetMemberPaymentsResponseItem)
+
+
+/**
+ * @summary Get check-in history for a member
+ */
+export const GetMemberCheckinsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetMemberCheckinsResponseItem = zod.object({
+  "id": zod.number(),
+  "memberId": zod.number(),
+  "memberName": zod.string(),
+  "memberNumber": zod.string().nullish(),
+  "checkedInAt": zod.string(),
+  "note": zod.string().nullish()
+})
+export const GetMemberCheckinsResponse = zod.array(GetMemberCheckinsResponseItem)
+
+

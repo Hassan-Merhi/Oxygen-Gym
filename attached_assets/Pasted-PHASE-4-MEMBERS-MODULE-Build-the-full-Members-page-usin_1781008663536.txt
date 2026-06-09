@@ -1,0 +1,159 @@
+PHASE 4 – MEMBERS MODULE
+
+Build the full Members page using the existing members table, plans table, payments table, check_ins table, numbering service, permissions, and activity logs.
+
+Requirements:
+
+1. Members List
+Create a members page with:
+- Search
+- Filter by status: Active, Expired, Frozen, Inactive, Archived
+- Filter by plan
+- Filter by expiry: Expiring in 7 days, 14 days, 30 days
+- Sort by name, date joined, expiry date
+- Pagination
+
+Show columns:
+- Member number
+- Name
+- Phone
+- Plan
+- Status
+- Start date
+- Expiry date
+- Balance
+- Last check-in
+- Actions
+
+2. Add/Edit Member
+Fields:
+- Member number auto-generated: MEM-000001 format
+- Full name
+- Phone
+- Email
+- Address
+- Emergency contact
+- Gender
+- Date joined
+- Member photo placeholder
+- Fingerprint ID placeholder
+- QR code ID placeholder
+- Notes
+- Status: Active, Expired, Frozen, Inactive, Archived
+- Plan
+- Start date
+- Expiry date
+- Amount paid
+- Discount
+- Currency: USD or CDF
+- Exchange rate used
+
+3. Membership Logic
+When selecting a plan:
+- Auto-fill price
+- Auto-calculate expiry date based on duration days
+- Allow manual discount
+- Allow custom paid amount
+- Calculate balance due
+
+Status rules:
+- Active if paid and expiry date is today or future
+- Expired if expiry date is past
+- Frozen if admin freezes membership
+- Inactive if member stopped coming
+- Archived for old records
+
+4. Member Actions
+Each member should support:
+- View profile
+- Edit
+- Renew
+- Check in
+- Freeze
+- Reactivate
+- Mark inactive
+- Archive
+- Print membership card placeholder
+
+5. Renew Membership
+Renew modal:
+- Choose plan
+- Start date
+- Auto expiry date
+- Amount paid
+- Discount
+- Currency
+- Exchange rate used
+- Notes
+
+Renewal must:
+- Update member plan
+- Update start/expiry date
+- Create payment record
+- Add to cash account/payment history later
+- Add activity log
+
+6. Check-in
+Manual check-in button:
+- Creates check_ins record
+- Prevent duplicate check-in for same member on same day unless admin confirms/overrides
+- Show today’s check-ins
+- Add activity log
+
+7. Freeze Membership
+Freeze modal:
+- Freeze start date
+- Freeze end date or number of days
+- Reason
+- When frozen, member status becomes Frozen
+- Expiry date should extend by frozen days when reactivated
+- Add activity log
+
+8. Reactivate
+Reactivate member:
+- If frozen, calculate extension days and update expiry date
+- Set status back to Active if expiry date is valid
+- Add activity log
+
+9. Member Profile Page
+Create detailed member profile:
+- Basic info
+- Current plan
+- Payment history
+- Renewal history
+- Check-in history
+- Status history
+- Notes
+
+10. Permissions
+Users without Manage Members:
+- Can view members only if they have page access
+- Cannot add/edit/delete/renew/freeze/reactivate
+
+Users without View Accounting:
+- Cannot see payment details beyond basic paid/expiry info
+
+Users without View Profit:
+- No profit/cost info shown
+
+11. Activity Logs
+Log:
+- Member created
+- Member edited
+- Member renewed
+- Member checked in
+- Member frozen
+- Member reactivated
+- Member marked inactive
+- Member archived
+
+12. UI Requirements
+- Clean modern table
+- Use modals for add/edit/renew/freeze
+- Mobile responsive
+- Loading states
+- Empty states
+- Toast messages
+- Form validation
+
+Do not move to Phase 5 until I approve.
