@@ -95,24 +95,29 @@ interface SaleItemData {
 function printReceipt(sale: Record<string, unknown>, settings: Record<string, unknown>, t: (key: string) => string) {
   const items = (sale.items ?? []) as SaleItemData[];
   const currency = sale.currency as string;
-  const fmt = (n: number | null | undefined) => `${currency} ${(n ?? 0).toFixed(2)}`;
+  const sym = currency === "USD" ? "$" : currency;
+  const fmt = (n: number | null | undefined) => `${sym} ${(n ?? 0).toFixed(2)}`;
+  const saleNum = (sale.saleNumber as string) ?? `SALE-${sale.id}`;
 
-  const rows = items.map((item: SaleItemData) => `
+  const rows = items.map((item: SaleItemData) => {
+    const lineTotal = item.lineTotal ?? ((item.unitPrice - (item.discount ?? 0)) * item.quantity);
+    return `
     <tr>
       <td style="padding:4px 8px">${item.productName}</td>
       <td style="padding:4px 8px;text-align:center">${item.quantity}</td>
       <td style="padding:4px 8px;text-align:right">${fmt(item.unitPrice)}</td>
       ${item.discount > 0 ? `<td style="padding:4px 8px;text-align:right">-${fmt(item.discount * item.quantity)}</td>` : `<td style="padding:4px 8px;text-align:right">—</td>`}
-      <td style="padding:4px 8px;text-align:right;font-weight:bold">${fmt(item.lineTotal)}</td>
+      <td style="padding:4px 8px;text-align:right;font-weight:bold">${fmt(lineTotal)}</td>
     </tr>
-  `).join("");
+  `;
+  }).join("");
 
   const html = `
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="utf-8">
-      <title>Receipt ${sale.saleNumber}</title>
+      <title>Receipt ${saleNum}</title>
       <style>
         body { font-family: 'Courier New', monospace; max-width: 300px; margin: 0 auto; padding: 16px; font-size: 12px; }
         h1 { font-size: 18px; margin: 0; }
@@ -133,7 +138,7 @@ function printReceipt(sale: Record<string, unknown>, settings: Record<string, un
         ${settings.receiptHeader ? `<div style="margin-top:6px;font-style:italic">${settings.receiptHeader}</div>` : ""}
       </div>
       <div class="divider"></div>
-      <div><strong>${t("sales.history.number")}:</strong> ${sale.saleNumber}</div>
+      <div><strong>${t("sales.history.number")}:</strong> ${saleNum}</div>
       <div><strong>Date:</strong> ${new Date(sale.saleDate as string).toLocaleString()}</div>
       <div><strong>${t("sales.receipt.cashier")}:</strong> ${sale.createdBy ?? "—"}</div>
       <div class="divider"></div>
@@ -290,7 +295,8 @@ function SaleDetailDialog({
   const saleData = sale as unknown as Record<string, unknown>;
   const items = (saleData.items ?? []) as SaleItemData[];
   const currency = saleData.currency as string;
-  const fmt = (n: number | null | undefined) => `${currency} ${(n ?? 0).toFixed(2)}`;
+  const sym = currency === "USD" ? "$" : currency;
+  const fmt = (n: number | null | undefined) => `${sym} ${(n ?? 0).toFixed(2)}`;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -341,7 +347,7 @@ function SaleDetailDialog({
                   <TableCell className="text-center">{item.quantity}</TableCell>
                   <TableCell className="text-right">{fmt(item.unitPrice)}</TableCell>
                   <TableCell className="text-right">{item.discount > 0 ? `-${fmt(item.discount * item.quantity)}` : "—"}</TableCell>
-                  <TableCell className="text-right font-semibold">{fmt(item.lineTotal)}</TableCell>
+                  <TableCell className="text-right font-semibold">{fmt(item.lineTotal ?? ((item.unitPrice - (item.discount ?? 0)) * item.quantity))}</TableCell>
                   {canViewCost && <TableCell className="text-right text-muted-foreground text-xs">{fmt(item.costPrice * item.quantity)}</TableCell>}
                   {canViewProfit && <TableCell className={`text-right text-xs font-medium ${item.profit >= 0 ? "text-green-600" : "text-red-600"}`}>{fmt(item.profit)}</TableCell>}
                 </TableRow>
@@ -451,7 +457,8 @@ export default function Sales() {
   }, { total: 0, discount: 0, cost: 0, profit: 0 });
 
   const changeDue = Math.max(0, paymentAmount - cartTotals.total);
-  const fmt = (n: number | null | undefined) => `${saleCurrency} ${(n ?? 0).toFixed(2)}`;
+  const cartSym = saleCurrency === "USD" ? "$" : saleCurrency;
+  const fmt = (n: number | null | undefined) => `${cartSym} ${(n ?? 0).toFixed(2)}`;
 
   // ── Barcode scanning (treat rapid keystrokes as scanner) ─────────────────
   const addProductToCart = useCallback(async (barcode: string) => {
@@ -918,7 +925,8 @@ export default function Sales() {
                   </TableRow>
                 ) : historyItems.items.map((sale) => {
                   const cur = sale.currency as string;
-                  const fmtS = (n: number) => `${cur} ${(n as number).toFixed(2)}`;
+                  const curSym = cur === "USD" ? "$" : cur;
+                  const fmtS = (n: number) => `${curSym} ${(n as number).toFixed(2)}`;
                   return (
                     <TableRow key={sale.id as number} className={sale.status === "voided" ? "opacity-60" : ""}>
                       <TableCell className="text-sm">{new Date(sale.saleDate as string).toLocaleString()}</TableCell>
