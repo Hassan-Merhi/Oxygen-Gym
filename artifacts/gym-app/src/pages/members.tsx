@@ -70,6 +70,7 @@ import {
   ChevronRight,
   AlertTriangle,
   Users,
+  SlidersHorizontal,
 } from "lucide-react";
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -327,70 +328,80 @@ export default function MembersPage() {
     freezeMutation.mutate({ id: freezeMember.id, data: values });
   }
 
+  // avatar color based on name
+  function avatarColor(name: string) {
+    const colors = [
+      "bg-violet-500","bg-blue-500","bg-emerald-500",
+      "bg-orange-500","bg-rose-500","bg-indigo-500","bg-teal-500","bg-amber-500",
+    ];
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xfffff;
+    return colors[h % colors.length];
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{t("members.title")}</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            {total} {t("members.total")}
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">{t("members.title")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{total} {t("members.total")}</p>
         </div>
         {canManage && (
-          <Button onClick={openAdd} className="gap-2">
-            <Plus className="h-4 w-4" />
+          <Button onClick={openAdd}>
+            <Plus className="h-4 w-4 mr-1.5" />
             {t("members.addMember")}
           </Button>
         )}
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            className="pl-9"
+            className="pl-9 h-9"
             placeholder={t("members.searchPlaceholder")}
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder={t("members.filter.status")} />
+          <SelectTrigger className="w-36 h-9 text-sm">
+            <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{t("members.filter.status")}</SelectItem>
+            <SelectItem value="all">All Statuses</SelectItem>
             {["active","expired","frozen","inactive","archived"].map(s => (
               <SelectItem key={s} value={s}>{t(`members.status.${s}`)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Select value={planFilter} onValueChange={(v) => { setPlanFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder={t("members.filter.plan")} />
+          <SelectTrigger className="w-36 h-9 text-sm">
+            <SelectValue placeholder="Plan" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{t("members.filter.plan")}</SelectItem>
+            <SelectItem value="all">All Plans</SelectItem>
             {plans.map((p: Plan) => (
               <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Select value={expiryWindow} onValueChange={(v) => { setExpiryWindow(v); setPage(1); }}>
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder={t("members.filter.expiry")} />
+          <SelectTrigger className="w-40 h-9 text-sm">
+            <SelectValue placeholder="Expiry" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{t("members.filter.expiry")}</SelectItem>
-            <SelectItem value="7">{t("members.filter.expiry7")}</SelectItem>
-            <SelectItem value="14">{t("members.filter.expiry14")}</SelectItem>
-            <SelectItem value="30">{t("members.filter.expiry30")}</SelectItem>
+            <SelectItem value="all">All Expiry</SelectItem>
+            <SelectItem value="7">Expires in 7 days</SelectItem>
+            <SelectItem value="14">Expires in 14 days</SelectItem>
+            <SelectItem value="30">Expires in 30 days</SelectItem>
           </SelectContent>
         </Select>
         <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-36 h-9 text-sm">
+            <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -402,75 +413,90 @@ export default function MembersPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900">
+      <div className="rounded-xl border border-border overflow-hidden bg-card">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50 dark:bg-slate-800/50">
-              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.number")}</TableHead>
-              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.name")}</TableHead>
-              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.phone")}</TableHead>
-              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.plan")}</TableHead>
-              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.status")}</TableHead>
-              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.start")}</TableHead>
-              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.expiry")}</TableHead>
-              {canViewAccounting && <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.balance")}</TableHead>}
-              <TableHead className="font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.lastCheckin")}</TableHead>
-              <TableHead className="text-right font-semibold text-xs uppercase tracking-wide text-slate-500">{t("members.table.actions")}</TableHead>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableHead className="font-medium text-xs uppercase tracking-wider text-muted-foreground py-3">{t("members.table.name")}</TableHead>
+              <TableHead className="font-medium text-xs uppercase tracking-wider text-muted-foreground py-3">{t("members.table.phone")}</TableHead>
+              <TableHead className="font-medium text-xs uppercase tracking-wider text-muted-foreground py-3">{t("members.table.plan")}</TableHead>
+              <TableHead className="font-medium text-xs uppercase tracking-wider text-muted-foreground py-3">{t("members.table.status")}</TableHead>
+              <TableHead className="font-medium text-xs uppercase tracking-wider text-muted-foreground py-3">{t("members.table.start")}</TableHead>
+              <TableHead className="font-medium text-xs uppercase tracking-wider text-muted-foreground py-3">{t("members.table.expiry")}</TableHead>
+              {canViewAccounting && <TableHead className="font-medium text-xs uppercase tracking-wider text-muted-foreground py-3">{t("members.table.balance")}</TableHead>}
+              <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  {Array.from({ length: canViewAccounting ? 10 : 9 }).map((_, j) => (
-                    <TableCell key={j}><div className="h-4 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" /></TableCell>
+              Array.from({ length: 8 }).map((_, i) => (
+                <TableRow key={i} className="border-border/50">
+                  {Array.from({ length: canViewAccounting ? 8 : 7 }).map((_, j) => (
+                    <TableCell key={j} className="py-3.5">
+                      <div className="h-4 bg-muted rounded animate-pulse" style={{ width: `${60 + (j * 17) % 40}%` }} />
+                    </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={canViewAccounting ? 10 : 9} className="text-center py-16">
-                  <Users className="h-10 w-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-                  <p className="font-medium text-slate-900 dark:text-white">{t("members.empty")}</p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t("members.emptyHint")}</p>
+                <TableCell colSpan={canViewAccounting ? 8 : 7} className="text-center py-20">
+                  <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-3">
+                    <Users className="h-6 w-6 text-muted-foreground/40" />
+                  </div>
+                  <p className="font-semibold text-foreground">{t("members.empty")}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{t("members.emptyHint")}</p>
                 </TableCell>
               </TableRow>
             ) : items.map((m) => {
               const days = daysUntil(m.expiryDate);
               const expiryClass =
                 m.status === "expired" || (days !== null && days < 0)
-                  ? "text-red-600 dark:text-red-400 font-medium"
+                  ? "text-red-600 font-medium"
                   : days !== null && days <= 7
-                  ? "text-orange-600 dark:text-orange-400 font-medium"
+                  ? "text-orange-500 font-medium"
                   : days !== null && days <= 14
-                  ? "text-yellow-600 dark:text-yellow-500 font-medium"
-                  : "text-slate-700 dark:text-slate-300";
+                  ? "text-yellow-600 font-medium"
+                  : "text-foreground";
+              const initials = m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
               return (
-                <TableRow key={m.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                  <TableCell className="font-mono text-xs text-slate-500">{m.memberNumber ?? "—"}</TableCell>
-                  <TableCell>
+                <TableRow key={m.id} className="border-border/50 hover:bg-muted/30 transition-colors group">
+                  <TableCell className="py-3">
                     <button
                       onClick={() => navigate(`/members/${m.id}`)}
-                      className="font-medium text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-left"
+                      className="flex items-center gap-3 text-left group/btn"
                     >
-                      {m.name}
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0 ${avatarColor(m.name)}`}>
+                        {initials}
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground group-hover/btn:text-primary transition-colors leading-tight">
+                          {m.name}
+                        </p>
+                        {m.email && <p className="text-xs text-muted-foreground mt-0.5">{m.email}</p>}
+                      </div>
                     </button>
                   </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400 text-sm">{m.phone ?? "—"}</TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400 text-sm">{m.planName ?? "—"}</TableCell>
-                  <TableCell><StatusBadge status={m.status} t={t} /></TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400 text-sm">{fmtDate(m.startDate)}</TableCell>
-                  <TableCell className={`text-sm ${expiryClass}`}>{fmtDate(m.expiryDate)}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground py-3">{m.phone ?? "—"}</TableCell>
+                  <TableCell className="py-3">
+                    {m.planName ? (
+                      <span className="text-sm font-medium text-foreground">{m.planName}</span>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="py-3"><StatusBadge status={m.status} t={t} /></TableCell>
+                  <TableCell className="text-sm text-muted-foreground py-3">{fmtDate(m.startDate)}</TableCell>
+                  <TableCell className={`text-sm py-3 ${expiryClass}`}>{fmtDate(m.expiryDate)}</TableCell>
                   {canViewAccounting && (
-                    <TableCell className={`text-sm font-medium ${(m.balance ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                    <TableCell className={`text-sm font-semibold py-3 ${(m.balance ?? 0) > 0 ? "text-red-600" : "text-emerald-600"}`}>
                       {(m.balance ?? 0) !== 0 ? fmtCurrency(m.balance, m.currency) : "—"}
                     </TableCell>
                   )}
-                  <TableCell className="text-slate-500 dark:text-slate-400 text-sm">{fmtDate(m.lastCheckIn)}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="py-3">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -511,7 +537,7 @@ export default function MembersPage() {
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem
-                              className="text-red-600 dark:text-red-400"
+                              className="text-red-600 focus:text-red-600"
                               onClick={() => deleteMutation.mutate({ id: m.id })}
                             >
                               <Archive className="h-4 w-4 mr-2" />{t("members.actions.archive")}
@@ -530,8 +556,10 @@ export default function MembersPage() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
-          <span>{t("common.page")} {page} {t("common.of")} {totalPages}</span>
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>
+            Page {page} of {totalPages} · {total} members
+          </span>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
               <ChevronLeft className="h-4 w-4 mr-1" />{t("common.previous")}
