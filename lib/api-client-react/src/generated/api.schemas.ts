@@ -505,6 +505,187 @@ export interface MemberPayment {
   createdAt: string;
 }
 
+export interface PaymentRecord {
+  id: number;
+  paymentNumber?: string | null;
+  direction: string;
+  category: string;
+  linkedEntity?: string | null;
+  linkedEntityId?: number | null;
+  linkedEntityName?: string | null;
+  memberId?: number | null;
+  memberName?: string | null;
+  planName?: string | null;
+  amount: number;
+  discount?: number | null;
+  currency: string;
+  exchangeRate: number;
+  amountUsd?: number | null;
+  amountCdf?: number | null;
+  account: string;
+  notes?: string | null;
+  paymentDate: string;
+  status: string;
+  createdBy?: string | null;
+  createdAt: string;
+}
+
+export type PaymentInputDirection = typeof PaymentInputDirection[keyof typeof PaymentInputDirection];
+
+
+export const PaymentInputDirection = {
+  in: 'in',
+  out: 'out',
+} as const;
+
+export type PaymentInputCategory = typeof PaymentInputCategory[keyof typeof PaymentInputCategory];
+
+
+export const PaymentInputCategory = {
+  membership: 'membership',
+  product_sale: 'product_sale',
+  expense: 'expense',
+  payroll: 'payroll',
+  stock_purchase: 'stock_purchase',
+  other: 'other',
+} as const;
+
+export type PaymentInputCurrency = typeof PaymentInputCurrency[keyof typeof PaymentInputCurrency];
+
+
+export const PaymentInputCurrency = {
+  USD: 'USD',
+  CDF: 'CDF',
+} as const;
+
+export interface PaymentInput {
+  direction: PaymentInputDirection;
+  category: PaymentInputCategory;
+  linkedEntity?: string | null;
+  linkedEntityId?: number | null;
+  linkedEntityName?: string | null;
+  memberId?: number | null;
+  amount: number;
+  discount: number;
+  currency: PaymentInputCurrency;
+  exchangeRate: number;
+  account?: string;
+  notes?: string | null;
+  paymentDate?: string | null;
+}
+
+export interface PaymentsPage {
+  items: PaymentRecord[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface PaymentSummary {
+  cashInToday: number;
+  cashOutToday: number;
+  netCashToday: number;
+  balanceUsd: number;
+  balanceCdf: number;
+  currency: string;
+}
+
+export interface VoucherRecord {
+  id: number;
+  voucherNumber?: string | null;
+  voucherType: string;
+  direction: string;
+  voucherDate: string;
+  paidTo?: string | null;
+  receivedFrom?: string | null;
+  linkedEntity?: string | null;
+  linkedEntityId?: number | null;
+  linkedEntityName?: string | null;
+  amount: number;
+  currency: string;
+  exchangeRate: number;
+  amountUsd?: number | null;
+  amountCdf?: number | null;
+  account: string;
+  category?: string | null;
+  description: string;
+  status: string;
+  createdBy?: string | null;
+  createdAt: string;
+}
+
+export type VoucherInputVoucherType = typeof VoucherInputVoucherType[keyof typeof VoucherInputVoucherType];
+
+
+export const VoucherInputVoucherType = {
+  cash_receipt: 'cash_receipt',
+  cash_payment: 'cash_payment',
+  expense: 'expense',
+  customer_payment: 'customer_payment',
+} as const;
+
+export type VoucherInputCurrency = typeof VoucherInputCurrency[keyof typeof VoucherInputCurrency];
+
+
+export const VoucherInputCurrency = {
+  USD: 'USD',
+  CDF: 'CDF',
+} as const;
+
+export interface VoucherInput {
+  voucherType: VoucherInputVoucherType;
+  voucherDate?: string | null;
+  paidTo?: string | null;
+  receivedFrom?: string | null;
+  linkedEntity?: string | null;
+  linkedEntityId?: number | null;
+  linkedEntityName?: string | null;
+  amount: number;
+  currency: VoucherInputCurrency;
+  exchangeRate: number;
+  category?: string | null;
+  description: string;
+  account?: string;
+}
+
+export interface VouchersPage {
+  items: VoucherRecord[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface LedgerEntry {
+  id: number;
+  entryDate: string;
+  sourceType: string;
+  sourceNumber?: string | null;
+  sourceId?: number | null;
+  direction: string;
+  amount: number;
+  currency: string;
+  exchangeRate: number;
+  amountUsd: number;
+  amountCdf: number;
+  balanceUsd: number;
+  balanceCdf: number;
+  description?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+}
+
+export interface LedgerPage {
+  items: LedgerEntry[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface LedgerBalance {
+  balanceUsd: number;
+  balanceCdf: number;
+}
+
 export type ListActivityLogsParams = {
 limit?: number;
 offset?: number;
@@ -519,5 +700,34 @@ planId?: number;
 expiryWindow?: number;
 sortBy?: string;
 sortOrder?: string;
+};
+
+export type ListPaymentsParams = {
+page?: number;
+limit?: number;
+search?: string;
+direction?: string;
+category?: string;
+currency?: string;
+dateFrom?: string;
+dateTo?: string;
+};
+
+export type ListVouchersParams = {
+page?: number;
+limit?: number;
+search?: string;
+voucherType?: string;
+currency?: string;
+dateFrom?: string;
+dateTo?: string;
+};
+
+export type ListLedgerParams = {
+page?: number;
+limit?: number;
+dateFrom?: string;
+dateTo?: string;
+direction?: string;
 };
 

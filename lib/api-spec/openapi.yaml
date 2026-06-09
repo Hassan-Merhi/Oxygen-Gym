@@ -24,6 +24,12 @@ tags:
     description: Member management
   - name: plans
     description: Subscription plans
+  - name: payments
+    description: Payments ledger
+  - name: vouchers
+    description: Cash vouchers
+  - name: ledger
+    description: Cash ledger
 paths:
   /healthz:
     get:
@@ -565,6 +571,255 @@ paths:
                 items:
                   $ref: "#/components/schemas/CheckInRecord"
 
+  /payments/summary:
+    get:
+      operationId: getPaymentSummary
+      tags: [payments]
+      summary: Get today's cash summary and current balance
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentSummary"
+
+  /payments:
+    get:
+      operationId: listPayments
+      tags: [payments]
+      summary: List payments with filters and pagination
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: direction
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: currency
+          in: query
+          schema: { type: string }
+        - name: dateFrom
+          in: query
+          schema: { type: string }
+        - name: dateTo
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated payments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentsPage"
+    post:
+      operationId: createPayment
+      tags: [payments]
+      summary: Record a new payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentInput"
+      responses:
+        "201":
+          description: Created payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentRecord"
+
+  /payments/{id}:
+    patch:
+      operationId: updatePayment
+      tags: [payments]
+      summary: Update a payment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentRecord"
+    delete:
+      operationId: deletePayment
+      tags: [payments]
+      summary: Cancel/archive a payment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Cancelled
+
+  /vouchers:
+    get:
+      operationId: listVouchers
+      tags: [vouchers]
+      summary: List vouchers
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: voucherType
+          in: query
+          schema: { type: string }
+        - name: currency
+          in: query
+          schema: { type: string }
+        - name: dateFrom
+          in: query
+          schema: { type: string }
+        - name: dateTo
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated vouchers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VouchersPage"
+    post:
+      operationId: createVoucher
+      tags: [vouchers]
+      summary: Create a new voucher
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoucherInput"
+      responses:
+        "201":
+          description: Created voucher
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoucherRecord"
+
+  /vouchers/{id}:
+    get:
+      operationId: getVoucher
+      tags: [vouchers]
+      summary: Get a single voucher
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Voucher
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoucherRecord"
+    patch:
+      operationId: updateVoucher
+      tags: [vouchers]
+      summary: Update a voucher
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoucherInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoucherRecord"
+    delete:
+      operationId: deleteVoucher
+      tags: [vouchers]
+      summary: Cancel/archive a voucher
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Cancelled
+
+  /ledger:
+    get:
+      operationId: listLedger
+      tags: [ledger]
+      summary: List cash ledger entries
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: dateFrom
+          in: query
+          schema: { type: string }
+        - name: dateTo
+          in: query
+          schema: { type: string }
+        - name: direction
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated ledger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerPage"
+
+  /ledger/balance:
+    get:
+      operationId: getLedgerBalance
+      tags: [ledger]
+      summary: Get current cash balance
+      responses:
+        "200":
+          description: Balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerBalance"
 
 components:
   schemas:
@@ -1121,3 +1376,167 @@ components:
         notes: { type: string, nullable: true }
         createdAt: { type: string }
       required: [id, type, amount, discount, currency, createdAt]
+
+    PaymentRecord:
+      type: object
+      properties:
+        id: { type: integer }
+        paymentNumber: { type: string, nullable: true }
+        direction: { type: string }
+        category: { type: string }
+        linkedEntity: { type: string, nullable: true }
+        linkedEntityId: { type: integer, nullable: true }
+        linkedEntityName: { type: string, nullable: true }
+        memberId: { type: integer, nullable: true }
+        memberName: { type: string, nullable: true }
+        planName: { type: string, nullable: true }
+        amount: { type: number }
+        discount: { type: number, nullable: true }
+        currency: { type: string }
+        exchangeRate: { type: number }
+        amountUsd: { type: number, nullable: true }
+        amountCdf: { type: number, nullable: true }
+        account: { type: string }
+        notes: { type: string, nullable: true }
+        paymentDate: { type: string }
+        status: { type: string }
+        createdBy: { type: string, nullable: true }
+        createdAt: { type: string }
+      required: [id, direction, category, amount, currency, exchangeRate, account, paymentDate, status, createdAt]
+
+    PaymentInput:
+      type: object
+      properties:
+        direction: { type: string, enum: [in, out] }
+        category: { type: string, enum: [membership, product_sale, expense, payroll, stock_purchase, other] }
+        linkedEntity: { type: string, nullable: true }
+        linkedEntityId: { type: integer, nullable: true }
+        linkedEntityName: { type: string, nullable: true }
+        memberId: { type: integer, nullable: true }
+        amount: { type: number }
+        discount: { type: number }
+        currency: { type: string, enum: [USD, CDF] }
+        exchangeRate: { type: number }
+        account: { type: string }
+        notes: { type: string, nullable: true }
+        paymentDate: { type: string, nullable: true }
+      required: [direction, category, amount, discount, currency, exchangeRate]
+
+    PaymentsPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaymentRecord"
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+      required: [items, total, page, limit]
+
+    PaymentSummary:
+      type: object
+      properties:
+        cashInToday: { type: number }
+        cashOutToday: { type: number }
+        netCashToday: { type: number }
+        balanceUsd: { type: number }
+        balanceCdf: { type: number }
+        currency: { type: string }
+      required: [cashInToday, cashOutToday, netCashToday, balanceUsd, balanceCdf, currency]
+
+    VoucherRecord:
+      type: object
+      properties:
+        id: { type: integer }
+        voucherNumber: { type: string, nullable: true }
+        voucherType: { type: string }
+        direction: { type: string }
+        voucherDate: { type: string }
+        paidTo: { type: string, nullable: true }
+        receivedFrom: { type: string, nullable: true }
+        linkedEntity: { type: string, nullable: true }
+        linkedEntityId: { type: integer, nullable: true }
+        linkedEntityName: { type: string, nullable: true }
+        amount: { type: number }
+        currency: { type: string }
+        exchangeRate: { type: number }
+        amountUsd: { type: number, nullable: true }
+        amountCdf: { type: number, nullable: true }
+        account: { type: string }
+        category: { type: string, nullable: true }
+        description: { type: string }
+        status: { type: string }
+        createdBy: { type: string, nullable: true }
+        createdAt: { type: string }
+      required: [id, voucherType, direction, voucherDate, amount, currency, exchangeRate, account, description, status, createdAt]
+
+    VoucherInput:
+      type: object
+      properties:
+        voucherType: { type: string, enum: [cash_receipt, cash_payment, expense, customer_payment] }
+        voucherDate: { type: string, nullable: true }
+        paidTo: { type: string, nullable: true }
+        receivedFrom: { type: string, nullable: true }
+        linkedEntity: { type: string, nullable: true }
+        linkedEntityId: { type: integer, nullable: true }
+        linkedEntityName: { type: string, nullable: true }
+        amount: { type: number }
+        currency: { type: string, enum: [USD, CDF] }
+        exchangeRate: { type: number }
+        category: { type: string, nullable: true }
+        description: { type: string }
+        account: { type: string }
+      required: [voucherType, amount, currency, exchangeRate, description]
+
+    VouchersPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/VoucherRecord"
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+      required: [items, total, page, limit]
+
+    LedgerEntry:
+      type: object
+      properties:
+        id: { type: integer }
+        entryDate: { type: string }
+        sourceType: { type: string }
+        sourceNumber: { type: string, nullable: true }
+        sourceId: { type: integer, nullable: true }
+        direction: { type: string }
+        amount: { type: number }
+        currency: { type: string }
+        exchangeRate: { type: number }
+        amountUsd: { type: number }
+        amountCdf: { type: number }
+        balanceUsd: { type: number }
+        balanceCdf: { type: number }
+        description: { type: string, nullable: true }
+        createdBy: { type: string, nullable: true }
+        createdAt: { type: string }
+      required: [id, entryDate, sourceType, direction, amount, currency, exchangeRate, amountUsd, amountCdf, balanceUsd, balanceCdf, createdAt]
+
+    LedgerPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/LedgerEntry"
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+      required: [items, total, page, limit]
+
+    LedgerBalance:
+      type: object
+      properties:
+        balanceUsd: { type: number }
+        balanceCdf: { type: number }
+      required: [balanceUsd, balanceCdf]

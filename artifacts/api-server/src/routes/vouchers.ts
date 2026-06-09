@@ -1,0 +1,172 @@
+import { Router, type Request, type Response } from "express";
+import { requireAuth } from "@clerk/express";
+import { db } from "@workspace/db";
+import { vouchersTable, settingsTable } from "@workspace/db/schema";
+import { eq, and, ilike, or, gte, lte, count, isNull, desc } from "drizzle-orm";
+import { getNextNumber } from "../lib/numbering";
+import { logActivity } from "../lib/activity";
+import { appendLedgerEntry } from "../lib/ledger";
+
+const router = Router();
+router.use(requireAuth());
+
+function callerName(req: Request): string {
+  return (req as unknown as { __gymproUserName?: string }).__gymproUserName ?? "System";
+}
+
+async function getExchangeRate(): Promise<number> {
+  const [s] = await db.select({ rate: settingsTable.usdToCdfRate }).from(settingsTable);
+  return s?.rate ?? 1;
+}
+
+// direction by voucher type
+function voucherDirection(voucherType: string): "in" | "out" {
+  return ["cash_receipt", "customer_payment"].includes(voucherType) ? "in" : "out";
+}
+
+// ─── List ─────────────────────────────────────────────────────────────────────
+router.get("/", async (req: Request, res: Response) => {
+  const { page = "1", limit = "20", search, voucherType, currency, dateFrom, dateTo } = req.query as Record<string, string>;
+
+  const pageNum = Math.max(1, parseInt(page));
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+  const offset = (pageNum - 1) * limitNum;
+
+  const conditions: ReturnType<typeof eq>[] = [isNull(vouchersTable.deletedAt) as ReturnType<typeof eq>];
+
+  if (search) {
+    conditions.push(
+      or(
+        ilike(vouchersTable.voucherNumber, `%${search}%`),
+        ilike(vouchersTable.description, `%${search}%`),
+        ilike(vouchersTable.paidTo, `%${search}%`),
+        ilike(vouchersTable.receivedFrom, `%${search}%`)
+      ) as ReturnType<typeof eq>
+    );
+  }
+  if (voucherType) conditions.push(eq(vouchersTable.voucherType, voucherType));
+  if (currency) conditions.push(eq(vouchersTable.currency, currency));
+  if (dateFrom) conditions.push(gte(vouchersTable.voucherDate, new Date(dateFrom)));
+  if (dateTo) conditions.push(lte(vouchersTable.voucherDate, new Date(dateTo + "T23:59:59")));
+
+  const where = and(...conditions);
+  const [items, [totRow]] = await Promise.all([
+    db.select().from(vouchersTable).where(where).orderBy(desc(vouchersTable.voucherDate)).limit(limitNum).offset(offset),
+    db.select({ total: count() }).from(vouchersTable).where(where),
+  ]);
+
+  res.json({ items, total: Number(totRow.total), page: pageNum, limit: limitNum });
+});
+
+// ─── Create ───────────────────────────────────────────────────────────────────
+router.post("/", async (req: Request, res: Response) => {
+  const body = req.body as {
+    voucherType: string;
+    voucherDate?: string;
+    paidTo?: string;
+    receivedFrom?: string;
+    linkedEntity?: string;
+    linkedEntityId?: number;
+    linkedEntityName?: string;
+    amount: number;
+    currency: string;
+    exchangeRate?: number;
+    account?: string;
+    category?: string;
+    description: string;
+  };
+
+  if (!body.voucherType || body.amount === undefined || !body.currency || !body.description) {
+    res.status(400).json({ error: "voucherType, amount, currency, description required" });
+    return;
+  }
+
+  const exchangeRate = body.exchangeRate ?? (await getExchangeRate());
+  const amountUsd = body.currency === "USD" ? body.amount : body.amount / exchangeRate;
+  const amountCdf = body.currency === "CDF" ? body.amount : body.amount * exchangeRate;
+  const direction = voucherDirection(body.voucherType);
+
+  const voucherNumber = await getNextNumber("VCH");
+  const createdBy = callerName(req);
+
+  const [voucher] = await db.insert(vouchersTable).values({
+    voucherNumber,
+    voucherType: body.voucherType,
+    direction,
+    voucherDate: body.voucherDate ? new Date(body.voucherDate) : new Date(),
+    paidTo: body.paidTo,
+    receivedFrom: body.receivedFrom,
+    linkedEntity: body.linkedEntity,
+    linkedEntityId: body.linkedEntityId,
+    linkedEntityName: body.linkedEntityName,
+    amount: body.amount,
+    currency: body.currency,
+    exchangeRate,
+    amountUsd,
+    amountCdf,
+    account: body.account ?? "cash",
+    category: body.category,
+    description: body.description,
+    status: "recorded",
+    createdBy,
+  }).returning();
+
+  await appendLedgerEntry({
+    sourceType: "voucher",
+    sourceNumber: voucherNumber,
+    sourceId: voucher.id,
+    direction,
+    amount: body.amount,
+    currency: body.currency,
+    exchangeRate,
+    description: body.description,
+    createdBy,
+  });
+
+  await logActivity(req, "voucher_created", "voucher", voucher.id, {
+    number: voucherNumber,
+    type: body.voucherType,
+    amount: body.amount,
+    currency: body.currency,
+  });
+
+  res.status(201).json(voucher);
+});
+
+// ─── Get single ───────────────────────────────────────────────────────────────
+router.get("/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const [voucher] = await db.select().from(vouchersTable)
+    .where(and(eq(vouchersTable.id, id), isNull(vouchersTable.deletedAt)));
+  if (!voucher) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(voucher);
+});
+
+// ─── Update ───────────────────────────────────────────────────────────────────
+router.patch("/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const body = req.body as Record<string, unknown>;
+  const allowed = ["voucherType","voucherDate","paidTo","receivedFrom","linkedEntity","linkedEntityId","linkedEntityName","amount","currency","exchangeRate","account","category","description"];
+  const update: Record<string, unknown> = {};
+  for (const k of allowed) { if (body[k] !== undefined) update[k] = body[k]; }
+  if (update.voucherDate) update.voucherDate = new Date(update.voucherDate as string);
+
+  const [voucher] = await db.update(vouchersTable).set(update).where(eq(vouchersTable.id, id)).returning();
+  if (!voucher) { res.status(404).json({ error: "Not found" }); return; }
+  await logActivity(req, "voucher_edited", "voucher", id, { number: voucher.voucherNumber });
+  res.json(voucher);
+});
+
+// ─── Delete / cancel ─────────────────────────────────────────────────────────
+router.delete("/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const [voucher] = await db.update(vouchersTable)
+    .set({ status: "cancelled", deletedAt: new Date() })
+    .where(and(eq(vouchersTable.id, id), isNull(vouchersTable.deletedAt)))
+    .returning();
+  if (!voucher) { res.status(404).json({ error: "Not found" }); return; }
+  await logActivity(req, "voucher_archived", "voucher", id, { number: voucher.voucherNumber });
+  res.json({ ok: true });
+});
+
+export default router;

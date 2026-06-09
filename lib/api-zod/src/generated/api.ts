@@ -959,3 +959,334 @@ export const GetMemberCheckinsResponseItem = zod.object({
 export const GetMemberCheckinsResponse = zod.array(GetMemberCheckinsResponseItem)
 
 
+/**
+ * @summary Get today's cash summary and current balance
+ */
+export const GetPaymentSummaryResponse = zod.object({
+  "cashInToday": zod.number(),
+  "cashOutToday": zod.number(),
+  "netCashToday": zod.number(),
+  "balanceUsd": zod.number(),
+  "balanceCdf": zod.number(),
+  "currency": zod.string()
+})
+
+
+/**
+ * @summary List payments with filters and pagination
+ */
+export const ListPaymentsQueryParams = zod.object({
+  "page": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().optional(),
+  "search": zod.coerce.string().optional(),
+  "direction": zod.coerce.string().optional(),
+  "category": zod.coerce.string().optional(),
+  "currency": zod.coerce.string().optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional()
+})
+
+export const ListPaymentsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "paymentNumber": zod.string().nullish(),
+  "direction": zod.string(),
+  "category": zod.string(),
+  "linkedEntity": zod.string().nullish(),
+  "linkedEntityId": zod.number().nullish(),
+  "linkedEntityName": zod.string().nullish(),
+  "memberId": zod.number().nullish(),
+  "memberName": zod.string().nullish(),
+  "planName": zod.string().nullish(),
+  "amount": zod.number(),
+  "discount": zod.number().nullish(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "amountUsd": zod.number().nullish(),
+  "amountCdf": zod.number().nullish(),
+  "account": zod.string(),
+  "notes": zod.string().nullish(),
+  "paymentDate": zod.string(),
+  "status": zod.string(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Record a new payment
+ */
+export const CreatePaymentBody = zod.object({
+  "direction": zod.enum(['in', 'out']),
+  "category": zod.enum(['membership', 'product_sale', 'expense', 'payroll', 'stock_purchase', 'other']),
+  "linkedEntity": zod.string().nullish(),
+  "linkedEntityId": zod.number().nullish(),
+  "linkedEntityName": zod.string().nullish(),
+  "memberId": zod.number().nullish(),
+  "amount": zod.number(),
+  "discount": zod.number(),
+  "currency": zod.enum(['USD', 'CDF']),
+  "exchangeRate": zod.number(),
+  "account": zod.string().optional(),
+  "notes": zod.string().nullish(),
+  "paymentDate": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update a payment
+ */
+export const UpdatePaymentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdatePaymentBody = zod.object({
+  "direction": zod.enum(['in', 'out']),
+  "category": zod.enum(['membership', 'product_sale', 'expense', 'payroll', 'stock_purchase', 'other']),
+  "linkedEntity": zod.string().nullish(),
+  "linkedEntityId": zod.number().nullish(),
+  "linkedEntityName": zod.string().nullish(),
+  "memberId": zod.number().nullish(),
+  "amount": zod.number(),
+  "discount": zod.number(),
+  "currency": zod.enum(['USD', 'CDF']),
+  "exchangeRate": zod.number(),
+  "account": zod.string().optional(),
+  "notes": zod.string().nullish(),
+  "paymentDate": zod.string().nullish()
+})
+
+export const UpdatePaymentResponse = zod.object({
+  "id": zod.number(),
+  "paymentNumber": zod.string().nullish(),
+  "direction": zod.string(),
+  "category": zod.string(),
+  "linkedEntity": zod.string().nullish(),
+  "linkedEntityId": zod.number().nullish(),
+  "linkedEntityName": zod.string().nullish(),
+  "memberId": zod.number().nullish(),
+  "memberName": zod.string().nullish(),
+  "planName": zod.string().nullish(),
+  "amount": zod.number(),
+  "discount": zod.number().nullish(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "amountUsd": zod.number().nullish(),
+  "amountCdf": zod.number().nullish(),
+  "account": zod.string(),
+  "notes": zod.string().nullish(),
+  "paymentDate": zod.string(),
+  "status": zod.string(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Cancel/archive a payment
+ */
+export const DeletePaymentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List vouchers
+ */
+export const ListVouchersQueryParams = zod.object({
+  "page": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().optional(),
+  "search": zod.coerce.string().optional(),
+  "voucherType": zod.coerce.string().optional(),
+  "currency": zod.coerce.string().optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional()
+})
+
+export const ListVouchersResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "voucherNumber": zod.string().nullish(),
+  "voucherType": zod.string(),
+  "direction": zod.string(),
+  "voucherDate": zod.string(),
+  "paidTo": zod.string().nullish(),
+  "receivedFrom": zod.string().nullish(),
+  "linkedEntity": zod.string().nullish(),
+  "linkedEntityId": zod.number().nullish(),
+  "linkedEntityName": zod.string().nullish(),
+  "amount": zod.number(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "amountUsd": zod.number().nullish(),
+  "amountCdf": zod.number().nullish(),
+  "account": zod.string(),
+  "category": zod.string().nullish(),
+  "description": zod.string(),
+  "status": zod.string(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Create a new voucher
+ */
+export const CreateVoucherBody = zod.object({
+  "voucherType": zod.enum(['cash_receipt', 'cash_payment', 'expense', 'customer_payment']),
+  "voucherDate": zod.string().nullish(),
+  "paidTo": zod.string().nullish(),
+  "receivedFrom": zod.string().nullish(),
+  "linkedEntity": zod.string().nullish(),
+  "linkedEntityId": zod.number().nullish(),
+  "linkedEntityName": zod.string().nullish(),
+  "amount": zod.number(),
+  "currency": zod.enum(['USD', 'CDF']),
+  "exchangeRate": zod.number(),
+  "category": zod.string().nullish(),
+  "description": zod.string(),
+  "account": zod.string().optional()
+})
+
+
+/**
+ * @summary Get a single voucher
+ */
+export const GetVoucherParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetVoucherResponse = zod.object({
+  "id": zod.number(),
+  "voucherNumber": zod.string().nullish(),
+  "voucherType": zod.string(),
+  "direction": zod.string(),
+  "voucherDate": zod.string(),
+  "paidTo": zod.string().nullish(),
+  "receivedFrom": zod.string().nullish(),
+  "linkedEntity": zod.string().nullish(),
+  "linkedEntityId": zod.number().nullish(),
+  "linkedEntityName": zod.string().nullish(),
+  "amount": zod.number(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "amountUsd": zod.number().nullish(),
+  "amountCdf": zod.number().nullish(),
+  "account": zod.string(),
+  "category": zod.string().nullish(),
+  "description": zod.string(),
+  "status": zod.string(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Update a voucher
+ */
+export const UpdateVoucherParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateVoucherBody = zod.object({
+  "voucherType": zod.enum(['cash_receipt', 'cash_payment', 'expense', 'customer_payment']),
+  "voucherDate": zod.string().nullish(),
+  "paidTo": zod.string().nullish(),
+  "receivedFrom": zod.string().nullish(),
+  "linkedEntity": zod.string().nullish(),
+  "linkedEntityId": zod.number().nullish(),
+  "linkedEntityName": zod.string().nullish(),
+  "amount": zod.number(),
+  "currency": zod.enum(['USD', 'CDF']),
+  "exchangeRate": zod.number(),
+  "category": zod.string().nullish(),
+  "description": zod.string(),
+  "account": zod.string().optional()
+})
+
+export const UpdateVoucherResponse = zod.object({
+  "id": zod.number(),
+  "voucherNumber": zod.string().nullish(),
+  "voucherType": zod.string(),
+  "direction": zod.string(),
+  "voucherDate": zod.string(),
+  "paidTo": zod.string().nullish(),
+  "receivedFrom": zod.string().nullish(),
+  "linkedEntity": zod.string().nullish(),
+  "linkedEntityId": zod.number().nullish(),
+  "linkedEntityName": zod.string().nullish(),
+  "amount": zod.number(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "amountUsd": zod.number().nullish(),
+  "amountCdf": zod.number().nullish(),
+  "account": zod.string(),
+  "category": zod.string().nullish(),
+  "description": zod.string(),
+  "status": zod.string(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Cancel/archive a voucher
+ */
+export const DeleteVoucherParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary List cash ledger entries
+ */
+export const ListLedgerQueryParams = zod.object({
+  "page": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional(),
+  "direction": zod.coerce.string().optional()
+})
+
+export const ListLedgerResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "entryDate": zod.string(),
+  "sourceType": zod.string(),
+  "sourceNumber": zod.string().nullish(),
+  "sourceId": zod.number().nullish(),
+  "direction": zod.string(),
+  "amount": zod.number(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "amountUsd": zod.number(),
+  "amountCdf": zod.number(),
+  "balanceUsd": zod.number(),
+  "balanceCdf": zod.number(),
+  "description": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Get current cash balance
+ */
+export const GetLedgerBalanceResponse = zod.object({
+  "balanceUsd": zod.number(),
+  "balanceCdf": zod.number()
+})
+
+

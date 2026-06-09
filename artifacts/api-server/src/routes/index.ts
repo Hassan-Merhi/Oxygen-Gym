@@ -8,6 +8,9 @@ import uploadRouter from "./upload";
 import dashboardRouter from "./dashboard";
 import plansRouter from "./plans";
 import membersRouter from "./members";
+import paymentsRouter from "./payments";
+import vouchersRouter from "./vouchers";
+import ledgerRouter from "./ledger";
 
 const router: IRouter = Router();
 
@@ -20,5 +23,8 @@ router.use("/upload", uploadRouter);
 router.use("/dashboard", dashboardRouter);
 router.use("/plans", plansRouter);
 router.use("/members", membersRouter);
+router.use("/payments", paymentsRouter);
+router.use("/vouchers", vouchersRouter);
+router.use("/ledger", ledgerRouter);
 
 export default router;
