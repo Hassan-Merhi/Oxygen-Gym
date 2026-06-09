@@ -620,10 +620,10 @@ export default function MembersPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>{t("members.form.plan")}</Label>
-                  <Select value={form.watch("planId") ?? ""} onValueChange={(v) => { form.setValue("planId", v); watchedPlanId(v); }}>
+                  <Select value={form.watch("planId") || "none"} onValueChange={(v) => { const val = v === "none" ? "" : v; form.setValue("planId", val); watchedPlanId(val); }}>
                     <SelectTrigger className="mt-1"><SelectValue placeholder={t("members.form.selectPlan")} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">{t("members.form.noPlan")}</SelectItem>
+                      <SelectItem value="none">{t("members.form.noPlan")}</SelectItem>
                       {plans.map((p: Plan) => <SelectItem key={p.id} value={String(p.id)}>{p.name} — {p.currency} {p.price}</SelectItem>)}
                     </SelectContent>
                   </Select>
