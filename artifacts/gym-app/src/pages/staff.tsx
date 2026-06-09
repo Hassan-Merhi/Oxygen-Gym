@@ -743,7 +743,7 @@ function PayrollTab() {
 }
 
 // ─── Login Users Tab ───────────────────────────────────────────────────────────
-function LoginUsersTab() {
+export function LoginUsersTab() {
   const { t } = useI18n();
   const { data: users = [], isLoading } = useListUsers();
   const queryClient = useQueryClient();

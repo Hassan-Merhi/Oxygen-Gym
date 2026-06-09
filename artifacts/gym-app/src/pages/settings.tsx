@@ -11,10 +11,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Upload, X, ImageIcon } from "lucide-react";
+import { Loader2, Upload, X, ImageIcon, Settings2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LoginUsersTab } from "@/pages/staff";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -178,126 +180,151 @@ export default function Settings() {
   const backupEnabled = form.watch("backupEnabled");
 
   return (
-    <div className="max-w-4xl space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">{t("settings.title")}</h1>
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-500/20 to-slate-400/10 flex items-center justify-center">
+          <Settings2 className="w-5 h-5 text-slate-600" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{t("settings.title")}</h1>
+          <p className="text-sm text-muted-foreground">Manage your gym configuration and users</p>
+        </div>
+      </div>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <Tabs defaultValue="general">
+        <TabsList className="h-10">
+          <TabsTrigger value="general" className="gap-2">
+            <Settings2 className="w-3.5 h-3.5" />
+            General
+          </TabsTrigger>
+          <TabsTrigger value="users" className="gap-2">
+            <Users className="w-3.5 h-3.5" />
+            Users
+          </TabsTrigger>
+        </TabsList>
 
-          {/* Gym Information */}
-          <Card>
-            <CardHeader><CardTitle className="text-base">{t("settings.gymInfo")}</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <FormField control={form.control} name="gymName" render={({ field }) => (
-                <FormItem><FormLabel>{t("settings.gymName")}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="phone" render={({ field }) => (
-                <FormItem><FormLabel>{t("settings.phone")}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="address" render={({ field }) => (
-                <FormItem className="md:col-span-2"><FormLabel>{t("settings.address")}</FormLabel><FormControl><Textarea rows={2} {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-            </CardContent>
-          </Card>
+        {/* ── General Tab ──────────────────────────────────────────────────── */}
+        <TabsContent value="general" className="mt-6">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
-          {/* Branding */}
-          <Card>
-            <CardHeader><CardTitle className="text-base">{t("settings.branding")}</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <LogoUpload
-                label={t("settings.gymLogo")}
-                hint={t("settings.logoHint")}
-                value={form.watch("logoUrl")}
-                onChange={(url) => form.setValue("logoUrl", url)}
-              />
-              <LogoUpload
-                label={t("settings.receiptLogo")}
-                hint={t("settings.logoHint")}
-                value={form.watch("receiptLogoUrl")}
-                onChange={(url) => form.setValue("receiptLogoUrl", url)}
-              />
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader><CardTitle className="text-base">{t("settings.gymInfo")}</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <FormField control={form.control} name="gymName" render={({ field }) => (
+                    <FormItem><FormLabel>{t("settings.gymName")}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="phone" render={({ field }) => (
+                    <FormItem><FormLabel>{t("settings.phone")}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={form.control} name="address" render={({ field }) => (
+                    <FormItem className="md:col-span-2"><FormLabel>{t("settings.address")}</FormLabel><FormControl><Textarea rows={2} {...field} /></FormControl><FormMessage /></FormItem>
+                  )} />
+                </CardContent>
+              </Card>
 
-          {/* Localization & Currency */}
-          <Card>
-            <CardHeader><CardTitle className="text-base">{t("settings.localization")}</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <FormField control={form.control} name="language" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("settings.language")}</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="en">English</SelectItem>
-                      <SelectItem value="fr">Français</SelectItem>
-                      <SelectItem value="ar">العربية</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="defaultCurrency" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("settings.defaultCurrency")}</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="USD">USD ($)</SelectItem>
-                      <SelectItem value="CDF">CDF (FC)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="usdToCdfRate" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("settings.usdToCdfRate")}</FormLabel>
-                  <FormControl><Input type="number" {...field} /></FormControl>
-                  <FormDescription>{t("common.preview")}: $10 = {(10 * (rate || 0)).toLocaleString()} FC</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader><CardTitle className="text-base">{t("settings.branding")}</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <LogoUpload
+                    label={t("settings.gymLogo")}
+                    hint={t("settings.logoHint")}
+                    value={form.watch("logoUrl")}
+                    onChange={(url) => form.setValue("logoUrl", url)}
+                  />
+                  <LogoUpload
+                    label={t("settings.receiptLogo")}
+                    hint={t("settings.logoHint")}
+                    value={form.watch("receiptLogoUrl")}
+                    onChange={(url) => form.setValue("receiptLogoUrl", url)}
+                  />
+                </CardContent>
+              </Card>
 
-          {/* Backup */}
-          <Card>
-            <CardHeader><CardTitle className="text-base">{t("settings.backup")}</CardTitle></CardHeader>
-            <CardContent className="space-y-5">
-              <FormField control={form.control} name="backupEnabled" render={({ field }) => (
-                <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <FormLabel className="text-sm font-medium">{t("settings.backupEnabled")}</FormLabel>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value === "true"}
-                      onCheckedChange={(v) => field.onChange(v ? "true" : "false")}
-                    />
-                  </FormControl>
-                </FormItem>
-              )} />
-              {backupEnabled === "true" && (
-                <FormField control={form.control} name="backupTime" render={({ field }) => (
-                  <FormItem className="max-w-[200px]">
-                    <FormLabel>{t("settings.backupTime")}</FormLabel>
-                    <FormControl><Input type="time" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              )}
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader><CardTitle className="text-base">{t("settings.localization")}</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <FormField control={form.control} name="language" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("settings.language")}</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="en">English</SelectItem>
+                          <SelectItem value="fr">Français</SelectItem>
+                          <SelectItem value="ar">العربية</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="defaultCurrency" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("settings.defaultCurrency")}</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="USD">USD ($)</SelectItem>
+                          <SelectItem value="CDF">CDF (FC)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="usdToCdfRate" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("settings.usdToCdfRate")}</FormLabel>
+                      <FormControl><Input type="number" {...field} /></FormControl>
+                      <FormDescription>{t("common.preview")}: $10 = {(10 * (rate || 0)).toLocaleString()} FC</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </CardContent>
+              </Card>
 
-          <div className="flex justify-end">
-            <Button type="submit" size="lg" disabled={updateSettings.isPending} data-testid="button-save-settings">
-              {updateSettings.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {t("settings.save")}
-            </Button>
-          </div>
-        </form>
-      </Form>
+              <Card>
+                <CardHeader><CardTitle className="text-base">{t("settings.backup")}</CardTitle></CardHeader>
+                <CardContent className="space-y-5">
+                  <FormField control={form.control} name="backupEnabled" render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                      <div>
+                        <FormLabel className="text-sm font-medium">{t("settings.backupEnabled")}</FormLabel>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value === "true"}
+                          onCheckedChange={(v) => field.onChange(v ? "true" : "false")}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )} />
+                  {backupEnabled === "true" && (
+                    <FormField control={form.control} name="backupTime" render={({ field }) => (
+                      <FormItem className="max-w-[200px]">
+                        <FormLabel>{t("settings.backupTime")}</FormLabel>
+                        <FormControl><Input type="time" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  )}
+                </CardContent>
+              </Card>
+
+              <div className="flex justify-end">
+                <Button type="submit" size="lg" disabled={updateSettings.isPending} data-testid="button-save-settings">
+                  {updateSettings.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {t("settings.save")}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </TabsContent>
+
+        {/* ── Users Tab ─────────────────────────────────────────────────────── */}
+        <TabsContent value="users" className="mt-6">
+          <LoginUsersTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
