@@ -127,9 +127,6 @@ export default function Settings() {
     defaultCurrency: z.enum(["USD", "CDF"]),
     usdToCdfRate: z.coerce.number().min(1),
     language: z.enum(["en", "fr", "ar"]),
-    receiptHeader: z.string().optional(),
-    receiptFooter: z.string().optional(),
-    membershipCardFooter: z.string().optional(),
     backupEnabled: z.string().optional(),
     backupTime: z.string().optional(),
   });
@@ -141,8 +138,6 @@ export default function Settings() {
       logoUrl: null, receiptLogoUrl: null,
       defaultCurrency: "USD", usdToCdfRate: 2800,
       language: "en",
-      receiptHeader: "", receiptFooter: "",
-      membershipCardFooter: "",
       backupEnabled: "false", backupTime: "02:00",
     },
   });
@@ -158,9 +153,6 @@ export default function Settings() {
         defaultCurrency: settings.defaultCurrency as "USD" | "CDF",
         usdToCdfRate: settings.usdToCdfRate,
         language: settings.language as "en" | "fr" | "ar",
-        receiptHeader: settings.receiptHeader ?? "",
-        receiptFooter: settings.receiptFooter ?? "",
-        membershipCardFooter: settings.membershipCardFooter ?? "",
         backupEnabled: settings.backupEnabled ?? "false",
         backupTime: settings.backupTime ?? "02:00",
       });
@@ -265,29 +257,6 @@ export default function Settings() {
                   <FormDescription>{t("common.preview")}: $10 = {(10 * (rate || 0)).toLocaleString()} FC</FormDescription>
                   <FormMessage />
                 </FormItem>
-              )} />
-            </CardContent>
-          </Card>
-
-          {/* Receipt Customization */}
-          <Card>
-            <CardHeader><CardTitle className="text-base">{t("settings.receipts")}</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-1 gap-5">
-              <FormField control={form.control} name="receiptHeader" render={({ field }) => (
-                <FormItem><FormLabel>{t("settings.receiptHeader")}</FormLabel><FormControl><Textarea rows={2} {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="receiptFooter" render={({ field }) => (
-                <FormItem><FormLabel>{t("settings.receiptFooter")}</FormLabel><FormControl><Textarea rows={2} {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-            </CardContent>
-          </Card>
-
-          {/* Membership Card */}
-          <Card>
-            <CardHeader><CardTitle className="text-base">{t("settings.membershipCard")}</CardTitle></CardHeader>
-            <CardContent>
-              <FormField control={form.control} name="membershipCardFooter" render={({ field }) => (
-                <FormItem><FormLabel>{t("settings.membershipCardFooter")}</FormLabel><FormControl><Textarea rows={2} {...field} /></FormControl><FormMessage /></FormItem>
               )} />
             </CardContent>
           </Card>
