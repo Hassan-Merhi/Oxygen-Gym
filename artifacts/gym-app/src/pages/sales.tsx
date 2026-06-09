@@ -95,7 +95,7 @@ interface SaleItemData {
 function printReceipt(sale: Record<string, unknown>, settings: Record<string, unknown>, t: (key: string) => string) {
   const items = (sale.items ?? []) as SaleItemData[];
   const currency = sale.currency as string;
-  const fmt = (n: number) => `${currency} ${n.toFixed(2)}`;
+  const fmt = (n: number | null | undefined) => `${currency} ${(n ?? 0).toFixed(2)}`;
 
   const rows = items.map((item: SaleItemData) => `
     <tr>
@@ -290,7 +290,7 @@ function SaleDetailDialog({
   const saleData = sale as unknown as Record<string, unknown>;
   const items = (saleData.items ?? []) as SaleItemData[];
   const currency = saleData.currency as string;
-  const fmt = (n: number) => `${currency} ${n.toFixed(2)}`;
+  const fmt = (n: number | null | undefined) => `${currency} ${(n ?? 0).toFixed(2)}`;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -451,7 +451,7 @@ export default function Sales() {
   }, { total: 0, discount: 0, cost: 0, profit: 0 });
 
   const changeDue = Math.max(0, paymentAmount - cartTotals.total);
-  const fmt = (n: number) => `${saleCurrency} ${n.toFixed(2)}`;
+  const fmt = (n: number | null | undefined) => `${saleCurrency} ${(n ?? 0).toFixed(2)}`;
 
   // ── Barcode scanning (treat rapid keystrokes as scanner) ─────────────────
   const addProductToCart = useCallback(async (barcode: string) => {
