@@ -247,7 +247,7 @@ router.post("/", async (req: Request, res: Response) => {
 
   // 5. Cash ledger entry (outside transaction — non-critical)
   await appendLedgerEntry({
-    sourceType: "product_sale",
+    sourceType: "sale",
     sourceNumber: saleNumber,
     sourceId: sale.id,
     direction: "in",
