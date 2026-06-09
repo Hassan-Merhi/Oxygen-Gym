@@ -14,3 +14,4 @@ export * from "./sales";
 export * from "./vouchers";
 export * from "./cash_ledger";
 export * from "./notification_reads";
+export * from "./chart_of_accounts";

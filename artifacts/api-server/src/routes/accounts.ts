@@ -1,10 +1,10 @@
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
-import { paymentsTable, vouchersTable, cashLedgerTable } from "@workspace/db/schema";
+import { paymentsTable, vouchersTable, cashLedgerTable, chartOfAccountsTable } from "@workspace/db/schema";
 import {
   and, gte, lte, eq, inArray, sum, not,
-  desc, count, or, ilike,
+  desc, count, or, ilike, asc,
 } from "drizzle-orm";
 import { getCurrentBalance } from "../lib/ledger";
 import { logActivity } from "../lib/activity";
@@ -314,6 +314,101 @@ router.get("/profit-loss", async (req: Request, res: Response) => {
     net: { usd: revenue.usd - totalExpUsd, cdf: revenue.cdf - totalExpCdf },
     breakdown: byCategory,
   });
+});
+
+// ── Chart of Accounts ────────────────────────────────────────────────────────
+
+// GET /accounts/chart
+router.get("/chart", async (_req: Request, res: Response) => {
+  const rows = await db
+    .select()
+    .from(chartOfAccountsTable)
+    .orderBy(asc(chartOfAccountsTable.type), asc(chartOfAccountsTable.name));
+  res.json(rows);
+});
+
+// POST /accounts/chart
+router.post("/chart", async (req: Request, res: Response) => {
+  const { name, type, description } = req.body as {
+    name: string;
+    type: string;
+    description?: string;
+  };
+  if (!name || !type) {
+    res.status(400).json({ error: "name and type are required" });
+    return;
+  }
+  const [row] = await db
+    .insert(chartOfAccountsTable)
+    .values({ name: name.trim(), type, description: description ?? null })
+    .onConflictDoNothing()
+    .returning();
+  if (!row) {
+    res.status(409).json({ error: "Account name already exists" });
+    return;
+  }
+  res.status(201).json(row);
+});
+
+// PUT /accounts/chart/:id
+router.put("/chart/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const { name, type, description, isActive } = req.body as {
+    name?: string;
+    type?: string;
+    description?: string;
+    isActive?: boolean;
+  };
+  const [row] = await db
+    .update(chartOfAccountsTable)
+    .set({
+      ...(name !== undefined && { name: name.trim() }),
+      ...(type !== undefined && { type }),
+      ...(description !== undefined && { description }),
+      ...(isActive !== undefined && { isActive }),
+    })
+    .where(eq(chartOfAccountsTable.id, id))
+    .returning();
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(row);
+});
+
+// DELETE /accounts/chart/:id
+router.delete("/chart/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  await db.delete(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, id));
+  res.status(204).end();
+});
+
+// GET /accounts/chart/:id/statement?dateFrom=&dateTo=
+router.get("/chart/:id/statement", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const { dateFrom, dateTo } = req.query as Record<string, string>;
+
+  const account = await db.query.chartOfAccountsTable.findFirst({
+    where: eq(chartOfAccountsTable.id, id),
+  });
+  if (!account) { res.status(404).json({ error: "Not found" }); return; }
+
+  const conditions = [eq(vouchersTable.account, account.name.toLowerCase().replace(/ /g, "_"))];
+  if (dateFrom) conditions.push(gte(vouchersTable.voucherDate, new Date(dateFrom)));
+  if (dateTo) conditions.push(lte(vouchersTable.voucherDate, new Date(dateTo)));
+
+  const rows = await db
+    .select()
+    .from(vouchersTable)
+    .where(and(...conditions))
+    .orderBy(asc(vouchersTable.voucherDate), asc(vouchersTable.id));
+
+  let runningBalance = 0;
+  const withBalance = rows.map((r) => {
+    const amt = Number(r.amountUsd ?? 0);
+    const delta = r.voucherType === "cash_receipt" || r.voucherType === "customer_payment" ? amt : -amt;
+    runningBalance += delta;
+    return { ...r, runningBalance };
+  });
+
+  res.json({ account, rows: withBalance });
 });
 
 export default router;

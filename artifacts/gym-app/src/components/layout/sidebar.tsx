@@ -14,6 +14,8 @@ import {
   Settings,
   CalendarCheck,
   ShieldCheck,
+  BookOpen,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +28,8 @@ const NAV_ITEMS = [
   { id: "payroll", href: "/payroll", icon: Banknote, labelKey: "nav.payroll" },
   { id: "payments", href: "/payments", icon: CreditCard, labelKey: "nav.payments" },
   { id: "vouchers", href: "/vouchers", icon: Ticket, labelKey: "nav.vouchers" },
-  { id: "accounts", href: "/accounts", icon: Briefcase, labelKey: "nav.accounts" },
+  { id: "accounts", href: "/accounts", icon: BookOpen, labelKey: "nav.accounts" },
+  { id: "financials", href: "/financials", icon: BarChart3, labelKey: "nav.financials" },
   { id: "stock", href: "/stock", icon: Package, labelKey: "nav.stock" },
   { id: "sales", href: "/sales", icon: TrendingUp, labelKey: "nav.sales" },
   { id: "audit", href: "/audit", icon: ShieldCheck, labelKey: "nav.audit" },

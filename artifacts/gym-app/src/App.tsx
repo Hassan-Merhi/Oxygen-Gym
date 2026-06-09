@@ -15,6 +15,7 @@ import MemberProfile from "@/pages/member-profile";
 import Payments from "@/pages/payments";
 import Vouchers from "@/pages/vouchers";
 import Accounts from "@/pages/accounts";
+import Financials from "@/pages/financials";
 import Stock from "@/pages/stock";
 import Sales from "@/pages/sales";
 import Payroll from "@/pages/payroll";
@@ -118,6 +119,7 @@ function AppShell() {
         <Route path="/payments"><ProtectedRoute component={Payments} /></Route>
         <Route path="/vouchers"><ProtectedRoute component={Vouchers} /></Route>
         <Route path="/accounts"><ProtectedRoute component={Accounts} /></Route>
+        <Route path="/financials"><ProtectedRoute component={Financials} /></Route>
         <Route path="/stock"><ProtectedRoute component={Stock} /></Route>
         <Route path="/sales"><ProtectedRoute component={Sales} /></Route>
 
