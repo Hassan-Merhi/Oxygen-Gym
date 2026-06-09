@@ -13,7 +13,6 @@ import Settings from "@/pages/settings";
 import Members from "@/pages/members";
 import MemberProfile from "@/pages/member-profile";
 import Payments from "@/pages/payments";
-import Vouchers from "@/pages/vouchers";
 import Accounts from "@/pages/accounts";
 import Financials from "@/pages/financials";
 import Stock from "@/pages/stock";
@@ -116,7 +115,7 @@ function AppShell() {
         <Route path="/notifications"><ProtectedRoute component={NotificationsPage} /></Route>
         <Route path="/audit"><ProtectedRoute component={AuditPage} /></Route>
         <Route path="/payments"><ProtectedRoute component={Payments} /></Route>
-        <Route path="/vouchers"><ProtectedRoute component={Vouchers} /></Route>
+        <Route path="/vouchers"><Redirect to="/payments" /></Route>
         <Route path="/accounts"><ProtectedRoute component={Accounts} /></Route>
         <Route path="/financials"><ProtectedRoute component={Financials} /></Route>
         <Route path="/stock"><ProtectedRoute component={Stock} /></Route>
