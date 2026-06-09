@@ -50,6 +50,7 @@ import {
   Trash2,
   ArrowDownCircle,
   ArrowUpCircle,
+  Loader2,
 } from "lucide-react";
 
 const VOUCHER_TYPES = [
@@ -413,103 +414,70 @@ export default function Vouchers() {
 
       {/* Create Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{t("vch.newVoucher")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>{t("vch.form.type")}</Label>
-                <Select value={form.voucherType} onValueChange={(v) => setForm({ ...form, voucherType: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {VOUCHER_TYPES.map((vt) => (
-                      <SelectItem key={vt} value={vt}>{t(`vch.type.${vt}`)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>{t("vch.form.date")}</Label>
-                <Input type="date" value={form.voucherDate} onChange={(e) => setForm({ ...form, voucherDate: e.target.value })} />
-              </div>
-            </div>
+          <div className="space-y-4 py-1">
 
-            {/* Cash Account */}
+            {/* Type pills */}
             <div className="space-y-1.5">
-              <Label>Cash Account</Label>
-              <Select value={form.account} onValueChange={(v) => setForm({ ...form, account: v })}>
-                <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
-                <SelectContent>
-                  {CASH_ACCOUNTS.map((a) => (
-                    <SelectItem key={a} value={a.toLowerCase().replace(/ /g, "_")}>{a}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>{t("vch.form.type")}</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {VOUCHER_TYPES.map((vt) => {
+                  const isIn = ["cash_receipt", "customer_payment"].includes(vt);
+                  const active = form.voucherType === vt;
+                  return (
+                    <button
+                      key={vt}
+                      type="button"
+                      onClick={() => setForm({ ...form, voucherType: vt })}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                        active
+                          ? isIn
+                            ? "bg-emerald-50 border-emerald-400 text-emerald-700"
+                            : "bg-rose-50 border-rose-400 text-rose-700"
+                          : "bg-muted/30 border-border text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {isIn
+                        ? <ArrowDownCircle className="w-3.5 h-3.5 shrink-0" />
+                        : <ArrowUpCircle className="w-3.5 h-3.5 shrink-0" />
+                      }
+                      {t(`vch.type.${vt}`)}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Received From / Paid To */}
-            {isInVoucher ? (
-              <div className="space-y-1.5">
-                <Label>{t("vch.form.receivedFrom")}</Label>
-                <Select
-                  value={form.linkedEntityId ? String(form.linkedEntityId) : "__manual__"}
-                  onValueChange={(v) => {
-                    if (v === "__manual__") {
-                      setForm({ ...form, linkedEntityId: null, receivedFrom: "", linkedEntityName: "" });
-                    } else {
-                      const m = membersList.find((m) => m.id === Number(v));
-                      setForm({ ...form, linkedEntityId: Number(v), receivedFrom: m?.name ?? "", linkedEntityName: m?.name ?? "" });
-                    }
-                  }}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select member or enter manually" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__manual__">— Enter manually —</SelectItem>
-                    {membersList.map((m) => (
-                      <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {!form.linkedEntityId && (
-                  <Input
-                    className="mt-1"
-                    placeholder="Name"
-                    value={form.receivedFrom}
-                    onChange={(e) => setForm({ ...form, receivedFrom: e.target.value })}
-                  />
-                )}
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                <Label>{t("vch.form.paidTo")}</Label>
-                <Input value={form.paidTo} onChange={(e) => setForm({ ...form, paidTo: e.target.value })} />
-              </div>
-            )}
+            {/* Date */}
+            <div className="space-y-1.5">
+              <Label>{t("vch.form.date")}</Label>
+              <Input type="date" value={form.voucherDate} onChange={(e) => setForm({ ...form, voucherDate: e.target.value })} />
+            </div>
 
-            {/* Expense Account (for payment types) */}
-            {!isInVoucher && (
-              <div className="space-y-1.5">
-                <Label>Expense Account</Label>
-                <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select expense account" /></SelectTrigger>
-                  <SelectContent>
-                    {EXPENSE_ACCOUNTS.map((a) => (
-                      <SelectItem key={a} value={a.toLowerCase()}>{a}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            {/* From / To */}
+            <div className="space-y-1.5">
+              <Label>{isInVoucher ? t("vch.form.receivedFrom") : t("vch.form.paidTo")}</Label>
+              <Input
+                placeholder={isInVoucher ? "Member name or payer…" : "Payee name…"}
+                value={isInVoucher ? form.receivedFrom : form.paidTo}
+                onChange={(e) =>
+                  isInVoucher
+                    ? setForm({ ...form, receivedFrom: e.target.value })
+                    : setForm({ ...form, paidTo: e.target.value })
+                }
+              />
+            </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            {/* Amount + Currency */}
+            <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2 space-y-1.5">
                 <Label>{t("vch.form.amount")}</Label>
                 <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="number" min="0" step="0.01"
+                  placeholder="0.00"
                   value={form.amount}
                   onChange={(e) => setForm({ ...form, amount: e.target.value })}
                 />
@@ -519,26 +487,28 @@ export default function Vouchers() {
                 <Select value={form.currency} onValueChange={(v) => setForm({ ...form, currency: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="USD">$ USD</SelectItem>
-                    <SelectItem value="CDF">FC CDF</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="CDF">CDF</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
+            {/* Description */}
             <div className="space-y-1.5">
               <Label>{t("vch.form.description")} *</Label>
               <Textarea
+                placeholder="What is this for?"
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 rows={2}
-                required
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalOpen(false)}>{t("common.cancel")}</Button>
             <Button onClick={handleSubmit} disabled={createMutation.isPending}>
+              {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               {t("common.save")}
             </Button>
           </DialogFooter>
