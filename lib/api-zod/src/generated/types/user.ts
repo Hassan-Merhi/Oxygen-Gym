@@ -20,5 +20,7 @@ export interface User {
   role: UserRole;
   status: UserStatus;
   permissions: PagePermissions;
+  /** @nullable */
+  deletedAt?: Date | null;
   createdAt: Date;
 }

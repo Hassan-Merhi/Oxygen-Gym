@@ -11,5 +11,6 @@ export type CurrentUserRole = typeof CurrentUserRole[keyof typeof CurrentUserRol
 
 export const CurrentUserRole = {
   admin: 'admin',
+  manager: 'manager',
   staff: 'staff',
 } as const;

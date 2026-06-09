@@ -13,7 +13,6 @@ router.get("/", async (req, res) => {
     let settings = await db.query.settingsTable.findFirst();
 
     if (!settings) {
-      // Seed default settings
       const [created] = await db.insert(settingsTable).values({
         gymName: "My Gym",
         defaultCurrency: "USD",
@@ -54,6 +53,10 @@ router.patch("/", async (req, res) => {
         receiptHeader: data.receiptHeader,
         receiptFooter: data.receiptFooter,
         logoUrl: data.logoUrl,
+        receiptLogoUrl: data.receiptLogoUrl,
+        membershipCardFooter: data.membershipCardFooter,
+        backupEnabled: data.backupEnabled ?? "false",
+        backupTime: data.backupTime ?? "02:00",
       }).returning();
       res.json(created);
       return;
@@ -70,6 +73,10 @@ router.patch("/", async (req, res) => {
         ...(data.receiptHeader !== undefined && { receiptHeader: data.receiptHeader }),
         ...(data.receiptFooter !== undefined && { receiptFooter: data.receiptFooter }),
         ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
+        ...(data.receiptLogoUrl !== undefined && { receiptLogoUrl: data.receiptLogoUrl }),
+        ...(data.membershipCardFooter !== undefined && { membershipCardFooter: data.membershipCardFooter }),
+        ...(data.backupEnabled !== undefined && { backupEnabled: data.backupEnabled }),
+        ...(data.backupTime !== undefined && { backupTime: data.backupTime }),
       })
       .returning();
 

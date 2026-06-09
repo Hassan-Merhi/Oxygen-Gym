@@ -6,9 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './activityLog';
 export * from './currentUser';
 export * from './currentUserRole';
 export * from './healthStatus';
+export * from './listActivityLogsParams';
 export * from './pagePermissions';
 export * from './permissionsUpdate';
 export * from './settings';

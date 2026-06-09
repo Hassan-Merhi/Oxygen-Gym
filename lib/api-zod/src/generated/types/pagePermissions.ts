@@ -7,7 +7,7 @@
  */
 
 /**
- * Per-page access flags for a staff user
+ * Per-page and per-feature permissions for a user
  */
 export interface PagePermissions {
   dashboard: boolean;
@@ -21,5 +21,13 @@ export interface PagePermissions {
   stock: boolean;
   sales: boolean;
   settings: boolean;
-  canViewCosts: boolean;
+  viewCost: boolean;
+  viewProfit: boolean;
+  viewAccounting: boolean;
+  manageStaff: boolean;
+  manageSettings: boolean;
+  managePayroll: boolean;
+  manageInventory: boolean;
+  manageMembers: boolean;
+  managePlans: boolean;
 }

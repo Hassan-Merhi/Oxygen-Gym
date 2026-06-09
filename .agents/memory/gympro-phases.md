@@ -7,8 +7,8 @@ description: Build phases for GymPro gym management app — must stop after each
 Stop after each phase and wait for user approval before starting the next.
 
 ## Phases
-1. **Foundation** (DONE) — Login, roles, permissions, sidebar, protected routes, settings base
-2. Settings — gym info, logo upload, currency, exchange rate, receipt settings, staff permissions manager
+1. **Foundation** (DONE) — Login, roles (admin/manager/staff), permissions, sidebar, protected routes
+2. **Advanced Settings** (DONE) — Logo upload, receipt customization, currency, backup settings, expanded permissions grid
 3. Dashboard KPIs — active members, revenue, expenses, check-ins, expiring soon, low stock, profit
 4. Members — CRUD, member fields, check-in, renew, freeze, history
 5. Subscription Plans — CRUD, member count per plan, revenue by plan

@@ -16,6 +16,8 @@ tags:
     description: Staff user management
   - name: settings
     description: Gym settings
+  - name: activity
+    description: Activity logs
 paths:
   /healthz:
     get:
@@ -49,7 +51,7 @@ paths:
     get:
       operationId: listUsers
       tags: [users]
-      summary: List all staff users
+      summary: List all non-deleted staff users
       responses:
         "200":
           description: List of staff users
@@ -123,7 +125,7 @@ paths:
     delete:
       operationId: deleteUser
       tags: [users]
-      summary: Delete a staff user
+      summary: Soft-delete a staff user
       parameters:
         - name: id
           in: path
@@ -132,7 +134,7 @@ paths:
             type: integer
       responses:
         "204":
-          description: Deleted
+          description: Deleted (soft)
 
   /users/{id}/permissions:
     patch:
@@ -189,6 +191,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/Settings"
 
+  /activity-logs:
+    get:
+      operationId: listActivityLogs
+      tags: [activity]
+      summary: List activity logs
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Activity logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityLog"
+
+
 components:
   schemas:
     HealthStatus:
@@ -201,32 +230,28 @@ components:
 
     PagePermissions:
       type: object
-      description: Per-page access flags for a staff user
+      description: Per-page and per-feature permissions for a user
       properties:
-        dashboard:
-          type: boolean
-        members:
-          type: boolean
-        plans:
-          type: boolean
-        staff:
-          type: boolean
-        payroll:
-          type: boolean
-        payments:
-          type: boolean
-        vouchers:
-          type: boolean
-        accounts:
-          type: boolean
-        stock:
-          type: boolean
-        sales:
-          type: boolean
-        settings:
-          type: boolean
-        canViewCosts:
-          type: boolean
+        dashboard: { type: boolean }
+        members: { type: boolean }
+        plans: { type: boolean }
+        staff: { type: boolean }
+        payroll: { type: boolean }
+        payments: { type: boolean }
+        vouchers: { type: boolean }
+        accounts: { type: boolean }
+        stock: { type: boolean }
+        sales: { type: boolean }
+        settings: { type: boolean }
+        viewCost: { type: boolean }
+        viewProfit: { type: boolean }
+        viewAccounting: { type: boolean }
+        manageStaff: { type: boolean }
+        manageSettings: { type: boolean }
+        managePayroll: { type: boolean }
+        manageInventory: { type: boolean }
+        manageMembers: { type: boolean }
+        managePlans: { type: boolean }
       required:
         - dashboard
         - members
@@ -239,29 +264,37 @@ components:
         - stock
         - sales
         - settings
-        - canViewCosts
+        - viewCost
+        - viewProfit
+        - viewAccounting
+        - manageStaff
+        - manageSettings
+        - managePayroll
+        - manageInventory
+        - manageMembers
+        - managePlans
 
     User:
       type: object
       properties:
-        id:
-          type: integer
+        id: { type: integer }
         clerkUserId:
           type: ["string", "null"]
-        name:
-          type: string
-        email:
-          type: string
+        name: { type: string }
+        email: { type: string }
         phone:
           type: ["string", "null"]
         role:
           type: string
-          enum: [admin, staff]
+          enum: [admin, manager, staff]
         status:
           type: string
           enum: [active, inactive]
         permissions:
           $ref: "#/components/schemas/PagePermissions"
+        deletedAt:
+          type: ["string", "null"]
+          format: date-time
         createdAt:
           type: string
           format: date-time
@@ -277,15 +310,13 @@ components:
     UserInput:
       type: object
       properties:
-        name:
-          type: string
-        email:
-          type: string
+        name: { type: string }
+        email: { type: string }
         phone:
           type: ["string", "null"]
         role:
           type: string
-          enum: [admin, staff]
+          enum: [admin, manager, staff]
         status:
           type: string
           enum: [active, inactive]
@@ -299,15 +330,13 @@ components:
     UserUpdate:
       type: object
       properties:
-        name:
-          type: string
-        email:
-          type: string
+        name: { type: string }
+        email: { type: string }
         phone:
           type: ["string", "null"]
         role:
           type: string
-          enum: [admin, staff]
+          enum: [admin, manager, staff]
         status:
           type: string
           enum: [active, inactive]
@@ -323,17 +352,13 @@ components:
     CurrentUser:
       type: object
       properties:
-        id:
-          type: integer
-        clerkUserId:
-          type: string
-        name:
-          type: string
-        email:
-          type: string
+        id: { type: integer }
+        clerkUserId: { type: string }
+        name: { type: string }
+        email: { type: string }
         role:
           type: string
-          enum: [admin, staff]
+          enum: [admin, manager, staff]
         permissions:
           $ref: "#/components/schemas/PagePermissions"
       required:
@@ -347,10 +372,8 @@ components:
     Settings:
       type: object
       properties:
-        id:
-          type: integer
-        gymName:
-          type: string
+        id: { type: integer }
+        gymName: { type: string }
         phone:
           type: ["string", "null"]
         address:
@@ -358,17 +381,22 @@ components:
         defaultCurrency:
           type: string
           enum: [USD, CDF]
-        usdToCdfRate:
-          type: number
+        usdToCdfRate: { type: number }
         language:
           type: string
           enum: [en, fr, ar]
+        logoUrl:
+          type: ["string", "null"]
+        receiptLogoUrl:
+          type: ["string", "null"]
         receiptHeader:
           type: ["string", "null"]
         receiptFooter:
           type: ["string", "null"]
-        logoUrl:
+        membershipCardFooter:
           type: ["string", "null"]
+        backupEnabled: { type: string }
+        backupTime: { type: string }
         updatedAt:
           type: string
           format: date-time
@@ -378,13 +406,14 @@ components:
         - defaultCurrency
         - usdToCdfRate
         - language
+        - backupEnabled
+        - backupTime
         - updatedAt
 
     SettingsUpdate:
       type: object
       properties:
-        gymName:
-          type: string
+        gymName: { type: string }
         phone:
           type: ["string", "null"]
         address:
@@ -392,14 +421,41 @@ components:
         defaultCurrency:
           type: string
           enum: [USD, CDF]
-        usdToCdfRate:
-          type: number
+        usdToCdfRate: { type: number }
         language:
           type: string
           enum: [en, fr, ar]
+        logoUrl:
+          type: ["string", "null"]
+        receiptLogoUrl:
+          type: ["string", "null"]
         receiptHeader:
           type: ["string", "null"]
         receiptFooter:
           type: ["string", "null"]
-        logoUrl:
+        membershipCardFooter:
           type: ["string", "null"]
+        backupEnabled: { type: string }
+        backupTime: { type: string }
+
+    ActivityLog:
+      type: object
+      properties:
+        id: { type: integer }
+        userId:
+          type: ["integer", "null"]
+        userName: { type: string }
+        action: { type: string }
+        entity:
+          type: ["string", "null"]
+        entityId:
+          type: ["integer", "null"]
+        details: {}
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userName
+        - action
+        - createdAt

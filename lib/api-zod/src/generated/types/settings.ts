@@ -19,10 +19,16 @@ export interface Settings {
   usdToCdfRate: number;
   language: SettingsLanguage;
   /** @nullable */
+  logoUrl?: string | null;
+  /** @nullable */
+  receiptLogoUrl?: string | null;
+  /** @nullable */
   receiptHeader?: string | null;
   /** @nullable */
   receiptFooter?: string | null;
   /** @nullable */
-  logoUrl?: string | null;
+  membershipCardFooter?: string | null;
+  backupEnabled: string;
+  backupTime: string;
   updatedAt: Date;
 }

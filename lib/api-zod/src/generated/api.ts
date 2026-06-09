@@ -24,7 +24,7 @@ export const GetMeResponse = zod.object({
   "clerkUserId": zod.string(),
   "name": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['admin', 'staff']),
+  "role": zod.enum(['admin', 'manager', 'staff']),
   "permissions": zod.object({
   "dashboard": zod.boolean(),
   "members": zod.boolean(),
@@ -37,13 +37,21 @@ export const GetMeResponse = zod.object({
   "stock": zod.boolean(),
   "sales": zod.boolean(),
   "settings": zod.boolean(),
-  "canViewCosts": zod.boolean()
-}).describe('Per-page access flags for a staff user')
+  "viewCost": zod.boolean(),
+  "viewProfit": zod.boolean(),
+  "viewAccounting": zod.boolean(),
+  "manageStaff": zod.boolean(),
+  "manageSettings": zod.boolean(),
+  "managePayroll": zod.boolean(),
+  "manageInventory": zod.boolean(),
+  "manageMembers": zod.boolean(),
+  "managePlans": zod.boolean()
+}).describe('Per-page and per-feature permissions for a user')
 })
 
 
 /**
- * @summary List all staff users
+ * @summary List all non-deleted staff users
  */
 export const ListUsersResponseItem = zod.object({
   "id": zod.number(),
@@ -51,7 +59,7 @@ export const ListUsersResponseItem = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'staff']),
+  "role": zod.enum(['admin', 'manager', 'staff']),
   "status": zod.enum(['active', 'inactive']),
   "permissions": zod.object({
   "dashboard": zod.boolean(),
@@ -65,8 +73,17 @@ export const ListUsersResponseItem = zod.object({
   "stock": zod.boolean(),
   "sales": zod.boolean(),
   "settings": zod.boolean(),
-  "canViewCosts": zod.boolean()
-}).describe('Per-page access flags for a staff user'),
+  "viewCost": zod.boolean(),
+  "viewProfit": zod.boolean(),
+  "viewAccounting": zod.boolean(),
+  "manageStaff": zod.boolean(),
+  "manageSettings": zod.boolean(),
+  "managePayroll": zod.boolean(),
+  "manageInventory": zod.boolean(),
+  "manageMembers": zod.boolean(),
+  "managePlans": zod.boolean()
+}).describe('Per-page and per-feature permissions for a user'),
+  "deletedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListUsersResponse = zod.array(ListUsersResponseItem)
@@ -79,7 +96,7 @@ export const CreateUserBody = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'staff']),
+  "role": zod.enum(['admin', 'manager', 'staff']),
   "status": zod.enum(['active', 'inactive']).optional(),
   "permissions": zod.object({
   "dashboard": zod.boolean(),
@@ -93,8 +110,16 @@ export const CreateUserBody = zod.object({
   "stock": zod.boolean(),
   "sales": zod.boolean(),
   "settings": zod.boolean(),
-  "canViewCosts": zod.boolean()
-}).optional().describe('Per-page access flags for a staff user')
+  "viewCost": zod.boolean(),
+  "viewProfit": zod.boolean(),
+  "viewAccounting": zod.boolean(),
+  "manageStaff": zod.boolean(),
+  "manageSettings": zod.boolean(),
+  "managePayroll": zod.boolean(),
+  "manageInventory": zod.boolean(),
+  "manageMembers": zod.boolean(),
+  "managePlans": zod.boolean()
+}).optional().describe('Per-page and per-feature permissions for a user')
 })
 
 
@@ -111,7 +136,7 @@ export const GetUserResponse = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'staff']),
+  "role": zod.enum(['admin', 'manager', 'staff']),
   "status": zod.enum(['active', 'inactive']),
   "permissions": zod.object({
   "dashboard": zod.boolean(),
@@ -125,8 +150,17 @@ export const GetUserResponse = zod.object({
   "stock": zod.boolean(),
   "sales": zod.boolean(),
   "settings": zod.boolean(),
-  "canViewCosts": zod.boolean()
-}).describe('Per-page access flags for a staff user'),
+  "viewCost": zod.boolean(),
+  "viewProfit": zod.boolean(),
+  "viewAccounting": zod.boolean(),
+  "manageStaff": zod.boolean(),
+  "manageSettings": zod.boolean(),
+  "managePayroll": zod.boolean(),
+  "manageInventory": zod.boolean(),
+  "manageMembers": zod.boolean(),
+  "managePlans": zod.boolean()
+}).describe('Per-page and per-feature permissions for a user'),
+  "deletedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -142,7 +176,7 @@ export const UpdateUserBody = zod.object({
   "name": zod.string().optional(),
   "email": zod.string().optional(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'staff']).optional(),
+  "role": zod.enum(['admin', 'manager', 'staff']).optional(),
   "status": zod.enum(['active', 'inactive']).optional()
 })
 
@@ -152,7 +186,7 @@ export const UpdateUserResponse = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'staff']),
+  "role": zod.enum(['admin', 'manager', 'staff']),
   "status": zod.enum(['active', 'inactive']),
   "permissions": zod.object({
   "dashboard": zod.boolean(),
@@ -166,14 +200,23 @@ export const UpdateUserResponse = zod.object({
   "stock": zod.boolean(),
   "sales": zod.boolean(),
   "settings": zod.boolean(),
-  "canViewCosts": zod.boolean()
-}).describe('Per-page access flags for a staff user'),
+  "viewCost": zod.boolean(),
+  "viewProfit": zod.boolean(),
+  "viewAccounting": zod.boolean(),
+  "manageStaff": zod.boolean(),
+  "manageSettings": zod.boolean(),
+  "managePayroll": zod.boolean(),
+  "manageInventory": zod.boolean(),
+  "manageMembers": zod.boolean(),
+  "managePlans": zod.boolean()
+}).describe('Per-page and per-feature permissions for a user'),
+  "deletedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 
 
 /**
- * @summary Delete a staff user
+ * @summary Soft-delete a staff user
  */
 export const DeleteUserParams = zod.object({
   "id": zod.coerce.number()
@@ -200,8 +243,16 @@ export const UpdateUserPermissionsBody = zod.object({
   "stock": zod.boolean(),
   "sales": zod.boolean(),
   "settings": zod.boolean(),
-  "canViewCosts": zod.boolean()
-}).describe('Per-page access flags for a staff user')
+  "viewCost": zod.boolean(),
+  "viewProfit": zod.boolean(),
+  "viewAccounting": zod.boolean(),
+  "manageStaff": zod.boolean(),
+  "manageSettings": zod.boolean(),
+  "managePayroll": zod.boolean(),
+  "manageInventory": zod.boolean(),
+  "manageMembers": zod.boolean(),
+  "managePlans": zod.boolean()
+}).describe('Per-page and per-feature permissions for a user')
 })
 
 export const UpdateUserPermissionsResponse = zod.object({
@@ -210,7 +261,7 @@ export const UpdateUserPermissionsResponse = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'staff']),
+  "role": zod.enum(['admin', 'manager', 'staff']),
   "status": zod.enum(['active', 'inactive']),
   "permissions": zod.object({
   "dashboard": zod.boolean(),
@@ -224,8 +275,17 @@ export const UpdateUserPermissionsResponse = zod.object({
   "stock": zod.boolean(),
   "sales": zod.boolean(),
   "settings": zod.boolean(),
-  "canViewCosts": zod.boolean()
-}).describe('Per-page access flags for a staff user'),
+  "viewCost": zod.boolean(),
+  "viewProfit": zod.boolean(),
+  "viewAccounting": zod.boolean(),
+  "manageStaff": zod.boolean(),
+  "manageSettings": zod.boolean(),
+  "managePayroll": zod.boolean(),
+  "manageInventory": zod.boolean(),
+  "manageMembers": zod.boolean(),
+  "managePlans": zod.boolean()
+}).describe('Per-page and per-feature permissions for a user'),
+  "deletedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -241,9 +301,13 @@ export const GetSettingsResponse = zod.object({
   "defaultCurrency": zod.enum(['USD', 'CDF']),
   "usdToCdfRate": zod.number(),
   "language": zod.enum(['en', 'fr', 'ar']),
+  "logoUrl": zod.string().nullish(),
+  "receiptLogoUrl": zod.string().nullish(),
   "receiptHeader": zod.string().nullish(),
   "receiptFooter": zod.string().nullish(),
-  "logoUrl": zod.string().nullish(),
+  "membershipCardFooter": zod.string().nullish(),
+  "backupEnabled": zod.string(),
+  "backupTime": zod.string(),
   "updatedAt": zod.coerce.date()
 })
 
@@ -258,9 +322,13 @@ export const UpdateSettingsBody = zod.object({
   "defaultCurrency": zod.enum(['USD', 'CDF']).optional(),
   "usdToCdfRate": zod.number().optional(),
   "language": zod.enum(['en', 'fr', 'ar']).optional(),
+  "logoUrl": zod.string().nullish(),
+  "receiptLogoUrl": zod.string().nullish(),
   "receiptHeader": zod.string().nullish(),
   "receiptFooter": zod.string().nullish(),
-  "logoUrl": zod.string().nullish()
+  "membershipCardFooter": zod.string().nullish(),
+  "backupEnabled": zod.string().optional(),
+  "backupTime": zod.string().optional()
 })
 
 export const UpdateSettingsResponse = zod.object({
@@ -271,10 +339,38 @@ export const UpdateSettingsResponse = zod.object({
   "defaultCurrency": zod.enum(['USD', 'CDF']),
   "usdToCdfRate": zod.number(),
   "language": zod.enum(['en', 'fr', 'ar']),
+  "logoUrl": zod.string().nullish(),
+  "receiptLogoUrl": zod.string().nullish(),
   "receiptHeader": zod.string().nullish(),
   "receiptFooter": zod.string().nullish(),
-  "logoUrl": zod.string().nullish(),
+  "membershipCardFooter": zod.string().nullish(),
+  "backupEnabled": zod.string(),
+  "backupTime": zod.string(),
   "updatedAt": zod.coerce.date()
 })
+
+
+/**
+ * @summary List activity logs
+ */
+export const listActivityLogsQueryLimitDefault = 50;
+export const listActivityLogsQueryOffsetDefault = 0;
+
+export const ListActivityLogsQueryParams = zod.object({
+  "limit": zod.coerce.number().default(listActivityLogsQueryLimitDefault),
+  "offset": zod.coerce.number().default(listActivityLogsQueryOffsetDefault)
+})
+
+export const ListActivityLogsResponseItem = zod.object({
+  "id": zod.number(),
+  "userId": zod.number().nullish(),
+  "userName": zod.string(),
+  "action": zod.string(),
+  "entity": zod.string().nullish(),
+  "entityId": zod.number().nullish(),
+  "details": zod.unknown().optional(),
+  "createdAt": zod.coerce.date()
+})
+export const ListActivityLogsResponse = zod.array(ListActivityLogsResponseItem)
 
 

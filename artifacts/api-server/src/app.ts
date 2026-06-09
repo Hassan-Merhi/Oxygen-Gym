@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import path from "path";
 import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import {
@@ -47,6 +48,10 @@ app.use(
     ),
   })),
 );
+
+// Serve uploaded files
+const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
+app.use("/api/uploads", express.static(UPLOAD_DIR));
 
 app.use("/api", router);
 

@@ -16,11 +16,24 @@ import { Edit2, Trash2, ShieldAlert, Plus, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
 
-const PERMISSION_KEYS = [
-  "dashboard", "members", "plans", "staff", "payroll", "payments", 
-  "vouchers", "accounts", "stock", "sales", "settings", "canViewCosts"
+const PAGE_PERMISSIONS = [
+  "dashboard", "members", "plans", "staff", "payroll",
+  "payments", "vouchers", "accounts", "stock", "sales", "settings",
 ] as const;
+
+const FEATURE_PERMISSIONS = [
+  "viewCost", "viewProfit", "viewAccounting",
+  "manageStaff", "manageSettings", "managePayroll",
+  "manageInventory", "manageMembers", "managePlans",
+] as const;
+
+const ROLE_COLORS: Record<string, "default" | "secondary" | "outline"> = {
+  admin: "default",
+  manager: "outline",
+  staff: "secondary",
+};
 
 export default function Staff() {
   const { t } = useI18n();
@@ -43,7 +56,7 @@ export default function Staff() {
     name: z.string().min(1, "Name is required"),
     email: z.string().email("Invalid email"),
     phone: z.string().optional(),
-    role: z.enum(["admin", "staff"]),
+    role: z.enum(["admin", "manager", "staff"]),
     status: z.enum(["active", "inactive"]),
   });
 
@@ -90,8 +103,7 @@ export default function Staff() {
 
   const handlePermissionsChange = (key: string, checked: boolean) => {
     if (!selectedUser) return;
-    const newPerms = { ...selectedUser.permissions, [key]: checked };
-    setSelectedUser({ ...selectedUser, permissions: newPerms });
+    setSelectedUser({ ...selectedUser, permissions: { ...selectedUser.permissions, [key]: checked } });
   };
 
   const savePermissions = () => {
@@ -108,13 +120,7 @@ export default function Staff() {
 
   const openEdit = (user: any) => {
     setSelectedUser(user);
-    form.reset({
-      name: user.name,
-      email: user.email,
-      phone: user.phone || "",
-      role: user.role,
-      status: user.status
-    });
+    form.reset({ name: user.name, email: user.email, phone: user.phone || "", role: user.role, status: user.status });
     setIsEditOpen(true);
   };
 
@@ -123,10 +129,18 @@ export default function Staff() {
     setIsPermsOpen(true);
   };
 
+  const RoleSelect = () => (
+    <>
+      <SelectItem value="admin">{t("staff.role.admin")}</SelectItem>
+      <SelectItem value="manager">{t("staff.role.manager")}</SelectItem>
+      <SelectItem value="staff">{t("staff.role.staff")}</SelectItem>
+    </>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("staff.title")}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t("staff.title")}</h1>
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-add-staff">
@@ -135,9 +149,7 @@ export default function Staff() {
             </Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{t("staff.addStaff")}</DialogTitle>
-            </DialogHeader>
+            <DialogHeader><DialogTitle>{t("staff.addStaff")}</DialogTitle></DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onAddSubmit)} className="space-y-4">
                 <FormField control={form.control} name="name" render={({ field }) => (
@@ -155,7 +167,7 @@ export default function Staff() {
                       <FormLabel>{t("staff.table.role")}</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                        <SelectContent><SelectItem value="admin">Admin</SelectItem><SelectItem value="staff">Staff</SelectItem></SelectContent>
+                        <SelectContent><RoleSelect /></SelectContent>
                       </Select>
                       <FormMessage />
                     </FormItem>
@@ -165,13 +177,21 @@ export default function Staff() {
                       <FormLabel>{t("staff.table.status")}</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                        <SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
                       </Select>
                       <FormMessage />
                     </FormItem>
                   )} />
                 </div>
-                <DialogFooter><Button type="submit" disabled={createUser.isPending}>{createUser.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} {t("staff.save")}</Button></DialogFooter>
+                <DialogFooter>
+                  <Button type="submit" disabled={createUser.isPending}>
+                    {createUser.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {t("staff.save")}
+                  </Button>
+                </DialogFooter>
               </form>
             </Form>
           </DialogContent>
@@ -201,9 +221,17 @@ export default function Staff() {
                   <TableCell className="font-medium">{user.name}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{user.phone || "-"}</TableCell>
-                  <TableCell><Badge variant={user.role === "admin" ? "default" : "secondary"}>{user.role}</Badge></TableCell>
-                  <TableCell><Badge variant={user.status === "active" ? "outline" : "destructive"}>{user.status}</Badge></TableCell>
-                  <TableCell className="text-right space-x-2 rtl:space-x-reverse">
+                  <TableCell>
+                    <Badge variant={ROLE_COLORS[user.role] ?? "secondary"}>
+                      {t(`staff.role.${user.role}`)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={user.status === "active" ? "outline" : "destructive"}>
+                      {user.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right space-x-1 rtl:space-x-reverse">
                     <Button variant="ghost" size="icon" onClick={() => openPerms(user)} title={t("staff.permissions")} data-testid={`btn-perms-${user.id}`}>
                       <ShieldAlert className="w-4 h-4 text-amber-500" />
                     </Button>
@@ -240,9 +268,9 @@ export default function Staff() {
                 <FormField control={form.control} name="role" render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t("staff.table.role")}</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent><SelectItem value="admin">Admin</SelectItem><SelectItem value="staff">Staff</SelectItem></SelectContent>
+                      <SelectContent><RoleSelect /></SelectContent>
                     </Select>
                     <FormMessage />
                   </FormItem>
@@ -250,15 +278,23 @@ export default function Staff() {
                 <FormField control={form.control} name="status" render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t("staff.table.status")}</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                      </SelectContent>
                     </Select>
                     <FormMessage />
                   </FormItem>
                 )} />
               </div>
-              <DialogFooter><Button type="submit" disabled={updateUser.isPending}>{updateUser.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>} {t("staff.save")}</Button></DialogFooter>
+              <DialogFooter>
+                <Button type="submit" disabled={updateUser.isPending}>
+                  {updateUser.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {t("staff.save")}
+                </Button>
+              </DialogFooter>
             </form>
           </Form>
         </DialogContent>
@@ -266,23 +302,51 @@ export default function Staff() {
 
       {/* Permissions Modal */}
       <Dialog open={isPermsOpen} onOpenChange={setIsPermsOpen}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader><DialogTitle>{t("staff.permissions")}: {selectedUser?.name}</DialogTitle></DialogHeader>
-          <div className="grid grid-cols-2 gap-y-4 gap-x-6 py-4">
-            {PERMISSION_KEYS.map((key) => (
-              <div key={key} className="flex items-center justify-between border-b pb-2">
-                <span className="text-sm font-medium">{key}</span>
-                <Switch 
-                  checked={!!selectedUser?.permissions?.[key]} 
-                  onCheckedChange={(checked) => handlePermissionsChange(key, checked)}
-                />
+        <DialogContent className="sm:max-w-[580px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t("staff.permissions")}: {selectedUser?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5 py-2">
+            {/* Page Access */}
+            <div>
+              <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                {t("perm.pageAccess")}
+              </p>
+              <div className="grid grid-cols-2 gap-y-3 gap-x-6">
+                {PAGE_PERMISSIONS.map((key) => (
+                  <div key={key} className="flex items-center justify-between">
+                    <span className="text-sm">{t(`perm.${key}`)}</span>
+                    <Switch
+                      checked={!!selectedUser?.permissions?.[key]}
+                      onCheckedChange={(v) => handlePermissionsChange(key, v)}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+            <Separator />
+            {/* Feature Access */}
+            <div>
+              <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                {t("perm.featureAccess")}
+              </p>
+              <div className="grid grid-cols-2 gap-y-3 gap-x-6">
+                {FEATURE_PERMISSIONS.map((key) => (
+                  <div key={key} className="flex items-center justify-between">
+                    <span className="text-sm">{t(`perm.${key}`)}</span>
+                    <Switch
+                      checked={!!selectedUser?.permissions?.[key]}
+                      onCheckedChange={(v) => handlePermissionsChange(key, v)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsPermsOpen(false)}>{t("staff.cancel")}</Button>
             <Button onClick={savePermissions} disabled={updatePermissions.isPending}>
-              {updatePermissions.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+              {updatePermissions.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {t("staff.save")}
             </Button>
           </DialogFooter>
@@ -299,7 +363,7 @@ export default function Staff() {
           <AlertDialogFooter>
             <AlertDialogCancel>{t("staff.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
-              {deleteUser.isPending ? <Loader2 className="h-4 w-4 animate-spin"/> : t("staff.delete")}
+              {deleteUser.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : t("staff.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

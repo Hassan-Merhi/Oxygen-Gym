@@ -20,8 +20,10 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ActivityLog,
   CurrentUser,
   HealthStatus,
+  ListActivityLogsParams,
   PermissionsUpdate,
   Settings,
   SettingsUpdate,
@@ -205,7 +207,7 @@ export const getListUsersUrl = () => {
 }
 
 /**
- * @summary List all staff users
+ * @summary List all non-deleted staff users
  */
 export const listUsers = async ( options?: RequestInit): Promise<User[]> => {
 
@@ -252,7 +254,7 @@ export type ListUsersQueryError = ErrorType<unknown>
 
 
 /**
- * @summary List all staff users
+ * @summary List all non-deleted staff users
  */
 
 export function useListUsers<TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(
@@ -502,7 +504,7 @@ export const getDeleteUserUrl = (id: number,) => {
 }
 
 /**
- * @summary Delete a staff user
+ * @summary Soft-delete a staff user
  */
 export const deleteUser = async (id: number, options?: RequestInit): Promise<void> => {
 
@@ -550,7 +552,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DeleteUserMutationError = ErrorType<unknown>
 
     /**
- * @summary Delete a staff user
+ * @summary Soft-delete a staff user
  */
 export const useDeleteUser = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -782,4 +784,88 @@ export const useUpdateSettings = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getUpdateSettingsMutationOptions(options));
     }
+
+export const getListActivityLogsUrl = (params?: ListActivityLogsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/activity-logs?${stringifiedParams}` : `/api/activity-logs`
+}
+
+/**
+ * @summary List activity logs
+ */
+export const listActivityLogs = async (params?: ListActivityLogsParams, options?: RequestInit): Promise<ActivityLog[]> => {
+
+  return customFetch<ActivityLog[]>(getListActivityLogsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListActivityLogsQueryKey = (params?: ListActivityLogsParams,) => {
+    return [
+    `/api/activity-logs`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListActivityLogsQueryOptions = <TData = Awaited<ReturnType<typeof listActivityLogs>>, TError = ErrorType<unknown>>(params?: ListActivityLogsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listActivityLogs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListActivityLogsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listActivityLogs>>> = ({ signal }) => listActivityLogs(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listActivityLogs>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListActivityLogsQueryResult = NonNullable<Awaited<ReturnType<typeof listActivityLogs>>>
+export type ListActivityLogsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List activity logs
+ */
+
+export function useListActivityLogs<TData = Awaited<ReturnType<typeof listActivityLogs>>, TError = ErrorType<unknown>>(
+ params?: ListActivityLogsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listActivityLogs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListActivityLogsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 

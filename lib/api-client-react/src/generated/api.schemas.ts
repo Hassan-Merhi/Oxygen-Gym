@@ -10,7 +10,7 @@ export interface HealthStatus {
 }
 
 /**
- * Per-page access flags for a staff user
+ * Per-page and per-feature permissions for a user
  */
 export interface PagePermissions {
   dashboard: boolean;
@@ -24,7 +24,15 @@ export interface PagePermissions {
   stock: boolean;
   sales: boolean;
   settings: boolean;
-  canViewCosts: boolean;
+  viewCost: boolean;
+  viewProfit: boolean;
+  viewAccounting: boolean;
+  manageStaff: boolean;
+  manageSettings: boolean;
+  managePayroll: boolean;
+  manageInventory: boolean;
+  manageMembers: boolean;
+  managePlans: boolean;
 }
 
 export type UserRole = typeof UserRole[keyof typeof UserRole];
@@ -32,6 +40,7 @@ export type UserRole = typeof UserRole[keyof typeof UserRole];
 
 export const UserRole = {
   admin: 'admin',
+  manager: 'manager',
   staff: 'staff',
 } as const;
 
@@ -54,6 +63,8 @@ export interface User {
   role: UserRole;
   status: UserStatus;
   permissions: PagePermissions;
+  /** @nullable */
+  deletedAt?: string | null;
   createdAt: string;
 }
 
@@ -62,6 +73,7 @@ export type UserInputRole = typeof UserInputRole[keyof typeof UserInputRole];
 
 export const UserInputRole = {
   admin: 'admin',
+  manager: 'manager',
   staff: 'staff',
 } as const;
 
@@ -88,6 +100,7 @@ export type UserUpdateRole = typeof UserUpdateRole[keyof typeof UserUpdateRole];
 
 export const UserUpdateRole = {
   admin: 'admin',
+  manager: 'manager',
   staff: 'staff',
 } as const;
 
@@ -117,6 +130,7 @@ export type CurrentUserRole = typeof CurrentUserRole[keyof typeof CurrentUserRol
 
 export const CurrentUserRole = {
   admin: 'admin',
+  manager: 'manager',
   staff: 'staff',
 } as const;
 
@@ -157,11 +171,17 @@ export interface Settings {
   usdToCdfRate: number;
   language: SettingsLanguage;
   /** @nullable */
+  logoUrl?: string | null;
+  /** @nullable */
+  receiptLogoUrl?: string | null;
+  /** @nullable */
   receiptHeader?: string | null;
   /** @nullable */
   receiptFooter?: string | null;
   /** @nullable */
-  logoUrl?: string | null;
+  membershipCardFooter?: string | null;
+  backupEnabled: string;
+  backupTime: string;
   updatedAt: string;
 }
 
@@ -192,10 +212,35 @@ export interface SettingsUpdate {
   usdToCdfRate?: number;
   language?: SettingsUpdateLanguage;
   /** @nullable */
+  logoUrl?: string | null;
+  /** @nullable */
+  receiptLogoUrl?: string | null;
+  /** @nullable */
   receiptHeader?: string | null;
   /** @nullable */
   receiptFooter?: string | null;
   /** @nullable */
-  logoUrl?: string | null;
+  membershipCardFooter?: string | null;
+  backupEnabled?: string;
+  backupTime?: string;
 }
+
+export interface ActivityLog {
+  id: number;
+  /** @nullable */
+  userId?: number | null;
+  userName: string;
+  action: string;
+  /** @nullable */
+  entity?: string | null;
+  /** @nullable */
+  entityId?: number | null;
+  details?: unknown;
+  createdAt: string;
+}
+
+export type ListActivityLogsParams = {
+limit?: number;
+offset?: number;
+};
 

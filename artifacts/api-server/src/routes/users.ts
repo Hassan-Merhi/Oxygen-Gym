@@ -1,18 +1,40 @@
 import { Router } from "express";
-import { requireAuth } from "@clerk/express";
-import { db, usersTable, pagePermissionsSchema, defaultStaffPermissions } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { requireAuth, getAuth } from "@clerk/express";
+import { db, usersTable, pagePermissionsSchema, defaultStaffPermissions, activityLogsTable } from "@workspace/db";
+import { eq, isNull } from "drizzle-orm";
 import { CreateUserBody, UpdateUserBody, UpdateUserPermissionsBody } from "@workspace/api-zod";
 
 const router = Router();
 
-// Middleware: require auth for all user routes
 router.use(requireAuth());
 
-// GET /api/users
+async function logActivity(
+  req: any,
+  action: string,
+  entity?: string,
+  entityId?: number,
+  details?: Record<string, unknown>,
+) {
+  try {
+    const actorId = (req as any).__gymproUserId as number | undefined;
+    const actorName = (req as any).__gymproUserName as string | undefined;
+    await db.insert(activityLogsTable).values({
+      userId: actorId ?? null,
+      userName: actorName ?? "System",
+      action,
+      entity: entity ?? null,
+      entityId: entityId ?? null,
+      details: details ?? null,
+    });
+  } catch {
+    // Never let logging break the main request
+  }
+}
+
+// GET /api/users — list non-deleted users
 router.get("/", async (req, res) => {
   try {
-    const users = await db.select().from(usersTable);
+    const users = await db.select().from(usersTable).where(isNull(usersTable.deletedAt));
     res.json(users);
   } catch (err) {
     req.log.error({ err }, "Failed to list users");
@@ -40,6 +62,7 @@ router.post("/", async (req, res) => {
       permissions: permissions ?? defaultStaffPermissions,
     }).returning();
 
+    await logActivity(req, "create_user", "user", user.id, { name, email, role });
     res.status(201).json(user);
   } catch (err) {
     req.log.error({ err }, "Failed to create user");
@@ -50,17 +73,13 @@ router.post("/", async (req, res) => {
 // GET /api/users/:id
 router.get("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  if (isNaN(id)) {
-    res.status(400).json({ error: "Invalid ID" });
-    return;
-  }
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
 
   try {
-    const user = await db.query.usersTable.findFirst({ where: eq(usersTable.id, id) });
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
+    const user = await db.query.usersTable.findFirst({
+      where: (u, { and, eq, isNull }) => and(eq(u.id, id), isNull(u.deletedAt)),
+    });
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
     res.json(user);
   } catch (err) {
     req.log.error({ err }, "Failed to get user");
@@ -71,10 +90,7 @@ router.get("/:id", async (req, res) => {
 // PATCH /api/users/:id
 router.patch("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  if (isNaN(id)) {
-    res.status(400).json({ error: "Invalid ID" });
-    return;
-  }
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
 
   const parsed = UpdateUserBody.safeParse(req.body);
   if (!parsed.success) {
@@ -96,11 +112,9 @@ router.patch("/:id", async (req, res) => {
       .where(eq(usersTable.id, id))
       .returning();
 
-    if (!updated) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
+    if (!updated) { res.status(404).json({ error: "User not found" }); return; }
 
+    await logActivity(req, "update_user", "user", id, data as Record<string, unknown>);
     res.json(updated);
   } catch (err) {
     req.log.error({ err }, "Failed to update user");
@@ -108,19 +122,20 @@ router.patch("/:id", async (req, res) => {
   }
 });
 
-// DELETE /api/users/:id
+// DELETE /api/users/:id — soft delete
 router.delete("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  if (isNaN(id)) {
-    res.status(400).json({ error: "Invalid ID" });
-    return;
-  }
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
 
   try {
-    await db.delete(usersTable).where(eq(usersTable.id, id));
+    await db.update(usersTable)
+      .set({ deletedAt: new Date() })
+      .where(eq(usersTable.id, id));
+
+    await logActivity(req, "delete_user", "user", id);
     res.status(204).send();
   } catch (err) {
-    req.log.error({ err }, "Failed to delete user");
+    req.log.error({ err }, "Failed to soft-delete user");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -128,10 +143,7 @@ router.delete("/:id", async (req, res) => {
 // PATCH /api/users/:id/permissions
 router.patch("/:id/permissions", async (req, res) => {
   const id = parseInt(req.params.id);
-  if (isNaN(id)) {
-    res.status(400).json({ error: "Invalid ID" });
-    return;
-  }
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
 
   const parsed = UpdateUserPermissionsBody.safeParse(req.body);
   if (!parsed.success) {
@@ -152,11 +164,9 @@ router.patch("/:id/permissions", async (req, res) => {
       .where(eq(usersTable.id, id))
       .returning();
 
-    if (!updated) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
+    if (!updated) { res.status(404).json({ error: "User not found" }); return; }
 
+    await logActivity(req, "update_permissions", "user", id);
     res.json(updated);
   } catch (err) {
     req.log.error({ err }, "Failed to update permissions");

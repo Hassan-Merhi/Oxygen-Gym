@@ -10,9 +10,17 @@ export const settingsTable = pgTable("settings", {
   defaultCurrency: text("default_currency").notNull().default("USD"), // 'USD' | 'CDF'
   usdToCdfRate: doublePrecision("usd_to_cdf_rate").notNull().default(2800),
   language: text("language").notNull().default("en"), // 'en' | 'fr' | 'ar'
+  // Logo & Branding
+  logoUrl: text("logo_url"),
+  receiptLogoUrl: text("receipt_logo_url"),
+  // Receipt settings
   receiptHeader: text("receipt_header"),
   receiptFooter: text("receipt_footer"),
-  logoUrl: text("logo_url"),
+  // Membership card
+  membershipCardFooter: text("membership_card_footer"),
+  // Backup
+  backupEnabled: text("backup_enabled").notNull().default("false"),
+  backupTime: text("backup_time").notNull().default("02:00"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
