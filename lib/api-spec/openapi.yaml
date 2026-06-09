@@ -3,20 +3,25 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Gym Management API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Auth and current user
+  - name: users
+    description: Staff user management
+  - name: settings
+    description: Gym settings
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +29,166 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated user profile with role and permissions
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentUser"
+        "401":
+          description: Not authenticated
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all staff users
+      responses:
+        "200":
+          description: List of staff users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a new staff user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get a staff user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Staff user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a staff user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete a staff user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /users/{id}/permissions:
+    patch:
+      operationId: updateUserPermissions
+      tags: [users]
+      summary: Update page permissions for a staff user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PermissionsUpdate"
+      responses:
+        "200":
+          description: Updated permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get gym settings
+      responses:
+        "200":
+          description: Current settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+    patch:
+      operationId: updateSettings
+      tags: [settings]
+      summary: Update gym settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsUpdate"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +199,207 @@ components:
       required:
         - status
 
+    PagePermissions:
+      type: object
+      description: Per-page access flags for a staff user
+      properties:
+        dashboard:
+          type: boolean
+        members:
+          type: boolean
+        plans:
+          type: boolean
+        staff:
+          type: boolean
+        payroll:
+          type: boolean
+        payments:
+          type: boolean
+        vouchers:
+          type: boolean
+        accounts:
+          type: boolean
+        stock:
+          type: boolean
+        sales:
+          type: boolean
+        settings:
+          type: boolean
+        canViewCosts:
+          type: boolean
+      required:
+        - dashboard
+        - members
+        - plans
+        - staff
+        - payroll
+        - payments
+        - vouchers
+        - accounts
+        - stock
+        - sales
+        - settings
+        - canViewCosts
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        clerkUserId:
+          type: ["string", "null"]
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: ["string", "null"]
+        role:
+          type: string
+          enum: [admin, staff]
+        status:
+          type: string
+          enum: [active, inactive]
+        permissions:
+          $ref: "#/components/schemas/PagePermissions"
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - role
+        - status
+        - permissions
+        - createdAt
+
+    UserInput:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: ["string", "null"]
+        role:
+          type: string
+          enum: [admin, staff]
+        status:
+          type: string
+          enum: [active, inactive]
+        permissions:
+          $ref: "#/components/schemas/PagePermissions"
+      required:
+        - name
+        - email
+        - role
+
+    UserUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: ["string", "null"]
+        role:
+          type: string
+          enum: [admin, staff]
+        status:
+          type: string
+          enum: [active, inactive]
+
+    PermissionsUpdate:
+      type: object
+      properties:
+        permissions:
+          $ref: "#/components/schemas/PagePermissions"
+      required:
+        - permissions
+
+    CurrentUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        clerkUserId:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, staff]
+        permissions:
+          $ref: "#/components/schemas/PagePermissions"
+      required:
+        - id
+        - clerkUserId
+        - name
+        - email
+        - role
+        - permissions
+
+    Settings:
+      type: object
+      properties:
+        id:
+          type: integer
+        gymName:
+          type: string
+        phone:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        defaultCurrency:
+          type: string
+          enum: [USD, CDF]
+        usdToCdfRate:
+          type: number
+        language:
+          type: string
+          enum: [en, fr, ar]
+        receiptHeader:
+          type: ["string", "null"]
+        receiptFooter:
+          type: ["string", "null"]
+        logoUrl:
+          type: ["string", "null"]
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - gymName
+        - defaultCurrency
+        - usdToCdfRate
+        - language
+        - updatedAt
+
+    SettingsUpdate:
+      type: object
+      properties:
+        gymName:
+          type: string
+        phone:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        defaultCurrency:
+          type: string
+          enum: [USD, CDF]
+        usdToCdfRate:
+          type: number
+        language:
+          type: string
+          enum: [en, fr, ar]
+        receiptHeader:
+          type: ["string", "null"]
+        receiptFooter:
+          type: ["string", "null"]
+        logoUrl:
+          type: ["string", "null"]

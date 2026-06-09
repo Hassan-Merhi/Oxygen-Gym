@@ -1,0 +1,3 @@
+- [GymPro auth quirks](gympro-auth.md) — JIT provisioning pattern, Clerk proxy middleware wiring, session-cookie-only for web (no Bearer tokens).
+- [GymPro i18n setup](gympro-i18n.md) — Zustand + persist store in src/lib/i18n.ts; RTL applied to html dir; translations cover EN/FR/AR.
+- [GymPro phase plan](gympro-phases.md) — 13-phase build; stop after each phase for user approval; full spec in attached_assets txt file.

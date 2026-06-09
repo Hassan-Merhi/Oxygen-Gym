@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="32" y="32" width="448" height="448" rx="64" fill="#3D38E6" stroke="none" />
+  <path d="M128 256h256" stroke="white" stroke-width="48" />
+  <path d="M160 160v192" stroke="white" stroke-width="32" />
+  <path d="M352 160v192" stroke="white" stroke-width="32" />
+  <circle cx="160" cy="256" r="16" fill="white" stroke="none" />
+  <circle cx="352" cy="256" r="16" fill="white" stroke="none" />
+  <text x="256" y="400" font-family="Inter, sans-serif" font-weight="900" font-size="64" fill="white" stroke="none" text-anchor="middle">GYMPRO</text>
+</svg>

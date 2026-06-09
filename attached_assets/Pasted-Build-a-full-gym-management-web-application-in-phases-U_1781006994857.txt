@@ -1,0 +1,256 @@
+Build a full gym management web application in phases. Use React frontend, Node/Express backend, PostgreSQL database, and a clean modern dashboard UI.
+
+Important rules:
+- Build phase by phase. Do not skip ahead.
+- Make the database structure properly first.
+- Accounting must be accurate.
+- Currency must support USD and CDF.
+- In Settings, admin can set the exchange rate.
+- Payments are cash only for now.
+- Only one gym branch for now.
+- Staff users need login access.
+- Admin can control exactly which pages each staff user can access.
+- Staff must NOT see cost prices, profit, or accounting cost details unless admin allows it.
+- Barcode/fingerprint device integration will be added later, so structure the app to support future integrations.
+- Add automatic daily database backup system.
+
+PHASE 1: App Foundation
+Create:
+1. Login system
+2. User roles:
+   - Admin
+   - Staff
+3. Permission system where admin can allow/deny access per page:
+   - Dashboard
+   - Members
+   - Subscription Plans
+   - Staff
+   - Payroll
+   - Payments
+   - Vouchers
+   - Accounts
+   - Stock
+   - Sales / Barcode
+   - Settings
+4. Admin account seed
+5. Sidebar layout
+6. Top navigation
+7. Protected routes
+8. Settings page base
+
+PHASE 2: Settings
+Create Settings page with:
+1. Gym name
+2. Logo upload
+3. Phone
+4. Address
+5. Currency settings:
+   - Default currency
+   - USD to CDF exchange rate
+   - CDF to USD conversion display
+6. Receipt settings:
+   - Receipt header
+   - Footer message
+   - Logo on receipt
+7. Staff permissions manager
+8. Daily backup settings
+
+PHASE 3: Dashboard KPIs
+Create dashboard with KPI cards:
+1. Active members
+2. Monthly subscription revenue
+3. Monthly expenses
+4. Today’s check-ins
+5. Expiring soon memberships
+6. Low stock items
+7. Total profit made
+
+Dashboard rules:
+- Revenue must come from subscription payments and product sales.
+- Expenses must come from vouchers/payments made.
+- Profit = revenue - cost - expenses.
+- Low stock card should expand and show low stock items.
+
+PHASE 4: Members
+Create Members page:
+1. Add/edit/delete members
+2. Member fields:
+   - Full name
+   - Phone
+   - Email
+   - Address
+   - Emergency contact
+   - Gender
+   - Date joined
+   - Plan
+   - Amount paid
+   - Discount
+   - Start date
+   - Expiry date
+   - Status: Active, Expired, Frozen, Inactive
+3. Member actions:
+   - Check in
+   - Renew membership
+   - Freeze membership
+   - Reactivate membership
+   - Change plan
+4. Member history:
+   - Payments
+   - Renewals
+   - Check-ins
+   - Plan changes
+
+PHASE 5: Subscription Plans
+Create plans page:
+1. Add/edit/delete plans
+2. Plan fields:
+   - Plan name
+   - Duration days
+   - Price USD
+   - Price CDF
+   - Description
+   - Active/inactive
+3. Show:
+   - Number of members on each plan
+   - Revenue by plan
+
+PHASE 6: Staff + Payroll
+Create Staff page:
+1. Add/edit/delete staff
+2. Staff fields:
+   - Name
+   - Phone
+   - Role
+   - Hire date
+   - Salary
+   - Status
+   - Login username/email
+   - Page permissions
+3. Payroll system:
+   - Generate payroll
+   - Mark payroll as paid
+   - Payroll history
+   - Export payroll slip as PDF
+   - Print payroll report
+
+PHASE 7: Payments / Daybook
+Create payments page:
+1. Track received payments
+2. Track payments made
+3. Fields:
+   - Date
+   - Type: Received or Paid
+   - Category
+   - Amount
+   - Currency: USD or CDF
+   - Exchange rate used
+   - Account
+   - Notes
+   - Linked member/staff/vendor if needed
+4. This page acts like a daybook.
+
+PHASE 8: Vouchers
+Create voucher page:
+1. Create cash receipt voucher
+2. Create cash payment voucher
+3. Create expense voucher
+4. Create customer payment voucher
+5. Voucher fields:
+   - Voucher number
+   - Date
+   - Account
+   - Paid to / Received from
+   - Amount
+   - Currency
+   - Description
+   - Created by
+6. Add print/PDF export for vouchers.
+
+PHASE 9: Accounts
+Create accounts page:
+1. Cash account
+2. Bank account placeholder for future
+3. Sales account
+4. Expenses account
+5. Payroll account
+6. Inventory account
+7. Show balances
+8. Show account ledger
+9. Every payment, sale, voucher, payroll, and stock purchase must update accounts correctly.
+
+PHASE 10: Stock / Inventory
+Create stock page:
+1. Add/edit/delete products
+2. Product fields:
+   - Product name
+   - Barcode number
+   - Category
+   - Cost price
+   - Selling price
+   - Currency
+   - Quantity in stock
+   - Low stock alert quantity
+   - Supplier
+   - Active/inactive
+3. Add stock purchase:
+   - Quantity added
+   - Cost per unit
+   - Total cost
+   - Date
+4. Selling products must:
+   - Deduct quantity
+   - Add money to cash account
+   - Record product cost
+   - Record profit correctly
+5. Staff without cost permission must not see:
+   - Cost price
+   - Profit
+   - Stock value
+
+PHASE 11: Sales / Barcode
+Create product sales page:
+1. Barcode input field
+2. Manual product search
+3. Scan barcode and auto-add item to cart
+4. Cart system:
+   - Product
+   - Quantity
+   - Price
+   - Discount
+   - Total
+5. Complete sale:
+   - Cash only
+   - Choose USD or CDF
+   - Deduct stock
+   - Add sale to cash account
+   - Record profit
+   - Generate receipt
+6. Receipt must be printable and customizable from settings.
+
+PHASE 12: Backup
+Create automatic daily backup:
+1. Backup database daily
+2. Store backup files safely
+3. Admin can download backup manually
+4. Admin can see backup history
+5. Add restore placeholder but do not activate restore until later.
+
+PHASE 13: Desktop App Preparation
+After the web app is complete, prepare structure for future desktop app:
+1. Keep frontend/backend clean
+2. Make it compatible with Electron later
+3. Do not build Electron yet unless I ask
+4. Add notes in README for future desktop packaging.
+
+Design requirements:
+- Clean modern UI
+- Mobile responsive
+- Easy sidebar navigation
+- Tables with search/filter/sort
+- Forms should be simple
+- Use modals or separate pages where needed
+- Show success/error messages
+- Add loading states
+- Use proper validation
+
+Start with PHASE 1 only. After Phase 1 is done, stop and ask me to approve before moving to Phase 2.
