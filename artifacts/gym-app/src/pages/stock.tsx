@@ -57,7 +57,6 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
-  Barcode,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -212,15 +211,11 @@ export default function Stock() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40">
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">{t("stock.col.number")}</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("stock.col.name")}</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">{t("stock.col.barcode")}</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">{t("stock.col.category")}</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("stock.col.sellingPrice")}</th>
                 {canViewCost && <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">{t("stock.col.costPrice")}</th>}
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("stock.col.quantity")}</th>
                 {canViewCost && <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden xl:table-cell">{t("stock.col.stockValue")}</th>}
-                {canViewProfit && <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden xl:table-cell">{t("stock.col.profit")}</th>}
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("stock.col.status")}</th>
                 <th className="px-4 py-3 font-medium text-muted-foreground text-right">{t("stock.col.actions")}</th>
               </tr>
@@ -244,9 +239,6 @@ export default function Stock() {
               ) : products.map((p) => (
                 <tr key={p.id} className={`border-b border-border/50 hover:bg-muted/20 transition-colors ${p.isLowStock && p.status === "active" ? "bg-amber-50/40" : ""}`}>
                   <td className="px-4 py-3">
-                    <span className="font-mono text-xs text-muted-foreground">{p.productNumber ?? "—"}</span>
-                  </td>
-                  <td className="px-4 py-3">
                     <div>
                       <span className="font-medium">{p.name}</span>
                       {p.isLowStock && p.status === "active" && (
@@ -256,18 +248,6 @@ export default function Stock() {
                       )}
                     </div>
                     {p.description && <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[160px]">{p.description}</p>}
-                  </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    {p.barcode ? (
-                      <span className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
-                        <Barcode className="w-3 h-3" />{p.barcode}
-                      </span>
-                    ) : <span className="text-xs text-muted-foreground/40">—</span>}
-                  </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    {p.category ? (
-                      <span className="text-xs font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full">{p.category}</span>
-                    ) : <span className="text-xs text-muted-foreground/40">—</span>}
                   </td>
                   <td className="px-4 py-3">
                     <span className="font-semibold">{fmtMoney(p.sellingPrice, p.currency)}</span>
@@ -286,13 +266,6 @@ export default function Stock() {
                   {canViewCost && (
                     <td className="px-4 py-3 hidden xl:table-cell">
                       <span className="text-sm">${p.stockValueUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                    </td>
-                  )}
-                  {canViewProfit && (
-                    <td className="px-4 py-3 hidden xl:table-cell">
-                      <span className={`text-sm font-medium ${p.profitPerUnit >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
-                        ${p.profitPerUnit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </span>
                     </td>
                   )}
                   <td className="px-4 py-3">
