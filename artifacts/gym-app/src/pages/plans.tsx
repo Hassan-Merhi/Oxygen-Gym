@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,6 +10,7 @@ import {
   useUpdatePlan,
   useDeletePlan,
   getListPlansQueryKey,
+  useGetSettings,
 } from "@workspace/api-client-react";
 import type { Plan } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -135,6 +136,23 @@ function PlanModal({
 
   const currency = watch("currency");
 
+  // Re-populate form whenever the plan being edited changes
+  useEffect(() => {
+    if (open) {
+      reset(
+        plan
+          ? {
+              name: plan.name,
+              description: plan.description ?? "",
+              durationDays: plan.durationDays,
+              price: plan.price,
+              currency: (plan.currency as "USD" | "CDF") ?? "USD",
+            }
+          : { currency: "USD", durationDays: 30, price: 0 },
+      );
+    }
+  }, [open, plan, reset]);
+
   const onSubmit = handleSubmit(async (data) => {
     try {
       if (plan) {
@@ -213,10 +231,11 @@ function PlanModal({
 
 // ── Plan Card ──────────────────────────────────────────────────────────────────
 function PlanCard({
-  plan, accentIdx, t, onEdit, onArchive, onDelete, onRestore, canManage,
+  plan, accentIdx, exchangeRate, t, onEdit, onArchive, onDelete, onRestore, canManage,
 }: {
   plan: Plan;
   accentIdx: number;
+  exchangeRate: number;
   t: (k: string) => string;
   onEdit: () => void;
   onArchive: () => void;
@@ -307,16 +326,28 @@ function PlanCard({
         )}
 
         {/* Price + Duration — the hero section */}
-        <div className="mt-auto pt-3 border-t border-border/40 flex items-end justify-between">
+        <div className="mt-auto pt-3 border-t border-border/40 space-y-2">
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Clock className="w-3.5 h-3.5" />
             <span className="text-sm font-semibold text-foreground">{dur.label}</span>
             <span className="text-xs">{dur.sub}</span>
             <span className="text-xs text-muted-foreground/60">({plan.durationDays}d)</span>
           </div>
-          <span className="text-xl font-bold tracking-tight text-foreground">
-            {fmtPrice(plan.price, plan.currency)}
-          </span>
+          <div className="flex items-end justify-between gap-2">
+            <div>
+              {plan.currency === "USD" ? (
+                <>
+                  <p className="text-xl font-bold tracking-tight text-foreground">{fmtPrice(plan.price, "USD")}</p>
+                  <p className="text-xs text-muted-foreground">FC {Math.round(plan.price * exchangeRate).toLocaleString()}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xl font-bold tracking-tight text-foreground">{fmtPrice(plan.price, "CDF")}</p>
+                  <p className="text-xs text-muted-foreground">${(plan.price / exchangeRate).toFixed(0)}</p>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -337,6 +368,8 @@ export default function PlansPage() {
   const [search, setSearch] = useState("");
 
   const { data: plans = [], isLoading } = useListPlans();
+  const { data: settings } = useGetSettings();
+  const exchangeRate = (settings?.usdToCdfRate as number) ?? 2800;
   const updatePlan = useUpdatePlan();
   const deletePlan = useDeletePlan();
 
@@ -499,6 +532,7 @@ export default function PlansPage() {
               key={plan.id}
               plan={plan}
               accentIdx={i}
+              exchangeRate={exchangeRate}
               t={t}
               canManage={!!canManage}
               onEdit={() => { setEditPlan(plan); setShowModal(true); }}
