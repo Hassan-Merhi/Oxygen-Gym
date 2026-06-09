@@ -1057,6 +1057,70 @@ export interface PayrollListResponse {
   limit: number;
 }
 
+export interface AttendanceSummary {
+  today: number;
+  thisWeek: number;
+  thisMonth: number;
+  activeToday: number;
+  avgDaily: number;
+}
+
+export interface AttendanceDailyEntry {
+  date: string;
+  count: number;
+}
+
+export interface AttendanceMonthlyEntry {
+  month: string;
+  count: number;
+}
+
+export interface AttendanceHourlyEntry {
+  hour: number;
+  count: number;
+}
+
+export interface AttendanceTopMember {
+  memberId: number;
+  memberName: string;
+  count: number;
+}
+
+export interface AttendanceCheckIn {
+  id: number;
+  memberId?: number | null;
+  memberName: string;
+  checkedInAt: string;
+}
+
+export interface MemberAttendanceStats {
+  totalCheckins: number;
+  lastCheckIn?: string | null;
+  thisMonthCheckins: number;
+  avgPerMonth: number;
+  monthlyHistory: AttendanceMonthlyEntry[];
+  calendarDays: string[];
+}
+
+export interface GymNotification {
+  key: string;
+  type: string;
+  priority: string;
+  message: string;
+  date: string;
+  isRead: boolean;
+}
+
+export interface NotificationsResponse {
+  items: GymNotification[];
+  total: number;
+  unreadCount: number;
+}
+
+export interface NotificationCountResponse {
+  unread: number;
+}
+
 export type ListActivityLogsParams = {
 limit?: number;
 offset?: number;
@@ -1100,6 +1164,32 @@ limit?: number;
 dateFrom?: string;
 dateTo?: string;
 direction?: string;
+};
+
+export type GetAttendanceDailyParams = {
+days?: string;
+};
+
+export type GetAttendanceMonthlyParams = {
+months?: string;
+};
+
+export type GetAttendanceTopMembersParams = {
+limit?: string;
+};
+
+export type ListNotificationsParams = {
+type?: string;
+read?: string;
+};
+
+export type MarkAllNotificationsRead200 = {
+  ok: boolean;
+  marked: number;
+};
+
+export type MarkNotificationRead200 = {
+  ok: boolean;
 };
 
 export type ListStaffEmployeesParams = {

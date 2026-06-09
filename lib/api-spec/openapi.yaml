@@ -827,6 +827,210 @@ paths:
               schema:
                 $ref: "#/components/schemas/LedgerBalance"
 
+  /attendance/summary:
+    get:
+      operationId: getAttendanceSummary
+      summary: Get attendance summary cards
+      tags: [checkins]
+      responses:
+        "200":
+          description: Attendance summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSummary"
+
+  /attendance/daily:
+    get:
+      operationId: getAttendanceDaily
+      summary: Get daily attendance chart data
+      tags: [checkins]
+      parameters:
+        - name: days
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Daily attendance array
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceDailyEntry"
+
+  /attendance/monthly:
+    get:
+      operationId: getAttendanceMonthly
+      summary: Get monthly attendance chart data
+      tags: [checkins]
+      parameters:
+        - name: months
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Monthly attendance array
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceMonthlyEntry"
+
+  /attendance/hourly:
+    get:
+      operationId: getAttendanceHourly
+      summary: Get hourly attendance distribution
+      tags: [checkins]
+      responses:
+        "200":
+          description: Hourly distribution
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceHourlyEntry"
+
+  /attendance/top-members:
+    get:
+      operationId: getAttendanceTopMembers
+      summary: Get top attending members
+      tags: [checkins]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Top members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceTopMember"
+
+  /attendance/today:
+    get:
+      operationId: getAttendanceToday
+      summary: Get today's check-ins
+      tags: [checkins]
+      responses:
+        "200":
+          description: Today's check-ins
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceCheckIn"
+
+  /attendance/week:
+    get:
+      operationId: getAttendanceWeek
+      summary: Get this week's check-ins
+      tags: [checkins]
+      responses:
+        "200":
+          description: This week's check-ins
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceCheckIn"
+
+  /attendance/member/{id}:
+    get:
+      operationId: getMemberAttendanceStats
+      summary: Get attendance stats for a specific member
+      tags: [checkins]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Member attendance statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberAttendanceStats"
+
+  /notifications:
+    get:
+      operationId: listNotifications
+      summary: Get all computed notifications with read state
+      tags: [users]
+      parameters:
+        - name: type
+          in: query
+          schema: { type: string }
+        - name: read
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Notifications list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationsResponse"
+
+  /notifications/count:
+    get:
+      operationId: getNotificationCount
+      summary: Get unread notification count
+      tags: [users]
+      responses:
+        "200":
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationCountResponse"
+
+  /notifications/read-all:
+    patch:
+      operationId: markAllNotificationsRead
+      summary: Mark all notifications as read
+      tags: [users]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  marked: { type: integer }
+                required: [ok, marked]
+
+  /notifications/{key}/read:
+    patch:
+      operationId: markNotificationRead
+      summary: Mark a single notification as read
+      tags: [users]
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                required: [ok]
+
   /staff-employees:
     get:
       operationId: listStaffEmployees
@@ -2586,3 +2790,95 @@ components:
         page: { type: integer }
         limit: { type: integer }
       required: [items, total, page, limit]
+
+    AttendanceSummary:
+      type: object
+      properties:
+        today: { type: integer }
+        thisWeek: { type: integer }
+        thisMonth: { type: integer }
+        activeToday: { type: integer }
+        avgDaily: { type: integer }
+      required: [today, thisWeek, thisMonth, activeToday, avgDaily]
+
+    AttendanceDailyEntry:
+      type: object
+      properties:
+        date: { type: string }
+        count: { type: integer }
+      required: [date, count]
+
+    AttendanceMonthlyEntry:
+      type: object
+      properties:
+        month: { type: string }
+        count: { type: integer }
+      required: [month, count]
+
+    AttendanceHourlyEntry:
+      type: object
+      properties:
+        hour: { type: integer }
+        count: { type: integer }
+      required: [hour, count]
+
+    AttendanceTopMember:
+      type: object
+      properties:
+        memberId: { type: integer }
+        memberName: { type: string }
+        count: { type: integer }
+      required: [memberId, memberName, count]
+
+    AttendanceCheckIn:
+      type: object
+      properties:
+        id: { type: integer }
+        memberId: { type: integer, nullable: true }
+        memberName: { type: string }
+        checkedInAt: { type: string }
+      required: [id, memberName, checkedInAt]
+
+    MemberAttendanceStats:
+      type: object
+      properties:
+        totalCheckins: { type: integer }
+        lastCheckIn: { type: string, nullable: true }
+        thisMonthCheckins: { type: integer }
+        avgPerMonth: { type: integer }
+        monthlyHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceMonthlyEntry"
+        calendarDays:
+          type: array
+          items: { type: string }
+      required: [totalCheckins, thisMonthCheckins, avgPerMonth, monthlyHistory, calendarDays]
+
+    GymNotification:
+      type: object
+      properties:
+        key: { type: string }
+        type: { type: string }
+        priority: { type: string }
+        message: { type: string }
+        date: { type: string }
+        isRead: { type: boolean }
+      required: [key, type, priority, message, date, isRead]
+
+    NotificationsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GymNotification"
+        total: { type: integer }
+        unreadCount: { type: integer }
+      required: [items, total, unreadCount]
+
+    NotificationCountResponse:
+      type: object
+      properties:
+        unread: { type: integer }
+      required: [unread]

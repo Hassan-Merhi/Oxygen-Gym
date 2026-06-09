@@ -16,6 +16,8 @@ import stockRouter from "./stock";
 import salesRouter from "./sales";
 import staffEmployeesRouter from "./staff-employees";
 import payrollRouter from "./payroll";
+import attendanceRouter from "./attendance";
+import notificationsRouter from "./notifications";
 
 const router: IRouter = Router();
 
@@ -36,5 +38,7 @@ router.use("/stock", stockRouter);
 router.use("/sales", salesRouter);
 router.use("/staff-employees", staffEmployeesRouter);
 router.use("/payroll", payrollRouter);
+router.use("/attendance", attendanceRouter);
+router.use("/notifications", notificationsRouter);
 
 export default router;

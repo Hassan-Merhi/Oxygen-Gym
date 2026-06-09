@@ -1291,6 +1291,166 @@ export const GetLedgerBalanceResponse = zod.object({
 
 
 /**
+ * @summary Get attendance summary cards
+ */
+export const GetAttendanceSummaryResponse = zod.object({
+  "today": zod.number(),
+  "thisWeek": zod.number(),
+  "thisMonth": zod.number(),
+  "activeToday": zod.number(),
+  "avgDaily": zod.number()
+})
+
+
+/**
+ * @summary Get daily attendance chart data
+ */
+export const GetAttendanceDailyQueryParams = zod.object({
+  "days": zod.coerce.string().optional()
+})
+
+export const GetAttendanceDailyResponseItem = zod.object({
+  "date": zod.string(),
+  "count": zod.number()
+})
+export const GetAttendanceDailyResponse = zod.array(GetAttendanceDailyResponseItem)
+
+
+/**
+ * @summary Get monthly attendance chart data
+ */
+export const GetAttendanceMonthlyQueryParams = zod.object({
+  "months": zod.coerce.string().optional()
+})
+
+export const GetAttendanceMonthlyResponseItem = zod.object({
+  "month": zod.string(),
+  "count": zod.number()
+})
+export const GetAttendanceMonthlyResponse = zod.array(GetAttendanceMonthlyResponseItem)
+
+
+/**
+ * @summary Get hourly attendance distribution
+ */
+export const GetAttendanceHourlyResponseItem = zod.object({
+  "hour": zod.number(),
+  "count": zod.number()
+})
+export const GetAttendanceHourlyResponse = zod.array(GetAttendanceHourlyResponseItem)
+
+
+/**
+ * @summary Get top attending members
+ */
+export const GetAttendanceTopMembersQueryParams = zod.object({
+  "limit": zod.coerce.string().optional()
+})
+
+export const GetAttendanceTopMembersResponseItem = zod.object({
+  "memberId": zod.number(),
+  "memberName": zod.string(),
+  "count": zod.number()
+})
+export const GetAttendanceTopMembersResponse = zod.array(GetAttendanceTopMembersResponseItem)
+
+
+/**
+ * @summary Get today's check-ins
+ */
+export const GetAttendanceTodayResponseItem = zod.object({
+  "id": zod.number(),
+  "memberId": zod.number().nullish(),
+  "memberName": zod.string(),
+  "checkedInAt": zod.string()
+})
+export const GetAttendanceTodayResponse = zod.array(GetAttendanceTodayResponseItem)
+
+
+/**
+ * @summary Get this week's check-ins
+ */
+export const GetAttendanceWeekResponseItem = zod.object({
+  "id": zod.number(),
+  "memberId": zod.number().nullish(),
+  "memberName": zod.string(),
+  "checkedInAt": zod.string()
+})
+export const GetAttendanceWeekResponse = zod.array(GetAttendanceWeekResponseItem)
+
+
+/**
+ * @summary Get attendance stats for a specific member
+ */
+export const GetMemberAttendanceStatsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetMemberAttendanceStatsResponse = zod.object({
+  "totalCheckins": zod.number(),
+  "lastCheckIn": zod.string().nullish(),
+  "thisMonthCheckins": zod.number(),
+  "avgPerMonth": zod.number(),
+  "monthlyHistory": zod.array(zod.object({
+  "month": zod.string(),
+  "count": zod.number()
+})),
+  "calendarDays": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Get all computed notifications with read state
+ */
+export const ListNotificationsQueryParams = zod.object({
+  "type": zod.coerce.string().optional(),
+  "read": zod.coerce.string().optional()
+})
+
+export const ListNotificationsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "key": zod.string(),
+  "type": zod.string(),
+  "priority": zod.string(),
+  "message": zod.string(),
+  "date": zod.string(),
+  "isRead": zod.boolean()
+})),
+  "total": zod.number(),
+  "unreadCount": zod.number()
+})
+
+
+/**
+ * @summary Get unread notification count
+ */
+export const GetNotificationCountResponse = zod.object({
+  "unread": zod.number()
+})
+
+
+/**
+ * @summary Mark all notifications as read
+ */
+export const MarkAllNotificationsReadResponse = zod.object({
+  "ok": zod.boolean(),
+  "marked": zod.number()
+})
+
+
+/**
+ * @summary Mark a single notification as read
+ */
+export const MarkNotificationReadParams = zod.object({
+  "key": zod.coerce.string()
+})
+
+export const MarkNotificationReadResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
  * @summary List staff employee records
  */
 export const ListStaffEmployeesQueryParams = zod.object({

@@ -23,6 +23,12 @@ import type {
   AccountSummary,
   ActivityLog,
   AddStockPurchaseBody,
+  AttendanceCheckIn,
+  AttendanceDailyEntry,
+  AttendanceHourlyEntry,
+  AttendanceMonthlyEntry,
+  AttendanceSummary,
+  AttendanceTopMember,
   BarcodeProduct,
   CancelPayrollBody,
   CheckInBody,
@@ -35,6 +41,9 @@ import type {
   DashboardKpis,
   ExpensePage,
   FreezeBody,
+  GetAttendanceDailyParams,
+  GetAttendanceMonthlyParams,
+  GetAttendanceTopMembersParams,
   GetProfitLossParams,
   HealthStatus,
   LedgerBalance,
@@ -43,6 +52,7 @@ import type {
   ListExpenseEntriesParams,
   ListLedgerParams,
   ListMembersParams,
+  ListNotificationsParams,
   ListPaymentsParams,
   ListPayrollParams,
   ListProductsParams,
@@ -51,12 +61,17 @@ import type {
   ListStaffEmployeesParams,
   ListVouchersParams,
   LookupBarcodeParams,
+  MarkAllNotificationsRead200,
+  MarkNotificationRead200,
   Member,
+  MemberAttendanceStats,
   MemberInput,
   MemberPayment,
   MemberStatusUpdate,
   MemberUpdate,
   MembersPage,
+  NotificationCountResponse,
+  NotificationsResponse,
   PaymentInput,
   PaymentRecord,
   PaymentSummary,
@@ -3089,6 +3104,944 @@ export function useGetLedgerBalance<TData = Awaited<ReturnType<typeof getLedgerB
 
 
 
+
+export const getGetAttendanceSummaryUrl = () => {
+
+
+
+
+  return `/api/attendance/summary`
+}
+
+/**
+ * @summary Get attendance summary cards
+ */
+export const getAttendanceSummary = async ( options?: RequestInit): Promise<AttendanceSummary> => {
+
+  return customFetch<AttendanceSummary>(getGetAttendanceSummaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAttendanceSummaryQueryKey = () => {
+    return [
+    `/api/attendance/summary`
+    ] as const;
+    }
+
+
+export const getGetAttendanceSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getAttendanceSummary>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAttendanceSummaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAttendanceSummary>>> = ({ signal }) => getAttendanceSummary({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAttendanceSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAttendanceSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getAttendanceSummary>>>
+export type GetAttendanceSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get attendance summary cards
+ */
+
+export function useGetAttendanceSummary<TData = Awaited<ReturnType<typeof getAttendanceSummary>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAttendanceSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetAttendanceDailyUrl = (params?: GetAttendanceDailyParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/attendance/daily?${stringifiedParams}` : `/api/attendance/daily`
+}
+
+/**
+ * @summary Get daily attendance chart data
+ */
+export const getAttendanceDaily = async (params?: GetAttendanceDailyParams, options?: RequestInit): Promise<AttendanceDailyEntry[]> => {
+
+  return customFetch<AttendanceDailyEntry[]>(getGetAttendanceDailyUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAttendanceDailyQueryKey = (params?: GetAttendanceDailyParams,) => {
+    return [
+    `/api/attendance/daily`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAttendanceDailyQueryOptions = <TData = Awaited<ReturnType<typeof getAttendanceDaily>>, TError = ErrorType<unknown>>(params?: GetAttendanceDailyParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceDaily>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAttendanceDailyQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAttendanceDaily>>> = ({ signal }) => getAttendanceDaily(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAttendanceDaily>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAttendanceDailyQueryResult = NonNullable<Awaited<ReturnType<typeof getAttendanceDaily>>>
+export type GetAttendanceDailyQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get daily attendance chart data
+ */
+
+export function useGetAttendanceDaily<TData = Awaited<ReturnType<typeof getAttendanceDaily>>, TError = ErrorType<unknown>>(
+ params?: GetAttendanceDailyParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceDaily>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAttendanceDailyQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetAttendanceMonthlyUrl = (params?: GetAttendanceMonthlyParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/attendance/monthly?${stringifiedParams}` : `/api/attendance/monthly`
+}
+
+/**
+ * @summary Get monthly attendance chart data
+ */
+export const getAttendanceMonthly = async (params?: GetAttendanceMonthlyParams, options?: RequestInit): Promise<AttendanceMonthlyEntry[]> => {
+
+  return customFetch<AttendanceMonthlyEntry[]>(getGetAttendanceMonthlyUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAttendanceMonthlyQueryKey = (params?: GetAttendanceMonthlyParams,) => {
+    return [
+    `/api/attendance/monthly`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAttendanceMonthlyQueryOptions = <TData = Awaited<ReturnType<typeof getAttendanceMonthly>>, TError = ErrorType<unknown>>(params?: GetAttendanceMonthlyParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceMonthly>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAttendanceMonthlyQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAttendanceMonthly>>> = ({ signal }) => getAttendanceMonthly(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAttendanceMonthly>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAttendanceMonthlyQueryResult = NonNullable<Awaited<ReturnType<typeof getAttendanceMonthly>>>
+export type GetAttendanceMonthlyQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get monthly attendance chart data
+ */
+
+export function useGetAttendanceMonthly<TData = Awaited<ReturnType<typeof getAttendanceMonthly>>, TError = ErrorType<unknown>>(
+ params?: GetAttendanceMonthlyParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceMonthly>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAttendanceMonthlyQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetAttendanceHourlyUrl = () => {
+
+
+
+
+  return `/api/attendance/hourly`
+}
+
+/**
+ * @summary Get hourly attendance distribution
+ */
+export const getAttendanceHourly = async ( options?: RequestInit): Promise<AttendanceHourlyEntry[]> => {
+
+  return customFetch<AttendanceHourlyEntry[]>(getGetAttendanceHourlyUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAttendanceHourlyQueryKey = () => {
+    return [
+    `/api/attendance/hourly`
+    ] as const;
+    }
+
+
+export const getGetAttendanceHourlyQueryOptions = <TData = Awaited<ReturnType<typeof getAttendanceHourly>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceHourly>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAttendanceHourlyQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAttendanceHourly>>> = ({ signal }) => getAttendanceHourly({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAttendanceHourly>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAttendanceHourlyQueryResult = NonNullable<Awaited<ReturnType<typeof getAttendanceHourly>>>
+export type GetAttendanceHourlyQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get hourly attendance distribution
+ */
+
+export function useGetAttendanceHourly<TData = Awaited<ReturnType<typeof getAttendanceHourly>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceHourly>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAttendanceHourlyQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetAttendanceTopMembersUrl = (params?: GetAttendanceTopMembersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/attendance/top-members?${stringifiedParams}` : `/api/attendance/top-members`
+}
+
+/**
+ * @summary Get top attending members
+ */
+export const getAttendanceTopMembers = async (params?: GetAttendanceTopMembersParams, options?: RequestInit): Promise<AttendanceTopMember[]> => {
+
+  return customFetch<AttendanceTopMember[]>(getGetAttendanceTopMembersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAttendanceTopMembersQueryKey = (params?: GetAttendanceTopMembersParams,) => {
+    return [
+    `/api/attendance/top-members`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAttendanceTopMembersQueryOptions = <TData = Awaited<ReturnType<typeof getAttendanceTopMembers>>, TError = ErrorType<unknown>>(params?: GetAttendanceTopMembersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceTopMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAttendanceTopMembersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAttendanceTopMembers>>> = ({ signal }) => getAttendanceTopMembers(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAttendanceTopMembers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAttendanceTopMembersQueryResult = NonNullable<Awaited<ReturnType<typeof getAttendanceTopMembers>>>
+export type GetAttendanceTopMembersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get top attending members
+ */
+
+export function useGetAttendanceTopMembers<TData = Awaited<ReturnType<typeof getAttendanceTopMembers>>, TError = ErrorType<unknown>>(
+ params?: GetAttendanceTopMembersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceTopMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAttendanceTopMembersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetAttendanceTodayUrl = () => {
+
+
+
+
+  return `/api/attendance/today`
+}
+
+/**
+ * @summary Get today's check-ins
+ */
+export const getAttendanceToday = async ( options?: RequestInit): Promise<AttendanceCheckIn[]> => {
+
+  return customFetch<AttendanceCheckIn[]>(getGetAttendanceTodayUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAttendanceTodayQueryKey = () => {
+    return [
+    `/api/attendance/today`
+    ] as const;
+    }
+
+
+export const getGetAttendanceTodayQueryOptions = <TData = Awaited<ReturnType<typeof getAttendanceToday>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceToday>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAttendanceTodayQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAttendanceToday>>> = ({ signal }) => getAttendanceToday({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAttendanceToday>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAttendanceTodayQueryResult = NonNullable<Awaited<ReturnType<typeof getAttendanceToday>>>
+export type GetAttendanceTodayQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get today's check-ins
+ */
+
+export function useGetAttendanceToday<TData = Awaited<ReturnType<typeof getAttendanceToday>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceToday>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAttendanceTodayQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetAttendanceWeekUrl = () => {
+
+
+
+
+  return `/api/attendance/week`
+}
+
+/**
+ * @summary Get this week's check-ins
+ */
+export const getAttendanceWeek = async ( options?: RequestInit): Promise<AttendanceCheckIn[]> => {
+
+  return customFetch<AttendanceCheckIn[]>(getGetAttendanceWeekUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAttendanceWeekQueryKey = () => {
+    return [
+    `/api/attendance/week`
+    ] as const;
+    }
+
+
+export const getGetAttendanceWeekQueryOptions = <TData = Awaited<ReturnType<typeof getAttendanceWeek>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceWeek>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAttendanceWeekQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAttendanceWeek>>> = ({ signal }) => getAttendanceWeek({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAttendanceWeek>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAttendanceWeekQueryResult = NonNullable<Awaited<ReturnType<typeof getAttendanceWeek>>>
+export type GetAttendanceWeekQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get this week's check-ins
+ */
+
+export function useGetAttendanceWeek<TData = Awaited<ReturnType<typeof getAttendanceWeek>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttendanceWeek>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAttendanceWeekQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetMemberAttendanceStatsUrl = (id: number,) => {
+
+
+
+
+  return `/api/attendance/member/${id}`
+}
+
+/**
+ * @summary Get attendance stats for a specific member
+ */
+export const getMemberAttendanceStats = async (id: number, options?: RequestInit): Promise<MemberAttendanceStats> => {
+
+  return customFetch<MemberAttendanceStats>(getGetMemberAttendanceStatsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMemberAttendanceStatsQueryKey = (id: number,) => {
+    return [
+    `/api/attendance/member/${id}`
+    ] as const;
+    }
+
+
+export const getGetMemberAttendanceStatsQueryOptions = <TData = Awaited<ReturnType<typeof getMemberAttendanceStats>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMemberAttendanceStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMemberAttendanceStatsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMemberAttendanceStats>>> = ({ signal }) => getMemberAttendanceStats(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMemberAttendanceStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMemberAttendanceStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getMemberAttendanceStats>>>
+export type GetMemberAttendanceStatsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get attendance stats for a specific member
+ */
+
+export function useGetMemberAttendanceStats<TData = Awaited<ReturnType<typeof getMemberAttendanceStats>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMemberAttendanceStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMemberAttendanceStatsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListNotificationsUrl = (params?: ListNotificationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/notifications?${stringifiedParams}` : `/api/notifications`
+}
+
+/**
+ * @summary Get all computed notifications with read state
+ */
+export const listNotifications = async (params?: ListNotificationsParams, options?: RequestInit): Promise<NotificationsResponse> => {
+
+  return customFetch<NotificationsResponse>(getListNotificationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListNotificationsQueryKey = (params?: ListNotificationsParams,) => {
+    return [
+    `/api/notifications`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListNotificationsQueryOptions = <TData = Awaited<ReturnType<typeof listNotifications>>, TError = ErrorType<unknown>>(params?: ListNotificationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListNotificationsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listNotifications>>> = ({ signal }) => listNotifications(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listNotifications>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListNotificationsQueryResult = NonNullable<Awaited<ReturnType<typeof listNotifications>>>
+export type ListNotificationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get all computed notifications with read state
+ */
+
+export function useListNotifications<TData = Awaited<ReturnType<typeof listNotifications>>, TError = ErrorType<unknown>>(
+ params?: ListNotificationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listNotifications>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListNotificationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetNotificationCountUrl = () => {
+
+
+
+
+  return `/api/notifications/count`
+}
+
+/**
+ * @summary Get unread notification count
+ */
+export const getNotificationCount = async ( options?: RequestInit): Promise<NotificationCountResponse> => {
+
+  return customFetch<NotificationCountResponse>(getGetNotificationCountUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetNotificationCountQueryKey = () => {
+    return [
+    `/api/notifications/count`
+    ] as const;
+    }
+
+
+export const getGetNotificationCountQueryOptions = <TData = Awaited<ReturnType<typeof getNotificationCount>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNotificationCount>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetNotificationCountQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNotificationCount>>> = ({ signal }) => getNotificationCount({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getNotificationCount>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetNotificationCountQueryResult = NonNullable<Awaited<ReturnType<typeof getNotificationCount>>>
+export type GetNotificationCountQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get unread notification count
+ */
+
+export function useGetNotificationCount<TData = Awaited<ReturnType<typeof getNotificationCount>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNotificationCount>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetNotificationCountQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getMarkAllNotificationsReadUrl = () => {
+
+
+
+
+  return `/api/notifications/read-all`
+}
+
+/**
+ * @summary Mark all notifications as read
+ */
+export const markAllNotificationsRead = async ( options?: RequestInit): Promise<MarkAllNotificationsRead200> => {
+
+  return customFetch<MarkAllNotificationsRead200>(getMarkAllNotificationsReadUrl(),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+export const getMarkAllNotificationsReadMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markAllNotificationsRead>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof markAllNotificationsRead>>, TError,void, TContext> => {
+
+const mutationKey = ['markAllNotificationsRead'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof markAllNotificationsRead>>, void> = () => {
+
+
+          return  markAllNotificationsRead(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MarkAllNotificationsReadMutationResult = NonNullable<Awaited<ReturnType<typeof markAllNotificationsRead>>>
+
+    export type MarkAllNotificationsReadMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Mark all notifications as read
+ */
+export const useMarkAllNotificationsRead = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markAllNotificationsRead>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof markAllNotificationsRead>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getMarkAllNotificationsReadMutationOptions(options));
+    }
+
+export const getMarkNotificationReadUrl = (key: string,) => {
+
+
+
+
+  return `/api/notifications/${key}/read`
+}
+
+/**
+ * @summary Mark a single notification as read
+ */
+export const markNotificationRead = async (key: string, options?: RequestInit): Promise<MarkNotificationRead200> => {
+
+  return customFetch<MarkNotificationRead200>(getMarkNotificationReadUrl(key),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+export const getMarkNotificationReadMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markNotificationRead>>, TError,{key: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof markNotificationRead>>, TError,{key: string}, TContext> => {
+
+const mutationKey = ['markNotificationRead'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof markNotificationRead>>, {key: string}> = (props) => {
+          const {key} = props ?? {};
+
+          return  markNotificationRead(key,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MarkNotificationReadMutationResult = NonNullable<Awaited<ReturnType<typeof markNotificationRead>>>
+
+    export type MarkNotificationReadMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Mark a single notification as read
+ */
+export const useMarkNotificationRead = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markNotificationRead>>, TError,{key: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof markNotificationRead>>,
+        TError,
+        {key: string},
+        TContext
+      > => {
+      return useMutation(getMarkNotificationReadMutationOptions(options));
+    }
 
 export const getListStaffEmployeesUrl = (params?: ListStaffEmployeesParams,) => {
   const normalizedParams = new URLSearchParams();

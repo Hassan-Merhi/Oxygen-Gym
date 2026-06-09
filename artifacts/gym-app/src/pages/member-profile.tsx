@@ -5,8 +5,10 @@ import {
   useGetMember,
   useGetMemberPayments,
   useGetMemberCheckins,
+  useGetMemberAttendanceStats,
 } from "@workspace/api-client-react";
 import type { MemberPayment, CheckInRecord } from "@workspace/api-client-react";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -67,6 +69,7 @@ export default function MemberProfile({ id }: { id: number }) {
   const { data: member, isLoading } = useGetMember(id);
   const { data: payments = [] } = useGetMemberPayments(id);
   const { data: checkins = [] } = useGetMemberCheckins(id);
+  const { data: attStats } = useGetMemberAttendanceStats(id);
 
   if (isLoading) {
     return (
@@ -240,11 +243,19 @@ export default function MemberProfile({ id }: { id: number }) {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-slate-500 dark:text-slate-400">{t("members.table.lastCheckin")}</span>
-                <span className="font-medium text-slate-900 dark:text-white">{fmtDate(member.lastCheckIn)}</span>
+                <span className="font-medium text-slate-900 dark:text-white">{fmtDate(attStats?.lastCheckIn ?? member.lastCheckIn)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Check-ins</span>
-                <span className="font-medium text-slate-900 dark:text-white">{checkins.length}</span>
+                <span className="text-slate-500 dark:text-slate-400">{t("att.totalCheckins")}</span>
+                <span className="font-medium text-slate-900 dark:text-white">{attStats?.totalCheckins ?? checkins.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 dark:text-slate-400">{t("att.thisMonth")}</span>
+                <span className="font-medium text-slate-900 dark:text-white">{attStats?.thisMonthCheckins ?? "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 dark:text-slate-400">{t("att.avgMonth")}</span>
+                <span className="font-medium text-slate-900 dark:text-white">{attStats?.avgPerMonth ?? "—"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500 dark:text-slate-400">Payments</span>

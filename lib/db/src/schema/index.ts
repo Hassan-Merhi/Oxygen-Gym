@@ -13,3 +13,4 @@ export * from "./staff_employees";
 export * from "./sales";
 export * from "./vouchers";
 export * from "./cash_ledger";
+export * from "./notification_reads";
