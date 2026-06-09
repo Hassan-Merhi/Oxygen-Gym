@@ -49,9 +49,9 @@ import {
   Trash2,
   Dumbbell,
   Clock,
-  DollarSign,
-  Users,
   RotateCcw,
+  Search,
+  Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -68,14 +68,34 @@ type PlanFormValues = z.infer<typeof planSchema>;
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function fmtPrice(price: number, currency: string) {
   if (currency === "CDF") return `FC ${price.toLocaleString()}`;
-  return `$${price.toFixed(2)}`;
+  return price % 1 === 0 ? `$${price}` : `$${price.toFixed(2)}`;
 }
-function fmtDuration(days: number) {
-  if (days % 365 === 0) return `${days / 365} yr${days / 365 > 1 ? "s" : ""}`;
-  if (days % 30 === 0) return `${days / 30} mo`;
-  if (days % 7 === 0) return `${days / 7} wk${days / 7 > 1 ? "s" : ""}`;
-  return `${days} days`;
+
+function fmtDuration(days: number): { label: string; sub: string } {
+  if (days % 365 === 0) {
+    const n = days / 365;
+    return { label: `${n}`, sub: `year${n > 1 ? "s" : ""}` };
+  }
+  if (days % 30 === 0) {
+    const n = days / 30;
+    return { label: `${n}`, sub: `month${n > 1 ? "s" : ""}` };
+  }
+  if (days % 7 === 0) {
+    const n = days / 7;
+    return { label: `${n}`, sub: `week${n > 1 ? "s" : ""}` };
+  }
+  return { label: `${days}`, sub: "days" };
 }
+
+// cycle through a set of accent colors so cards aren't all the same
+const CARD_ACCENTS = [
+  "from-violet-500 to-purple-600",
+  "from-blue-500 to-cyan-600",
+  "from-emerald-500 to-teal-600",
+  "from-orange-500 to-amber-600",
+  "from-rose-500 to-pink-600",
+  "from-indigo-500 to-blue-600",
+];
 
 // ── Plan Form Modal ────────────────────────────────────────────────────────────
 function PlanModal({
@@ -139,42 +159,42 @@ function PlanModal({
           <DialogTitle>{plan ? t("plans.editPlan") : t("plans.addPlan")}</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4 py-2">
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <Label htmlFor="name">{t("plans.form.name")} *</Label>
             <Input id="name" {...register("name")} placeholder={t("plans.form.namePlaceholder")} />
             {errors.name && <p className="text-xs text-red-500">{errors.name.message}</p>}
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <Label htmlFor="description">{t("plans.form.description")}</Label>
             <Textarea id="description" {...register("description")} rows={2} placeholder={t("plans.form.descriptionPlaceholder")} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="durationDays">{t("plans.form.duration")} *</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="durationDays">{t("plans.form.duration")} (days) *</Label>
               <Input id="durationDays" type="number" min={1} {...register("durationDays")} placeholder="30" />
               {errors.durationDays && <p className="text-xs text-red-500">{errors.durationDays.message}</p>}
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label>{t("plans.form.currency")}</Label>
               <Select value={currency} onValueChange={(v) => setValue("currency", v as "USD" | "CDF")}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="USD">USD ($)</SelectItem>
-                  <SelectItem value="CDF">CDF (FC)</SelectItem>
+                  <SelectItem value="USD">$ USD</SelectItem>
+                  <SelectItem value="CDF">FC CDF</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <Label htmlFor="price">{t("plans.form.price")} *</Label>
             <div className="relative">
-              <span className="absolute left-3 top-2.5 text-muted-foreground text-sm">
+              <span className="absolute left-3 top-2.5 text-muted-foreground text-sm font-medium">
                 {currency === "CDF" ? "FC" : "$"}
               </span>
-              <Input id="price" type="number" step="0.01" min="0" className="pl-8" {...register("price")} placeholder="0.00" />
+              <Input id="price" type="number" step="0.01" min="0" className="pl-9" {...register("price")} placeholder="0" />
             </div>
             {errors.price && <p className="text-xs text-red-500">{errors.price.message}</p>}
           </div>
@@ -191,11 +211,12 @@ function PlanModal({
   );
 }
 
-// ── Plan Card ─────────────────────────────────────────────────────────────────
+// ── Plan Card ──────────────────────────────────────────────────────────────────
 function PlanCard({
-  plan, t, onEdit, onArchive, onDelete, onRestore, canManage,
+  plan, accentIdx, t, onEdit, onArchive, onDelete, onRestore, canManage,
 }: {
   plan: Plan;
+  accentIdx: number;
   t: (k: string) => string;
   onEdit: () => void;
   onArchive: () => void;
@@ -204,74 +225,98 @@ function PlanCard({
   canManage: boolean;
 }) {
   const isArchived = plan.status === "archived";
+  const accent = CARD_ACCENTS[accentIdx % CARD_ACCENTS.length];
+  const dur = fmtDuration(plan.durationDays);
 
   return (
-    <div className={cn(
-      "rounded-xl border p-5 flex flex-col gap-3 shadow-sm transition-colors",
-      isArchived ? "bg-muted/30 border-border/40 opacity-60" : "bg-card border-border/60 hover:border-primary/30"
-    )}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className={cn(
-            "w-9 h-9 rounded-lg flex items-center justify-center shrink-0",
-            isArchived ? "bg-muted" : "bg-primary/10"
-          )}>
-            <Dumbbell className={cn("w-4 h-4", isArchived ? "text-muted-foreground" : "text-primary")} />
-          </div>
-          <div className="min-w-0">
-            <h3 className="font-semibold text-sm truncate">{plan.name}</h3>
-            <p className="text-xs text-muted-foreground font-mono">{plan.planNumber}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {isArchived && (
-            <Badge variant="outline" className="text-xs border-amber-300 text-amber-600">{t("plans.archived")}</Badge>
-          )}
-          {canManage && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7">
-                  <MoreHorizontal className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {!isArchived && (
-                  <DropdownMenuItem onClick={onEdit}>
-                    <Edit className="w-3.5 h-3.5 mr-2" />{t("common.edit")}
-                  </DropdownMenuItem>
-                )}
-                {isArchived ? (
-                  <DropdownMenuItem onClick={onRestore}>
-                    <RotateCcw className="w-3.5 h-3.5 mr-2" />{t("plans.restore")}
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem onClick={onArchive}>
-                    <Archive className="w-3.5 h-3.5 mr-2" />{t("plans.archive")}
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onDelete} className="text-red-600 focus:text-red-600">
-                  <Trash2 className="w-3.5 h-3.5 mr-2" />{t("common.delete")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-      </div>
-
-      {plan.description && (
-        <p className="text-xs text-muted-foreground line-clamp-2">{plan.description}</p>
+    <div
+      className={cn(
+        "group rounded-2xl border overflow-hidden flex flex-col transition-all duration-200",
+        isArchived
+          ? "bg-muted/20 border-border/30 opacity-60"
+          : "bg-card border-border/50 hover:border-border hover:shadow-md hover:-translate-y-0.5",
       )}
+    >
+      {/* Accent top bar with duration badge */}
+      <div className={cn("h-1.5 w-full bg-gradient-to-r", isArchived ? "bg-muted" : accent)} />
 
-      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/40">
-        <div className="flex items-center gap-1.5 text-xs">
-          <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-          <span className="font-medium">{fmtDuration(plan.durationDays)}</span>
-          <span className="text-muted-foreground">({plan.durationDays}d)</span>
+      {/* Card body */}
+      <div className="p-5 flex flex-col flex-1 gap-4">
+        {/* Name row */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className={cn(
+                "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
+                isArchived ? "bg-muted" : `bg-gradient-to-br ${accent} shadow-sm`,
+              )}
+            >
+              <Dumbbell className="w-4 h-4 text-white" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-semibold text-sm leading-tight truncate">{plan.name}</h3>
+              <p className="text-xs text-muted-foreground font-mono mt-0.5">{plan.planNumber}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {isArchived && (
+              <Badge variant="outline" className="text-xs border-amber-300 text-amber-600 bg-amber-50">
+                Archived
+              </Badge>
+            )}
+            {canManage && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {!isArchived && (
+                    <DropdownMenuItem onClick={onEdit}>
+                      <Edit className="w-3.5 h-3.5 mr-2" />{t("common.edit")}
+                    </DropdownMenuItem>
+                  )}
+                  {isArchived ? (
+                    <DropdownMenuItem onClick={onRestore}>
+                      <RotateCcw className="w-3.5 h-3.5 mr-2" />{t("plans.restore")}
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem onClick={onArchive}>
+                      <Archive className="w-3.5 h-3.5 mr-2" />{t("plans.archive")}
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={onDelete} className="text-red-600 focus:text-red-600">
+                    <Trash2 className="w-3.5 h-3.5 mr-2" />{t("common.delete")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-1.5 text-xs justify-end">
-          <DollarSign className="w-3.5 h-3.5 text-muted-foreground" />
-          <span className="font-bold text-base text-foreground">{fmtPrice(plan.price, plan.currency)}</span>
+
+        {/* Description */}
+        {plan.description && (
+          <p className="text-xs text-muted-foreground line-clamp-2 -mt-1">{plan.description}</p>
+        )}
+
+        {/* Price + Duration — the hero section */}
+        <div className="mt-auto pt-3 border-t border-border/40 flex items-end justify-between">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Clock className="w-3.5 h-3.5" />
+            <span className="text-sm font-semibold text-foreground">{dur.label}</span>
+            <span className="text-xs">{dur.sub}</span>
+            <span className="text-xs text-muted-foreground/60">({plan.durationDays}d)</span>
+          </div>
+          <span className="text-xl font-bold tracking-tight text-foreground">
+            {fmtPrice(plan.price, plan.currency)}
+          </span>
         </div>
       </div>
     </div>
@@ -289,6 +334,7 @@ export default function PlansPage() {
   const [showModal, setShowModal] = useState(false);
   const [editPlan, setEditPlan] = useState<Plan | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [search, setSearch] = useState("");
 
   const { data: plans = [], isLoading } = useListPlans();
   const updatePlan = useUpdatePlan();
@@ -296,16 +342,21 @@ export default function PlansPage() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListPlansQueryKey() });
 
-  const filtered = plans.filter(p =>
-    showArchived ? p.status === "archived" : p.status !== "archived"
-  );
+  const activeCount = plans.filter((p) => p.status !== "archived").length;
+  const archivedCount = plans.filter((p) => p.status === "archived").length;
 
-  const activeCount = plans.filter(p => p.status !== "archived").length;
-  const archivedCount = plans.filter(p => p.status === "archived").length;
+  const filtered = plans.filter((p) => {
+    const matchesTab = showArchived ? p.status === "archived" : p.status !== "archived";
+    const matchesSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
+    return matchesTab && matchesSearch;
+  });
 
   const handleArchive = async (plan: Plan) => {
     try {
-      await updatePlan.mutateAsync({ id: plan.id, data: { name: plan.name, description: plan.description, durationDays: plan.durationDays, price: plan.price, currency: plan.currency as "USD" | "CDF", status: "archived" } });
+      await updatePlan.mutateAsync({
+        id: plan.id,
+        data: { name: plan.name, description: plan.description, durationDays: plan.durationDays, price: plan.price, currency: plan.currency as "USD" | "CDF", status: "archived" },
+      });
       toast({ title: t("plans.archived") });
       invalidate();
     } catch {
@@ -315,7 +366,10 @@ export default function PlansPage() {
 
   const handleRestore = async (plan: Plan) => {
     try {
-      await updatePlan.mutateAsync({ id: plan.id, data: { name: plan.name, description: plan.description, durationDays: plan.durationDays, price: plan.price, currency: plan.currency as "USD" | "CDF", status: "active" } });
+      await updatePlan.mutateAsync({
+        id: plan.id,
+        data: { name: plan.name, description: plan.description, durationDays: plan.durationDays, price: plan.price, currency: plan.currency as "USD" | "CDF", status: "active" },
+      });
       toast({ title: t("plans.restored") });
       invalidate();
     } catch {
@@ -335,79 +389,116 @@ export default function PlansPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <Dumbbell className="w-8 h-8 text-primary" />
-            {t("nav.plans")}
-          </h1>
-          <p className="text-muted-foreground mt-1">{t("plans.subtitle")}</p>
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">Plans</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("plans.subtitle")}</p>
         </div>
         {canManage && (
-          <Button onClick={() => { setEditPlan(null); setShowModal(true); }}>
-            <Plus className="w-4 h-4 mr-2" />
+          <Button
+            onClick={() => { setEditPlan(null); setShowModal(true); }}
+            className="shrink-0"
+          >
+            <Plus className="w-4 h-4 mr-1.5" />
             {t("plans.addPlan")}
           </Button>
         )}
       </div>
 
-      {/* Stats row */}
-      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-        <button
-          onClick={() => setShowArchived(false)}
-          className={cn(
-            "flex items-center gap-1.5 pb-1 border-b-2 transition-colors font-medium",
-            !showArchived ? "border-primary text-foreground" : "border-transparent hover:border-border"
-          )}
-        >
-          <Users className="w-4 h-4" />
-          {t("plans.active")} ({activeCount})
-        </button>
-        <button
-          onClick={() => setShowArchived(true)}
-          className={cn(
-            "flex items-center gap-1.5 pb-1 border-b-2 transition-colors font-medium",
-            showArchived ? "border-primary text-foreground" : "border-transparent hover:border-border"
-          )}
-        >
-          <Archive className="w-4 h-4" />
-          {t("plans.archivedTab")} ({archivedCount})
-        </button>
+      {/* Controls row */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* Tab pills */}
+        <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">
+          <button
+            onClick={() => setShowArchived(false)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+              !showArchived
+                ? "bg-white text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            Active
+            <span className={cn(
+              "text-xs px-1.5 py-0.5 rounded-full font-semibold",
+              !showArchived ? "bg-primary/10 text-primary" : "bg-muted-foreground/20 text-muted-foreground",
+            )}>
+              {activeCount}
+            </span>
+          </button>
+          <button
+            onClick={() => setShowArchived(true)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+              showArchived
+                ? "bg-white text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Archive className="w-3.5 h-3.5" />
+            Archived
+            <span className={cn(
+              "text-xs px-1.5 py-0.5 rounded-full font-semibold",
+              showArchived ? "bg-amber-100 text-amber-700" : "bg-muted-foreground/20 text-muted-foreground",
+            )}>
+              {archivedCount}
+            </span>
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Search plans…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        <p className="text-sm text-muted-foreground ml-auto">
+          {filtered.length} plan{filtered.length !== 1 ? "s" : ""}
+        </p>
       </div>
 
-      {/* Plan grid */}
+      {/* Grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-40 rounded-xl" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-44 rounded-2xl" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-4 rounded-xl border border-dashed border-border/60">
-          <Dumbbell className="w-12 h-12 text-muted-foreground/30" />
-          <div className="text-center">
-            <p className="font-medium text-muted-foreground">
-              {showArchived ? t("plans.noArchived") : t("plans.noPlans")}
-            </p>
-            {!showArchived && canManage && (
-              <p className="text-sm text-muted-foreground mt-1">{t("plans.noPlansHint")}</p>
-            )}
+        <div className="flex flex-col items-center justify-center py-24 gap-4 rounded-2xl border border-dashed border-border/60 bg-muted/10">
+          <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
+            <Dumbbell className="w-7 h-7 text-muted-foreground/40" />
           </div>
-          {!showArchived && canManage && (
+          <div className="text-center">
+            <p className="font-semibold text-foreground">
+              {search ? "No plans match your search" : showArchived ? t("plans.noArchived") : t("plans.noPlans")}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {search ? "Try a different name" : !showArchived && canManage ? t("plans.noPlansHint") : ""}
+            </p>
+          </div>
+          {!search && !showArchived && canManage && (
             <Button onClick={() => { setEditPlan(null); setShowModal(true); }}>
-              <Plus className="w-4 h-4 mr-2" />
+              <Plus className="w-4 h-4 mr-1.5" />
               {t("plans.addPlan")}
             </Button>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(plan => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filtered.map((plan, i) => (
             <PlanCard
               key={plan.id}
               plan={plan}
+              accentIdx={i}
               t={t}
               canManage={!!canManage}
               onEdit={() => { setEditPlan(plan); setShowModal(true); }}
@@ -419,7 +510,6 @@ export default function PlansPage() {
         </div>
       )}
 
-      {/* Modal */}
       <PlanModal
         open={showModal}
         onClose={() => { setShowModal(false); setEditPlan(null); }}
