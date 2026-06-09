@@ -91,23 +91,30 @@ interface SaleItemData {
   currency: string;
 }
 
+// ─── Receipt helpers ───────────────────────────────────────────────────────────
+function fmtMoney(n: number | null | undefined, sym: string): string {
+  const v = n ?? 0;
+  const s = v % 1 === 0 ? `${v}` : v.toFixed(2);
+  return sym === "FC" ? `FC ${s}` : `${sym}${s}`;
+}
+
 // ─── Receipt Print ─────────────────────────────────────────────────────────────
 function printReceipt(sale: Record<string, unknown>, settings: Record<string, unknown>, t: (key: string) => string) {
   const items = (sale.items ?? []) as SaleItemData[];
   const currency = sale.currency as string;
-  const sym = currency === "USD" ? "$" : currency;
-  const fmt = (n: number | null | undefined) => `${sym} ${(n ?? 0).toFixed(2)}`;
+  const sym = currency === "CDF" ? "FC" : "$";
+  const fmt = (n: number | null | undefined) => fmtMoney(n, sym);
   const saleNum = (sale.saleNumber as string) ?? `SALE-${sale.id}`;
 
   const rows = items.map((item: SaleItemData) => {
     const lineTotal = item.lineTotal ?? ((item.unitPrice - (item.discount ?? 0)) * item.quantity);
     return `
     <tr>
-      <td style="padding:4px 8px">${item.productName}</td>
-      <td style="padding:4px 8px;text-align:center">${item.quantity}</td>
-      <td style="padding:4px 8px;text-align:right">${fmt(item.unitPrice)}</td>
-      ${item.discount > 0 ? `<td style="padding:4px 8px;text-align:right">-${fmt(item.discount * item.quantity)}</td>` : `<td style="padding:4px 8px;text-align:right">—</td>`}
-      <td style="padding:4px 8px;text-align:right;font-weight:bold">${fmt(lineTotal)}</td>
+      <td style="padding:6px 0">${item.productName}</td>
+      <td style="padding:6px 8px;text-align:center;color:#666">${item.quantity}</td>
+      <td style="padding:6px 0;text-align:right;color:#666">${fmt(item.unitPrice)}</td>
+      <td style="padding:6px 0;text-align:right;color:#e53e3e">${item.discount > 0 ? `-${fmt(item.discount * item.quantity)}` : ""}</td>
+      <td style="padding:6px 0;text-align:right;font-weight:600">${fmt(lineTotal)}</td>
     </tr>
   `;
   }).join("");
@@ -117,64 +124,71 @@ function printReceipt(sale: Record<string, unknown>, settings: Record<string, un
     <html>
     <head>
       <meta charset="utf-8">
-      <title>Receipt</title>
+      <title>Receipt — ${saleNum}</title>
       <style>
-        body { font-family: 'Courier New', monospace; max-width: 300px; margin: 0 auto; padding: 16px; font-size: 12px; }
-        h1 { font-size: 18px; margin: 0; }
-        h2 { font-size: 14px; margin: 0; color: #555; }
-        .divider { border-top: 1px dashed #999; margin: 8px 0; }
-        table { width: 100%; border-collapse: collapse; }
-        th { font-weight: bold; border-bottom: 1px solid #000; }
-        .total-row td { font-weight: bold; font-size: 14px; border-top: 2px solid #000; }
-        .footer { margin-top: 16px; text-align: center; font-size: 11px; color: #555; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 340px; margin: 0 auto; padding: 24px 20px; font-size: 13px; color: #111; background: #fff; }
+        .gym-name { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+        .gym-sub { font-size: 12px; color: #666; margin-top: 2px; }
+        .divider { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
+        .divider-dashed { border: none; border-top: 1px dashed #d1d5db; margin: 14px 0; }
+        .meta-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+        .meta-label { color: #6b7280; }
+        .meta-val { font-weight: 500; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #9ca3af; font-weight: 600; padding: 0 0 8px; border-bottom: 1px solid #e5e7eb; }
+        thead th:last-child { text-align: right; }
+        thead th:nth-child(2) { text-align: center; }
+        thead th:nth-child(3), thead th:nth-child(4) { text-align: right; }
+        tbody tr { border-bottom: 1px solid #f3f4f6; }
+        .summary { margin-top: 14px; }
+        .summary-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; }
+        .summary-row.total { font-size: 16px; font-weight: 700; padding: 8px 0; border-top: 2px solid #111; margin-top: 4px; }
+        .summary-row .label { color: #6b7280; }
+        .summary-row.total .label { color: #111; }
+        .badge { display: inline-block; background: #f3f4f6; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 600; color: #374151; }
+        .footer { margin-top: 24px; text-align: center; font-size: 12px; color: #9ca3af; }
+        @media print { body { padding: 12px; } }
       </style>
     </head>
     <body>
-      <div style="text-align:center">
-        <img src="${window.location.origin}/gym-logo.jpg" style="max-height:80px;margin-bottom:8px;object-fit:contain" alt="logo"/>
-        <h1>${settings.gymName ?? "Oxygen Fitness Gym"}</h1>
-        ${settings.address ? `<div>${settings.address}</div>` : ""}
-        ${settings.phone ? `<div>${settings.phone}</div>` : ""}
-        ${settings.receiptHeader ? `<div style="margin-top:6px;font-style:italic">${settings.receiptHeader}</div>` : ""}
+      <div style="text-align:center;margin-bottom:16px">
+        <img src="${window.location.origin}/gym-logo.jpg" onerror="this.style.display='none'" style="max-height:60px;margin-bottom:10px;object-fit:contain" alt=""/>
+        <div class="gym-name">${settings.gymName ?? "Oxygen Fitness Gym"}</div>
+        ${settings.address ? `<div class="gym-sub">${settings.address}</div>` : ""}
+        ${settings.phone ? `<div class="gym-sub">${settings.phone}</div>` : ""}
+        ${settings.receiptHeader ? `<div style="margin-top:6px;font-size:12px;color:#666;font-style:italic">${settings.receiptHeader}</div>` : ""}
       </div>
-      <div class="divider"></div>
-      <div><strong>${t("sales.history.number")}:</strong> ${saleNum}</div>
-      <div><strong>Date:</strong> ${new Date(sale.saleDate as string).toLocaleString()}</div>
-      <div><strong>${t("sales.receipt.cashier")}:</strong> ${sale.createdBy ?? "—"}</div>
-      <div class="divider"></div>
+      <hr class="divider">
+      <div class="meta-row"><span class="meta-label">${t("sales.history.number")}</span><span class="meta-val badge">${saleNum}</span></div>
+      <div class="meta-row"><span class="meta-label">Date</span><span class="meta-val">${new Date(sale.saleDate as string).toLocaleString()}</span></div>
+      <div class="meta-row"><span class="meta-label">${t("sales.receipt.cashier")}</span><span class="meta-val">${sale.createdBy ?? "—"}</span></div>
+      <hr class="divider">
       <table>
         <thead>
           <tr>
-            <th style="text-align:left;padding:4px 8px">${t("sales.col.product")}</th>
-            <th style="text-align:center;padding:4px 8px">${t("sales.col.qty")}</th>
-            <th style="text-align:right;padding:4px 8px">${t("sales.col.price")}</th>
-            <th style="text-align:right;padding:4px 8px">${t("sales.col.discount")}</th>
-            <th style="text-align:right;padding:4px 8px">${t("sales.col.total")}</th>
+            <th style="text-align:left">${t("sales.col.product")}</th>
+            <th>${t("sales.col.qty")}</th>
+            <th>${t("sales.col.price")}</th>
+            <th>${t("sales.col.discount")}</th>
+            <th>${t("sales.col.total")}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
-        <tfoot>
-          ${(sale.totalDiscount as number) > 0 ? `
-            <tr><td colspan="4" style="text-align:right;padding:4px 8px">${t("sales.receipt.discount")}:</td>
-            <td style="text-align:right;padding:4px 8px">-${fmt(sale.totalDiscount as number)}</td></tr>
-          ` : ""}
-          <tr class="total-row">
-            <td colspan="4" style="text-align:right;padding:6px 8px">${t("sales.receipt.total")}:</td>
-            <td style="text-align:right;padding:6px 8px">${fmt(sale.totalAmount as number)}</td>
-          </tr>
-          <tr><td colspan="4" style="text-align:right;padding:4px 8px">${t("sales.receipt.paid")}:</td>
-            <td style="text-align:right;padding:4px 8px">${fmt(sale.paymentAmount as number)}</td></tr>
-          <tr><td colspan="4" style="text-align:right;padding:4px 8px">${t("sales.receipt.change")}:</td>
-            <td style="text-align:right;padding:4px 8px">${fmt(sale.changeDue as number)}</td></tr>
-        </tfoot>
       </table>
-      <div class="divider"></div>
-      ${settings.receiptFooter ? `<div class="footer">${settings.receiptFooter}</div>` : `<div class="footer">Thank you!</div>`}
+      <div class="summary">
+        ${(sale.totalDiscount as number) > 0 ? `<div class="summary-row"><span class="label">${t("sales.receipt.discount")}</span><span style="color:#e53e3e">-${fmt(sale.totalDiscount as number)}</span></div>` : ""}
+        <div class="summary-row total"><span class="label">${t("sales.receipt.total")}</span><span>${fmt(sale.totalAmount as number)}</span></div>
+        <div class="summary-row"><span class="label">${t("sales.receipt.paid")}</span><span>${fmt(sale.paymentAmount as number)}</span></div>
+        <div class="summary-row"><span class="label">${t("sales.receipt.change")}</span><span style="font-weight:600;color:#059669">${fmt(sale.changeDue as number)}</span></div>
+      </div>
+      <hr class="divider-dashed" style="margin-top:20px">
+      <div class="footer">${settings.receiptFooter ?? "Thank you for your visit!"}</div>
     </body>
     </html>
   `;
 
-  const win = window.open("", "_blank", "width=350,height=600");
+  const win = window.open("", "_blank", "width=380,height=650");
   if (!win) return;
   win.document.write(html);
   win.document.close();
@@ -295,8 +309,8 @@ function SaleDetailDialog({
   const saleData = sale as unknown as Record<string, unknown>;
   const items = (saleData.items ?? []) as SaleItemData[];
   const currency = saleData.currency as string;
-  const sym = currency === "USD" ? "$" : currency;
-  const fmt = (n: number | null | undefined) => `${sym} ${(n ?? 0).toFixed(2)}`;
+  const sym = currency === "CDF" ? "FC" : "$";
+  const fmt = (n: number | null | undefined) => fmtMoney(n, sym);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
