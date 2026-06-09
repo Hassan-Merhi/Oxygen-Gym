@@ -11,7 +11,6 @@ import {
   Package,
   TrendingUp,
   Settings,
-  ShieldCheck,
   BookOpen,
   BarChart3,
 } from "lucide-react";
@@ -28,7 +27,6 @@ const NAV_ITEMS = [
   { id: "financials", href: "/financials", icon: BarChart3, labelKey: "nav.financials" },
   { id: "stock", href: "/stock", icon: Package, labelKey: "nav.stock" },
   { id: "sales", href: "/sales", icon: TrendingUp, labelKey: "nav.sales" },
-  { id: "audit", href: "/audit", icon: ShieldCheck, labelKey: "nav.audit" },
   { id: "settings", href: "/settings", icon: Settings, labelKey: "nav.settings" },
 ];
 
