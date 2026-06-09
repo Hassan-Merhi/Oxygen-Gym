@@ -1,0 +1,150 @@
+PHASE 7 – STOCK / INVENTORY MODULE
+
+Build the full Stock page for gym products like water, creatine, protein, etc.
+
+Important:
+- Support USD and CDF.
+- Store exchange rate used for purchases.
+- Staff without View Cost cannot see cost price, profit, stock value, or purchase cost.
+- Staff without Manage Inventory cannot add/edit/archive products or stock purchases.
+- Selling products will be handled in the Sales phase, but inventory must be ready for it.
+
+1. Products Page
+
+Create /stock page with:
+- Product list
+- Search
+- Filter by category
+- Filter by status: Active, Archived, Deleted
+- Filter low stock only
+- Pagination
+
+Columns:
+- Product number: PRD-000001
+- Product name
+- Barcode
+- Category
+- Selling price
+- Currency
+- Quantity in stock
+- Low stock alert quantity
+- Status
+- Actions
+
+If user has View Cost, also show:
+- Cost price
+- Stock value
+- Expected profit per unit
+
+2. Add/Edit Product
+
+Fields:
+- Product name
+- Product number auto-generated
+- Barcode number
+- Category
+- Supplier
+- Cost price
+- Selling price
+- Currency
+- Quantity in stock
+- Low stock alert quantity
+- Notes
+- Status: Active, Archived, Deleted
+
+3. Stock Purchases
+
+Add stock purchase modal:
+- Product
+- Quantity added
+- Cost per unit
+- Total cost
+- Currency
+- Exchange rate used
+- Supplier
+- Date
+- Notes
+
+Rules:
+- Increase product quantity
+- Update average cost if needed
+- Create expense/payment record if marked as paid
+- Create cash ledger entry if paid from cash
+- Add activity log
+
+4. Inventory Value
+
+Create inventory summary:
+- Total products
+- Low stock count
+- Total quantity
+- Total stock value USD
+- Total stock value CDF
+
+Hide stock value from users without View Cost.
+
+5. Low Stock
+
+Highlight products where:
+quantity <= low stock alert quantity
+
+Add expandable low-stock table.
+
+6. Product History
+
+Each product should have a history view:
+- Stock purchases
+- Quantity changes
+- Future sales deductions placeholder
+- Edits
+- Archived/restored history
+
+7. Barcode
+
+Allow barcode number to be added now.
+Barcode scanning sales will be built in Phase 8.
+
+Prevent duplicate barcode numbers.
+
+8. Permissions
+
+Without page access:
+- Cannot open stock page
+
+Without Manage Inventory:
+- View only
+
+Without View Cost:
+- Hide:
+  - Cost price
+  - Total cost
+  - Stock value
+  - Profit per unit
+  - Purchase cost
+
+Without View Profit:
+- Hide expected profit
+
+9. Activity Logs
+
+Log:
+- Product created
+- Product edited
+- Product archived
+- Product restored
+- Stock purchase added
+- Barcode changed
+
+10. UI Requirements
+
+- Clean table
+- Summary cards
+- Add product modal
+- Add stock purchase modal
+- Product details drawer/page
+- Loading states
+- Empty states
+- Toast notifications
+- Full EN / FR / AR translations
+
+Stop after Phase 7 and wait for approval.

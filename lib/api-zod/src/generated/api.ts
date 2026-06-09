@@ -1291,6 +1291,223 @@ export const GetLedgerBalanceResponse = zod.object({
 
 
 /**
+ * @summary Inventory summary cards
+ */
+export const GetStockSummaryResponse = zod.object({
+  "totalProducts": zod.number(),
+  "activeProducts": zod.number(),
+  "lowStockCount": zod.number(),
+  "totalQuantity": zod.number(),
+  "totalValueUsd": zod.number(),
+  "totalValueCdf": zod.number()
+})
+
+
+/**
+ * @summary List products with filters and pagination
+ */
+export const ListProductsQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "category": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional(),
+  "lowStock": zod.coerce.string().optional(),
+  "page": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().optional()
+})
+
+export const ListProductsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "productNumber": zod.string().nullish(),
+  "name": zod.string(),
+  "barcode": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "supplier": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "quantity": zod.number(),
+  "alertQuantity": zod.number(),
+  "costPrice": zod.number(),
+  "sellingPrice": zod.number(),
+  "currency": zod.string(),
+  "status": zod.string(),
+  "stockValueUsd": zod.number(),
+  "stockValueCdf": zod.number(),
+  "profitPerUnit": zod.number(),
+  "isLowStock": zod.boolean(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Create a new product
+ */
+export const CreateProductBody = zod.object({
+  "name": zod.string(),
+  "barcode": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "supplier": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "quantity": zod.number(),
+  "alertQuantity": zod.number(),
+  "costPrice": zod.number(),
+  "sellingPrice": zod.number(),
+  "currency": zod.enum(['USD', 'CDF']),
+  "status": zod.string().optional()
+})
+
+
+/**
+ * @summary Get a single product
+ */
+export const GetProductParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetProductResponse = zod.object({
+  "id": zod.number(),
+  "productNumber": zod.string().nullish(),
+  "name": zod.string(),
+  "barcode": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "supplier": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "quantity": zod.number(),
+  "alertQuantity": zod.number(),
+  "costPrice": zod.number(),
+  "sellingPrice": zod.number(),
+  "currency": zod.string(),
+  "status": zod.string(),
+  "stockValueUsd": zod.number(),
+  "stockValueCdf": zod.number(),
+  "profitPerUnit": zod.number(),
+  "isLowStock": zod.boolean(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Update a product
+ */
+export const UpdateProductParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateProductBody = zod.object({
+  "name": zod.string().optional(),
+  "barcode": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "supplier": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "quantity": zod.number().optional(),
+  "alertQuantity": zod.number().optional(),
+  "costPrice": zod.number().optional(),
+  "sellingPrice": zod.number().optional(),
+  "currency": zod.enum(['USD', 'CDF']).optional(),
+  "status": zod.string().optional()
+})
+
+export const UpdateProductResponse = zod.object({
+  "id": zod.number(),
+  "productNumber": zod.string().nullish(),
+  "name": zod.string(),
+  "barcode": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "supplier": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "quantity": zod.number(),
+  "alertQuantity": zod.number(),
+  "costPrice": zod.number(),
+  "sellingPrice": zod.number(),
+  "currency": zod.string(),
+  "status": zod.string(),
+  "stockValueUsd": zod.number(),
+  "stockValueCdf": zod.number(),
+  "profitPerUnit": zod.number(),
+  "isLowStock": zod.boolean(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary List stock purchases for a product
+ */
+export const ListProductPurchasesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListProductPurchasesResponseItem = zod.object({
+  "id": zod.number(),
+  "purchaseNumber": zod.string().nullish(),
+  "productId": zod.number(),
+  "productName": zod.string().nullish(),
+  "quantityAdded": zod.number(),
+  "costPerUnit": zod.number(),
+  "totalCost": zod.number(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "totalCostUsd": zod.number().nullish(),
+  "totalCostCdf": zod.number().nullish(),
+  "supplier": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "paidFromCash": zod.number(),
+  "purchaseDate": zod.string(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListProductPurchasesResponse = zod.array(ListProductPurchasesResponseItem)
+
+
+/**
+ * @summary Add a stock purchase for a product
+ */
+export const AddStockPurchaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AddStockPurchaseBody = zod.object({
+  "quantityAdded": zod.number(),
+  "costPerUnit": zod.number(),
+  "totalCost": zod.number(),
+  "currency": zod.enum(['USD', 'CDF']),
+  "exchangeRate": zod.number(),
+  "supplier": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "paidFromCash": zod.boolean(),
+  "purchaseDate": zod.string().nullish()
+})
+
+
+/**
+ * @summary Get activity history for a product
+ */
+export const GetProductHistoryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetProductHistoryResponseItem = zod.object({
+  "id": zod.number(),
+  "action": zod.string(),
+  "entity": zod.string(),
+  "details": zod.unknown().optional(),
+  "userName": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const GetProductHistoryResponse = zod.array(GetProductHistoryResponseItem)
+
+
+/**
  * @summary Get account cards overview with balances and movements
  */
 export const GetAccountSummaryResponse = zod.object({

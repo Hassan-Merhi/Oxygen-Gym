@@ -30,6 +30,8 @@ tags:
     description: Cash vouchers
   - name: ledger
     description: Cash ledger
+  - name: stock
+    description: Stock and inventory management
   - name: accounts
     description: Accounts overview and accounting reports
 paths:
@@ -822,6 +824,170 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LedgerBalance"
+
+  /stock/summary:
+    get:
+      operationId: getStockSummary
+      tags: [stock]
+      summary: Inventory summary cards
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockSummary"
+
+  /stock:
+    get:
+      operationId: listProducts
+      tags: [stock]
+      summary: List products with filters and pagination
+      parameters:
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: lowStock
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Product list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductsPage"
+    post:
+      operationId: createProduct
+      tags: [stock]
+      summary: Create a new product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductBody"
+      responses:
+        "201":
+          description: Created product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductRecord"
+
+  /stock/{id}:
+    get:
+      operationId: getProduct
+      tags: [stock]
+      summary: Get a single product
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductRecord"
+    patch:
+      operationId: updateProduct
+      tags: [stock]
+      summary: Update a product
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductBody"
+      responses:
+        "200":
+          description: Updated product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductRecord"
+
+  /stock/{id}/purchases:
+    get:
+      operationId: listProductPurchases
+      tags: [stock]
+      summary: List stock purchases for a product
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Purchases list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockPurchaseRecord"
+    post:
+      operationId: addStockPurchase
+      tags: [stock]
+      summary: Add a stock purchase for a product
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddStockPurchaseBody"
+      responses:
+        "201":
+          description: Created purchase
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockPurchaseRecord"
+
+  /stock/{id}/history:
+    get:
+      operationId: getProductHistory
+      tags: [stock]
+      summary: Get activity history for a product
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: History entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductHistoryEntry"
 
   /accounts/summary:
     get:
@@ -1759,3 +1925,131 @@ components:
           additionalProperties:
             $ref: "#/components/schemas/AmountPair"
       required: [period, dateFrom, dateTo, revenue, expenses, net, breakdown]
+
+    ProductRecord:
+      type: object
+      properties:
+        id: { type: integer }
+        productNumber: { type: string, nullable: true }
+        name: { type: string }
+        barcode: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        category: { type: string, nullable: true }
+        supplier: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        quantity: { type: integer }
+        alertQuantity: { type: integer }
+        costPrice: { type: number }
+        sellingPrice: { type: number }
+        currency: { type: string }
+        status: { type: string }
+        stockValueUsd: { type: number }
+        stockValueCdf: { type: number }
+        profitPerUnit: { type: number }
+        isLowStock: { type: boolean }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+      required: [id, name, quantity, alertQuantity, costPrice, sellingPrice, currency, status, stockValueUsd, stockValueCdf, profitPerUnit, isLowStock, createdAt, updatedAt]
+
+    ProductsPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductRecord"
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+      required: [items, total, page, limit]
+
+    CreateProductBody:
+      type: object
+      properties:
+        name: { type: string }
+        barcode: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        category: { type: string, nullable: true }
+        supplier: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        quantity: { type: integer }
+        alertQuantity: { type: integer }
+        costPrice: { type: number }
+        sellingPrice: { type: number }
+        currency: { type: string, enum: [USD, CDF] }
+        status: { type: string }
+      required: [name, quantity, alertQuantity, costPrice, sellingPrice, currency]
+
+    UpdateProductBody:
+      type: object
+      properties:
+        name: { type: string }
+        barcode: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        category: { type: string, nullable: true }
+        supplier: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        quantity: { type: integer }
+        alertQuantity: { type: integer }
+        costPrice: { type: number }
+        sellingPrice: { type: number }
+        currency: { type: string, enum: [USD, CDF] }
+        status: { type: string }
+
+    StockPurchaseRecord:
+      type: object
+      properties:
+        id: { type: integer }
+        purchaseNumber: { type: string, nullable: true }
+        productId: { type: integer }
+        productName: { type: string, nullable: true }
+        quantityAdded: { type: integer }
+        costPerUnit: { type: number }
+        totalCost: { type: number }
+        currency: { type: string }
+        exchangeRate: { type: number }
+        totalCostUsd: { type: number, nullable: true }
+        totalCostCdf: { type: number, nullable: true }
+        supplier: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        paidFromCash: { type: integer }
+        purchaseDate: { type: string }
+        createdBy: { type: string, nullable: true }
+        createdAt: { type: string }
+      required: [id, productId, quantityAdded, costPerUnit, totalCost, currency, exchangeRate, paidFromCash, purchaseDate, createdAt]
+
+    AddStockPurchaseBody:
+      type: object
+      properties:
+        quantityAdded: { type: integer }
+        costPerUnit: { type: number }
+        totalCost: { type: number }
+        currency: { type: string, enum: [USD, CDF] }
+        exchangeRate: { type: number }
+        supplier: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        paidFromCash: { type: boolean }
+        purchaseDate: { type: string, nullable: true }
+      required: [quantityAdded, costPerUnit, totalCost, currency, exchangeRate, paidFromCash]
+
+    StockSummary:
+      type: object
+      properties:
+        totalProducts: { type: integer }
+        activeProducts: { type: integer }
+        lowStockCount: { type: integer }
+        totalQuantity: { type: integer }
+        totalValueUsd: { type: number }
+        totalValueCdf: { type: number }
+      required: [totalProducts, activeProducts, lowStockCount, totalQuantity, totalValueUsd, totalValueCdf]
+
+    ProductHistoryEntry:
+      type: object
+      properties:
+        id: { type: integer }
+        action: { type: string }
+        entity: { type: string }
+        details: {}
+        userName: { type: string, nullable: true }
+        createdAt: { type: string }
+      required: [id, action, entity, createdAt]

@@ -18,6 +18,7 @@ import MemberProfile from "@/pages/member-profile";
 import Payments from "@/pages/payments";
 import Vouchers from "@/pages/vouchers";
 import Accounts from "@/pages/accounts";
+import Stock from "@/pages/stock";
 import ComingSoon from "@/pages/coming-soon";
 import NotFound from "@/pages/not-found";
 import { AppLayout } from "@/components/layout/app-layout";
@@ -202,7 +203,7 @@ function ClerkProviderWithRoutes() {
             <Route path="/payments"><ProtectedRoute component={Payments} /></Route>
             <Route path="/vouchers"><ProtectedRoute component={Vouchers} /></Route>
             <Route path="/accounts"><ProtectedRoute component={Accounts} /></Route>
-            <Route path="/stock"><ProtectedRoute component={ComingSoon} /></Route>
+            <Route path="/stock"><ProtectedRoute component={Stock} /></Route>
             <Route path="/sales"><ProtectedRoute component={ComingSoon} /></Route>
 
             <Route path="*"><NotFound /></Route>

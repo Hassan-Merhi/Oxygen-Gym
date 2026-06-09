@@ -771,6 +771,140 @@ export interface ProfitLoss {
   breakdown: ProfitLossBreakdown;
 }
 
+export interface ProductRecord {
+  id: number;
+  productNumber?: string | null;
+  name: string;
+  barcode?: string | null;
+  description?: string | null;
+  category?: string | null;
+  supplier?: string | null;
+  notes?: string | null;
+  quantity: number;
+  alertQuantity: number;
+  costPrice: number;
+  sellingPrice: number;
+  currency: string;
+  status: string;
+  stockValueUsd: number;
+  stockValueCdf: number;
+  profitPerUnit: number;
+  isLowStock: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductsPage {
+  items: ProductRecord[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export type CreateProductBodyCurrency = typeof CreateProductBodyCurrency[keyof typeof CreateProductBodyCurrency];
+
+
+export const CreateProductBodyCurrency = {
+  USD: 'USD',
+  CDF: 'CDF',
+} as const;
+
+export interface CreateProductBody {
+  name: string;
+  barcode?: string | null;
+  description?: string | null;
+  category?: string | null;
+  supplier?: string | null;
+  notes?: string | null;
+  quantity: number;
+  alertQuantity: number;
+  costPrice: number;
+  sellingPrice: number;
+  currency: CreateProductBodyCurrency;
+  status?: string;
+}
+
+export type UpdateProductBodyCurrency = typeof UpdateProductBodyCurrency[keyof typeof UpdateProductBodyCurrency];
+
+
+export const UpdateProductBodyCurrency = {
+  USD: 'USD',
+  CDF: 'CDF',
+} as const;
+
+export interface UpdateProductBody {
+  name?: string;
+  barcode?: string | null;
+  description?: string | null;
+  category?: string | null;
+  supplier?: string | null;
+  notes?: string | null;
+  quantity?: number;
+  alertQuantity?: number;
+  costPrice?: number;
+  sellingPrice?: number;
+  currency?: UpdateProductBodyCurrency;
+  status?: string;
+}
+
+export interface StockPurchaseRecord {
+  id: number;
+  purchaseNumber?: string | null;
+  productId: number;
+  productName?: string | null;
+  quantityAdded: number;
+  costPerUnit: number;
+  totalCost: number;
+  currency: string;
+  exchangeRate: number;
+  totalCostUsd?: number | null;
+  totalCostCdf?: number | null;
+  supplier?: string | null;
+  notes?: string | null;
+  paidFromCash: number;
+  purchaseDate: string;
+  createdBy?: string | null;
+  createdAt: string;
+}
+
+export type AddStockPurchaseBodyCurrency = typeof AddStockPurchaseBodyCurrency[keyof typeof AddStockPurchaseBodyCurrency];
+
+
+export const AddStockPurchaseBodyCurrency = {
+  USD: 'USD',
+  CDF: 'CDF',
+} as const;
+
+export interface AddStockPurchaseBody {
+  quantityAdded: number;
+  costPerUnit: number;
+  totalCost: number;
+  currency: AddStockPurchaseBodyCurrency;
+  exchangeRate: number;
+  supplier?: string | null;
+  notes?: string | null;
+  paidFromCash: boolean;
+  purchaseDate?: string | null;
+}
+
+export interface StockSummary {
+  totalProducts: number;
+  activeProducts: number;
+  lowStockCount: number;
+  totalQuantity: number;
+  totalValueUsd: number;
+  totalValueCdf: number;
+}
+
+export interface ProductHistoryEntry {
+  id: number;
+  action: string;
+  entity: string;
+  details?: unknown;
+  userName?: string | null;
+  createdAt: string;
+}
+
 export type ListActivityLogsParams = {
 limit?: number;
 offset?: number;
@@ -814,6 +948,15 @@ limit?: number;
 dateFrom?: string;
 dateTo?: string;
 direction?: string;
+};
+
+export type ListProductsParams = {
+search?: string;
+category?: string;
+status?: string;
+lowStock?: string;
+page?: number;
+limit?: number;
 };
 
 export type ListSalesEntriesParams = {
