@@ -44,10 +44,8 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo + Brand */}
         <div className="flex flex-col items-center mb-8">
-          <div className="h-14 w-14 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg mb-4">
-            <Dumbbell className="h-7 w-7 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">GymPro</h1>
+          <img src="/gym-logo.jpg" alt="Oxygen Fitness Gym" className="h-16 w-16 rounded-2xl object-cover shadow-lg mb-4" />
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">OxygenGym</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{t("auth.tagline")}</p>
         </div>
 
@@ -122,7 +120,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-slate-400 mt-6">
-          GymPro &copy; {new Date().getFullYear()}
+          OxygenGym &copy; {new Date().getFullYear()}
         </p>
       </div>
     </div>

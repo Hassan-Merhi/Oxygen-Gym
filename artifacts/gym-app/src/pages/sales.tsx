@@ -117,7 +117,7 @@ function printReceipt(sale: Record<string, unknown>, settings: Record<string, un
     <html>
     <head>
       <meta charset="utf-8">
-      <title>Receipt ${saleNum}</title>
+      <title>Receipt</title>
       <style>
         body { font-family: 'Courier New', monospace; max-width: 300px; margin: 0 auto; padding: 16px; font-size: 12px; }
         h1 { font-size: 18px; margin: 0; }
@@ -131,8 +131,8 @@ function printReceipt(sale: Record<string, unknown>, settings: Record<string, un
     </head>
     <body>
       <div style="text-align:center">
-        ${settings.receiptLogoUrl ? `<img src="${settings.receiptLogoUrl}" style="max-height:60px;margin-bottom:8px" alt="logo"/>` : ""}
-        <h1>${settings.gymName ?? "GymPro"}</h1>
+        <img src="${window.location.origin}/gym-logo.jpg" style="max-height:80px;margin-bottom:8px;object-fit:contain" alt="logo"/>
+        <h1>${settings.gymName ?? "Oxygen Fitness Gym"}</h1>
         ${settings.address ? `<div>${settings.address}</div>` : ""}
         ${settings.phone ? `<div>${settings.phone}</div>` : ""}
         ${settings.receiptHeader ? `<div style="margin-top:6px;font-style:italic">${settings.receiptHeader}</div>` : ""}

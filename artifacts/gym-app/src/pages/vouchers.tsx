@@ -377,7 +377,7 @@ export default function Vouchers() {
       {printVoucher && (
         <div ref={printRef} className="hidden">
           <div className="header">
-            <div className="logo">{settings?.gymName ?? "GymPro"}</div>
+            <div className="logo">{settings?.gymName ?? "Oxygen Fitness Gym"}</div>
             {settings?.address && <div style={{ fontSize: 13, color: "#666" }}>{settings.address}</div>}
             {settings?.phone && <div style={{ fontSize: 13, color: "#666" }}>{settings.phone}</div>}
             <div className="title">{t(`vch.type.${printVoucher.voucherType}`)}</div>

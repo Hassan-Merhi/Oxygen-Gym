@@ -40,8 +40,8 @@ export function Sidebar() {
   return (
     <aside className="w-64 bg-sidebar border-r border-sidebar-border h-full flex flex-col fixed left-0 top-0 z-10">
       <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
-        <img src="/logo.svg" alt="GymPro" className="h-8 w-8 mr-3" />
-        <span className="font-bold text-lg text-sidebar-foreground tracking-tight">GYMPRO</span>
+        <img src="/gym-logo.jpg" alt="Oxygen Fitness Gym" className="h-8 w-8 mr-3 rounded object-cover" />
+        <span className="font-bold text-lg text-sidebar-foreground tracking-tight">OXYGEN GYM</span>
       </div>
 
       <div className="flex-1 overflow-y-auto py-4">
