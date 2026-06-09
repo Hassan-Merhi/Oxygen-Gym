@@ -204,9 +204,9 @@ export default function Stock() {
             <thead>
               <tr className="border-b border-border bg-muted/30">
                 <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("stock.col.name")}</th>
+                <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("stock.col.quantity")}</th>
                 <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("stock.col.sellingPrice")}</th>
                 {canViewCost && <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground hidden lg:table-cell">{t("stock.col.costPrice")}</th>}
-                <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("stock.col.quantity")}</th>
                 {canViewCost && <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground hidden xl:table-cell">{t("stock.col.stockValue")}</th>}
                 <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("stock.col.status")}</th>
                 <th className="px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground text-right">{t("stock.col.actions")}</th>
@@ -242,6 +242,11 @@ export default function Stock() {
                     {p.productNumber && <p className="text-xs text-muted-foreground/60 mt-0.5">{p.productNumber}</p>}
                   </td>
                   <td className="px-5 py-3.5 text-right">
+                    <span className={`font-bold tabular-nums text-base ${p.isLowStock && p.status === "active" ? "text-amber-600" : "text-foreground"}`}>
+                      {p.quantity}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5 text-right">
                     <span className="font-semibold tabular-nums">{fmtMoney(p.sellingPrice, p.currency)}</span>
                   </td>
                   {canViewCost && (
@@ -249,11 +254,6 @@ export default function Stock() {
                       <span className="text-muted-foreground tabular-nums">{fmtMoney(p.costPrice, p.currency)}</span>
                     </td>
                   )}
-                  <td className="px-5 py-3.5 text-right">
-                    <span className={`font-bold tabular-nums text-base ${p.isLowStock && p.status === "active" ? "text-amber-600" : "text-foreground"}`}>
-                      {p.quantity}
-                    </span>
-                  </td>
                   {canViewCost && (
                     <td className="px-5 py-3.5 text-right hidden xl:table-cell">
                       <span className="tabular-nums text-muted-foreground">${p.stockValueUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
