@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { sql } from "drizzle-orm";
-import { requireAuth } from "@clerk/express";
+import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
 
 const router = Router();

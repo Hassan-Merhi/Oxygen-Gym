@@ -9,8 +9,10 @@ import type { UserUpdateRole } from './userUpdateRole';
 import type { UserUpdateStatus } from './userUpdateStatus';
 
 export interface UserUpdate {
+  username?: string;
   name?: string;
-  email?: string;
+  /** @nullable */
+  email?: string | null;
   /** @nullable */
   phone?: string | null;
   role?: UserUpdateRole;

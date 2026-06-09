@@ -19,7 +19,7 @@ import {
   count,
   between,
 } from "drizzle-orm";
-import { requireAuth } from "@clerk/express";
+import { requireAuth } from "../middlewares/auth";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 

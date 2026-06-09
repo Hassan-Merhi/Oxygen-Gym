@@ -11,15 +11,17 @@ import type { UserStatus } from './userStatus';
 
 export interface User {
   id: number;
-  /** @nullable */
-  clerkUserId?: string | null;
+  username: string;
   name: string;
-  email: string;
+  /** @nullable */
+  email?: string | null;
   /** @nullable */
   phone?: string | null;
   role: UserRole;
   status: UserStatus;
   permissions: PagePermissions;
+  /** @nullable */
+  lastLoginAt?: Date | null;
   /** @nullable */
   deletedAt?: Date | null;
   createdAt: Date;

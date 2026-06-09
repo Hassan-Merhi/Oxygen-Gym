@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth } from "@clerk/express";
+import { requireAuth } from "../middlewares/auth";
 import multer from "multer";
 import path from "path";
 import fs from "fs";

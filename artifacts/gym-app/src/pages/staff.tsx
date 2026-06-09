@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useI18n } from "@/lib/i18n";
 import {
   useListUsers, useCreateUser, useUpdateUser, useDeleteUser, useUpdateUserPermissions, getListUsersQueryKey,
@@ -296,39 +296,72 @@ function LoginUsersTab() {
   const [selectedUser, setSelectedUser] = useState<any>(null);
 
   const formSchema = z.object({
+    username: z.string().min(2, "Username required").regex(/^[a-z0-9_.-]+$/, "Lowercase letters, numbers, _ . - only"),
     name: z.string().min(1, "Name is required"),
-    email: z.string().email("Invalid email"),
+    email: z.string().email("Invalid email").optional().or(z.literal("")),
     phone: z.string().optional(),
+    password: z.string().min(6, "Min 6 characters").optional().or(z.literal("")),
     role: z.enum(["admin", "manager", "staff"]),
     status: z.enum(["active", "inactive"]),
   });
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: { name: "", email: "", phone: "", role: "staff", status: "active" },
+    defaultValues: { username: "", name: "", email: "", phone: "", password: "", role: "staff", status: "active" },
   });
 
+  // Auto-fill username from name
+  const watchedName = form.watch("name");
+  useEffect(() => {
+    if (!form.getValues("username") || form.getValues("username") === prevUsernameRef.current) {
+      const generated = watchedName.toLowerCase().replace(/[^a-z0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
+      if (generated) {
+        form.setValue("username", generated);
+        prevUsernameRef.current = generated;
+      }
+    }
+  }, [watchedName]);
+  const prevUsernameRef = useRef("");
+
   const onAddSubmit = (data: z.infer<typeof formSchema>) => {
-    createUser.mutate({ data }, {
+    const payload: any = {
+      username: data.username,
+      name: data.name,
+      email: data.email || undefined,
+      phone: data.phone || undefined,
+      role: data.role,
+      status: data.status,
+      password: data.password || undefined,
+    };
+    createUser.mutate({ data: payload }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
         setIsAddOpen(false);
         form.reset();
+        prevUsernameRef.current = "";
         toast({ title: t("common.success") });
       },
-      onError: () => toast({ title: t("common.error"), variant: "destructive" })
+      onError: (err: any) => toast({ title: err?.data?.error ?? t("common.error"), variant: "destructive" })
     });
   };
 
   const onEditSubmit = (data: z.infer<typeof formSchema>) => {
     if (!selectedUser) return;
-    updateUser.mutate({ id: selectedUser.id, data }, {
+    const payload: any = {
+      username: data.username,
+      name: data.name,
+      email: data.email || undefined,
+      phone: data.phone || undefined,
+      role: data.role,
+      status: data.status,
+    };
+    updateUser.mutate({ id: selectedUser.id, data: payload }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() });
         setIsEditOpen(false);
         toast({ title: t("common.success") });
       },
-      onError: () => toast({ title: t("common.error"), variant: "destructive" })
+      onError: (err: any) => toast({ title: err?.data?.error ?? t("common.error"), variant: "destructive" })
     });
   };
 
@@ -363,7 +396,8 @@ function LoginUsersTab() {
 
   const openEdit = (user: any) => {
     setSelectedUser(user);
-    form.reset({ name: user.name, email: user.email, phone: user.phone || "", role: user.role, status: user.status });
+    prevUsernameRef.current = user.username ?? "";
+    form.reset({ username: user.username ?? "", name: user.name, email: user.email ?? "", phone: user.phone || "", password: "", role: user.role, status: user.status });
     setIsEditOpen(true);
   };
 
@@ -394,8 +428,14 @@ function LoginUsersTab() {
                 <FormField control={form.control} name="name" render={({ field }) => (
                   <FormItem><FormLabel>{t("staff.table.name")}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
+                <FormField control={form.control} name="username" render={({ field }) => (
+                  <FormItem><FormLabel>{t("auth.username")}</FormLabel><FormControl><Input {...field} placeholder="e.g. john_smith" /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={form.control} name="password" render={({ field }) => (
+                  <FormItem><FormLabel>{t("auth.password")} <span className="text-muted-foreground text-xs">({t("common.optional")})</span></FormLabel><FormControl><Input type="password" {...field} placeholder="••••••••" /></FormControl><FormMessage /></FormItem>
+                )} />
                 <FormField control={form.control} name="email" render={({ field }) => (
-                  <FormItem><FormLabel>{t("staff.table.email")}</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem><FormLabel>{t("staff.table.email")} <span className="text-muted-foreground text-xs">({t("common.optional")})</span></FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="phone" render={({ field }) => (
                   <FormItem><FormLabel>{t("staff.table.phone")}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
@@ -497,8 +537,11 @@ function LoginUsersTab() {
               <FormField control={form.control} name="name" render={({ field }) => (
                 <FormItem><FormLabel>{t("staff.table.name")}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
               )} />
+              <FormField control={form.control} name="username" render={({ field }) => (
+                <FormItem><FormLabel>{t("auth.username")}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
               <FormField control={form.control} name="email" render={({ field }) => (
-                <FormItem><FormLabel>{t("staff.table.email")}</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>{t("staff.table.email")} <span className="text-muted-foreground text-xs">({t("common.optional")})</span></FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="phone" render={({ field }) => (
                 <FormItem><FormLabel>{t("staff.table.phone")}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>

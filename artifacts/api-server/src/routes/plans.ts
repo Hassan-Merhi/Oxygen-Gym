@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { plansTable } from "@workspace/db/schema";
 import { eq, isNull } from "drizzle-orm";
-import { requireAuth } from "@clerk/express";
+import { requireAuth } from "../middlewares/auth";
 
 const router = Router();
 router.use(requireAuth());

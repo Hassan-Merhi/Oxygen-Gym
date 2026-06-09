@@ -3,7 +3,6 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
 export const pagePermissionsSchema = z.object({
-  // Page access
   dashboard: z.boolean().default(false),
   members: z.boolean().default(false),
   plans: z.boolean().default(false),
@@ -15,7 +14,6 @@ export const pagePermissionsSchema = z.object({
   stock: z.boolean().default(false),
   sales: z.boolean().default(false),
   settings: z.boolean().default(false),
-  // Feature-level permissions
   viewCost: z.boolean().default(false),
   viewProfit: z.boolean().default(false),
   viewAccounting: z.boolean().default(false),
@@ -58,12 +56,16 @@ export const defaultStaffPermissions: PagePermissions = {
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
-  clerkUserId: text("clerk_user_id").unique(),
+  username: text("username").notNull().unique(),
+  passwordHash: text("password_hash"),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  // Kept for display / backward compat
   name: text("name").notNull(),
-  email: text("email").notNull().unique(),
+  email: text("email").unique(),
   phone: text("phone"),
-  role: text("role").notNull().default("staff"), // 'admin' | 'manager' | 'staff'
-  status: text("status").notNull().default("active"), // 'active' | 'inactive'
+  clerkUserId: text("clerk_user_id").unique(),
+  role: text("role").notNull().default("staff"),
+  status: text("status").notNull().default("active"),
   permissions: jsonb("permissions").notNull().$type<PagePermissions>().default(defaultStaffPermissions),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

@@ -10,9 +10,13 @@ import type { PagePermissions } from './pagePermissions';
 
 export interface CurrentUser {
   id: number;
-  clerkUserId: string;
+  username: string;
   name: string;
-  email: string;
+  /** @nullable */
+  email?: string | null;
   role: CurrentUserRole;
+  status: string;
   permissions: PagePermissions;
+  /** @nullable */
+  lastLoginAt?: Date | null;
 }

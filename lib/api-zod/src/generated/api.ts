@@ -17,14 +17,31 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * @summary Get current authenticated user profile with role and permissions
+ * @summary Check if first-admin setup is needed
  */
-export const GetMeResponse = zod.object({
+export const GetSetupStatusResponse = zod.object({
+  "needsSetup": zod.boolean()
+})
+
+
+/**
+ * @summary Create the first admin user
+ */
+export const RunSetupBody = zod.object({
+  "username": zod.string(),
+  "password": zod.string(),
+  "fullName": zod.string()
+})
+
+export const RunSetupResponse = zod.object({
+  "token": zod.string(),
+  "user": zod.object({
   "id": zod.number(),
-  "clerkUserId": zod.string(),
+  "username": zod.string(),
   "name": zod.string(),
-  "email": zod.string(),
+  "email": zod.string().nullish(),
   "role": zod.enum(['admin', 'manager', 'staff']),
+  "status": zod.string(),
   "permissions": zod.object({
   "dashboard": zod.boolean(),
   "members": zod.boolean(),
@@ -46,7 +63,99 @@ export const GetMeResponse = zod.object({
   "manageInventory": zod.boolean(),
   "manageMembers": zod.boolean(),
   "managePlans": zod.boolean()
-}).describe('Per-page and per-feature permissions for a user')
+}).describe('Per-page and per-feature permissions for a user'),
+  "lastLoginAt": zod.coerce.date().nullish()
+})
+})
+
+
+/**
+ * @summary Log in with username and password
+ */
+export const LoginBody = zod.object({
+  "username": zod.string(),
+  "password": zod.string()
+})
+
+export const LoginResponse = zod.object({
+  "token": zod.string(),
+  "user": zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "name": zod.string(),
+  "email": zod.string().nullish(),
+  "role": zod.enum(['admin', 'manager', 'staff']),
+  "status": zod.string(),
+  "permissions": zod.object({
+  "dashboard": zod.boolean(),
+  "members": zod.boolean(),
+  "plans": zod.boolean(),
+  "staff": zod.boolean(),
+  "payroll": zod.boolean(),
+  "payments": zod.boolean(),
+  "vouchers": zod.boolean(),
+  "accounts": zod.boolean(),
+  "stock": zod.boolean(),
+  "sales": zod.boolean(),
+  "settings": zod.boolean(),
+  "viewCost": zod.boolean(),
+  "viewProfit": zod.boolean(),
+  "viewAccounting": zod.boolean(),
+  "manageStaff": zod.boolean(),
+  "manageSettings": zod.boolean(),
+  "managePayroll": zod.boolean(),
+  "manageInventory": zod.boolean(),
+  "manageMembers": zod.boolean(),
+  "managePlans": zod.boolean()
+}).describe('Per-page and per-feature permissions for a user'),
+  "lastLoginAt": zod.coerce.date().nullish()
+})
+})
+
+
+/**
+ * @summary Get current authenticated user profile with role and permissions
+ */
+export const GetMeResponse = zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "name": zod.string(),
+  "email": zod.string().nullish(),
+  "role": zod.enum(['admin', 'manager', 'staff']),
+  "status": zod.string(),
+  "permissions": zod.object({
+  "dashboard": zod.boolean(),
+  "members": zod.boolean(),
+  "plans": zod.boolean(),
+  "staff": zod.boolean(),
+  "payroll": zod.boolean(),
+  "payments": zod.boolean(),
+  "vouchers": zod.boolean(),
+  "accounts": zod.boolean(),
+  "stock": zod.boolean(),
+  "sales": zod.boolean(),
+  "settings": zod.boolean(),
+  "viewCost": zod.boolean(),
+  "viewProfit": zod.boolean(),
+  "viewAccounting": zod.boolean(),
+  "manageStaff": zod.boolean(),
+  "manageSettings": zod.boolean(),
+  "managePayroll": zod.boolean(),
+  "manageInventory": zod.boolean(),
+  "manageMembers": zod.boolean(),
+  "managePlans": zod.boolean()
+}).describe('Per-page and per-feature permissions for a user'),
+  "lastLoginAt": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary Change own password
+ */
+export const ChangePasswordBody = zod.object({
+  "currentPassword": zod.string(),
+  "newPassword": zod.string(),
+  "confirmPassword": zod.string()
 })
 
 
@@ -55,9 +164,9 @@ export const GetMeResponse = zod.object({
  */
 export const ListUsersResponseItem = zod.object({
   "id": zod.number(),
-  "clerkUserId": zod.string().nullish(),
+  "username": zod.string(),
   "name": zod.string(),
-  "email": zod.string(),
+  "email": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "role": zod.enum(['admin', 'manager', 'staff']),
   "status": zod.enum(['active', 'inactive']),
@@ -83,6 +192,7 @@ export const ListUsersResponseItem = zod.object({
   "manageMembers": zod.boolean(),
   "managePlans": zod.boolean()
 }).describe('Per-page and per-feature permissions for a user'),
+  "lastLoginAt": zod.coerce.date().nullish(),
   "deletedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
@@ -93,10 +203,12 @@ export const ListUsersResponse = zod.array(ListUsersResponseItem)
  * @summary Create a new staff user
  */
 export const CreateUserBody = zod.object({
+  "username": zod.string(),
   "name": zod.string(),
-  "email": zod.string(),
+  "email": zod.string().nullish(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'manager', 'staff']),
+  "password": zod.string().nullish(),
+  "role": zod.enum(['admin', 'manager', 'staff']).optional(),
   "status": zod.enum(['active', 'inactive']).optional(),
   "permissions": zod.object({
   "dashboard": zod.boolean(),
@@ -132,9 +244,9 @@ export const GetUserParams = zod.object({
 
 export const GetUserResponse = zod.object({
   "id": zod.number(),
-  "clerkUserId": zod.string().nullish(),
+  "username": zod.string(),
   "name": zod.string(),
-  "email": zod.string(),
+  "email": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "role": zod.enum(['admin', 'manager', 'staff']),
   "status": zod.enum(['active', 'inactive']),
@@ -160,6 +272,7 @@ export const GetUserResponse = zod.object({
   "manageMembers": zod.boolean(),
   "managePlans": zod.boolean()
 }).describe('Per-page and per-feature permissions for a user'),
+  "lastLoginAt": zod.coerce.date().nullish(),
   "deletedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
@@ -173,8 +286,9 @@ export const UpdateUserParams = zod.object({
 })
 
 export const UpdateUserBody = zod.object({
+  "username": zod.string().optional(),
   "name": zod.string().optional(),
-  "email": zod.string().optional(),
+  "email": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "role": zod.enum(['admin', 'manager', 'staff']).optional(),
   "status": zod.enum(['active', 'inactive']).optional()
@@ -182,9 +296,9 @@ export const UpdateUserBody = zod.object({
 
 export const UpdateUserResponse = zod.object({
   "id": zod.number(),
-  "clerkUserId": zod.string().nullish(),
+  "username": zod.string(),
   "name": zod.string(),
-  "email": zod.string(),
+  "email": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "role": zod.enum(['admin', 'manager', 'staff']),
   "status": zod.enum(['active', 'inactive']),
@@ -210,6 +324,7 @@ export const UpdateUserResponse = zod.object({
   "manageMembers": zod.boolean(),
   "managePlans": zod.boolean()
 }).describe('Per-page and per-feature permissions for a user'),
+  "lastLoginAt": zod.coerce.date().nullish(),
   "deletedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
@@ -257,9 +372,9 @@ export const UpdateUserPermissionsBody = zod.object({
 
 export const UpdateUserPermissionsResponse = zod.object({
   "id": zod.number(),
-  "clerkUserId": zod.string().nullish(),
+  "username": zod.string(),
   "name": zod.string(),
-  "email": zod.string(),
+  "email": zod.string().nullish(),
   "phone": zod.string().nullish(),
   "role": zod.enum(['admin', 'manager', 'staff']),
   "status": zod.enum(['active', 'inactive']),
@@ -285,6 +400,7 @@ export const UpdateUserPermissionsResponse = zod.object({
   "manageMembers": zod.boolean(),
   "managePlans": zod.boolean()
 }).describe('Per-page and per-feature permissions for a user'),
+  "lastLoginAt": zod.coerce.date().nullish(),
   "deletedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })

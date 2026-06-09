@@ -1,9 +1,8 @@
-@layer theme, base, clerk, components, utilities;
+@layer theme, base, components, utilities;
 
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
-@import "@clerk/themes/shadcn.css";
 
 @custom-variant dark (&:is(.dark *));
 

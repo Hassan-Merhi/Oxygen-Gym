@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from "express";
-import { requireAuth, getAuth } from "@clerk/express";
+import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
 import { membersTable, productsTable, payrollTable, notificationReadsTable } from "@workspace/db/schema";
-import { and, eq, lte, gte, inArray, sql } from "drizzle-orm";
+import { and, eq, lte, gte, sql } from "drizzle-orm";
 import { logActivity } from "../lib/activity";
 
 const router = Router();
@@ -32,13 +32,11 @@ function daysFromNow(d: Date | null | undefined): number | null {
   return Math.ceil((new Date(d).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
-async function computeNotifications(userClerkId: string, permissions: any): Promise<Notification[]> {
+async function computeNotifications(userId: number, permissions: any): Promise<Notification[]> {
   const now = new Date();
   const in30 = new Date(now); in30.setDate(in30.getDate() + 30);
 
-  // Fetch all data sources in parallel
   const [expiringMembers, lowStockProducts, outOfStockProducts, draftPayrolls, frozenMembers, inactiveMembers, readKeys] = await Promise.all([
-    // Members expiring within 30 days
     db.select({ id: membersTable.id, name: membersTable.name, planName: membersTable.planName, expiryDate: membersTable.expiryDate })
       .from(membersTable)
       .where(and(
@@ -47,42 +45,35 @@ async function computeNotifications(userClerkId: string, permissions: any): Prom
         lte(membersTable.expiryDate, in30),
       )),
 
-    // Low stock (quantity > 0 but below alert)
     db.execute(sql`
       SELECT id, name, quantity, alert_quantity AS "alertQuantity"
       FROM products
       WHERE status = 'active' AND quantity > 0 AND quantity <= alert_quantity
     `),
 
-    // Out of stock
     db.execute(sql`
       SELECT id, name, quantity FROM products WHERE status = 'active' AND quantity = 0
     `),
 
-    // Draft payrolls (pending payment)
     permissions?.managePayroll !== false
       ? db.select({ id: payrollTable.id, payrollNumber: payrollTable.payrollNumber, staffName: payrollTable.staffName, createdAt: payrollTable.createdAt })
           .from(payrollTable).where(eq(payrollTable.status, "draft"))
       : Promise.resolve([]),
 
-    // Frozen members
     db.select({ id: membersTable.id, name: membersTable.name, frozenUntil: membersTable.frozenUntil })
       .from(membersTable).where(eq(membersTable.status, "frozen")),
 
-    // Inactive members
     db.select({ id: membersTable.id, name: membersTable.name })
       .from(membersTable).where(eq(membersTable.status, "inactive")),
 
-    // Read keys for this user
     db.select({ notificationKey: notificationReadsTable.notificationKey })
       .from(notificationReadsTable)
-      .where(eq(notificationReadsTable.userClerkId, userClerkId)),
+      .where(eq(notificationReadsTable.userId, userId)),
   ]);
 
   const readSet = new Set(readKeys.map(r => r.notificationKey));
   const notifications: Notification[] = [];
 
-  // ── Expiring memberships ──────────────────────────────────────────────────
   for (const m of expiringMembers) {
     const days = daysFromNow(m.expiryDate);
     if (days === null) continue;
@@ -100,78 +91,57 @@ async function computeNotifications(userClerkId: string, permissions: any): Prom
     });
   }
 
-  // ── Low stock ─────────────────────────────────────────────────────────────
   if (permissions?.viewCost !== false || permissions?.manageInventory !== false) {
     for (const p of ((lowStockProducts.rows ?? lowStockProducts) as any[])) {
       const key = `stock_low_${p.id}`;
       notifications.push({
-        key,
-        type: "stock_low",
-        priority: "medium",
+        key, type: "stock_low", priority: "medium",
         message: `Low stock: ${p.name} (${p.quantity}/${p.alertQuantity} remaining)`,
-        date: now.toISOString(),
-        isRead: readSet.has(key),
+        date: now.toISOString(), isRead: readSet.has(key),
         metadata: { productId: p.id, quantity: p.quantity, alertQuantity: p.alertQuantity },
       });
     }
-
     for (const p of ((outOfStockProducts.rows ?? outOfStockProducts) as any[])) {
       const key = `stock_out_${p.id}`;
       notifications.push({
-        key,
-        type: "stock_out",
-        priority: "high",
+        key, type: "stock_out", priority: "high",
         message: `Out of stock: ${p.name}`,
-        date: now.toISOString(),
-        isRead: readSet.has(key),
+        date: now.toISOString(), isRead: readSet.has(key),
         metadata: { productId: p.id },
       });
     }
   }
 
-  // ── Payroll due ───────────────────────────────────────────────────────────
   for (const pr of draftPayrolls as any[]) {
     const key = `payroll_draft_${pr.id}`;
     notifications.push({
-      key,
-      type: "payroll_due",
-      priority: "medium",
+      key, type: "payroll_due", priority: "medium",
       message: `Payroll ${pr.payrollNumber ?? `#${pr.id}`} for ${pr.staffName} is pending payment`,
-      date: now.toISOString(),
-      isRead: readSet.has(key),
+      date: now.toISOString(), isRead: readSet.has(key),
       metadata: { payrollId: pr.id },
     });
   }
 
-  // ── Frozen members ────────────────────────────────────────────────────────
   for (const m of frozenMembers) {
     const key = `member_frozen_${m.id}`;
     notifications.push({
-      key,
-      type: "member_frozen",
-      priority: "low",
+      key, type: "member_frozen", priority: "low",
       message: `${m.name}'s membership is frozen${m.frozenUntil ? ` until ${new Date(m.frozenUntil).toLocaleDateString()}` : ""}`,
-      date: now.toISOString(),
-      isRead: readSet.has(key),
+      date: now.toISOString(), isRead: readSet.has(key),
       metadata: { memberId: m.id },
     });
   }
 
-  // ── Inactive members ──────────────────────────────────────────────────────
   for (const m of inactiveMembers) {
     const key = `member_inactive_${m.id}`;
     notifications.push({
-      key,
-      type: "member_inactive",
-      priority: "low",
+      key, type: "member_inactive", priority: "low",
       message: `${m.name} is an inactive member`,
-      date: now.toISOString(),
-      isRead: readSet.has(key),
+      date: now.toISOString(), isRead: readSet.has(key),
       metadata: { memberId: m.id },
     });
   }
 
-  // Sort: unread first, then by priority
   const priorityOrder = { high: 0, medium: 1, low: 2 };
   notifications.sort((a, b) => {
     if (a.isRead !== b.isRead) return a.isRead ? 1 : -1;
@@ -183,22 +153,13 @@ async function computeNotifications(userClerkId: string, permissions: any): Prom
 
 // ── List notifications ────────────────────────────────────────────────────────
 router.get("/", async (req: Request, res: Response) => {
-  const { userId } = getAuth(req);
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
-
+  const user = (req as any).__gymproUser;
   const typeFilter = (req.query as any).type as string | undefined;
   const readFilter = (req.query as any).read as string | undefined;
-
-  // Get user permissions from DB
-  const { usersTable } = await import("@workspace/db/schema");
-  const [user] = await db.select({ permissions: usersTable.permissions, role: usersTable.role })
-    .from(usersTable).where(eq(usersTable.clerkUserId, userId));
-
   const permissions = (user?.permissions ?? {}) as Record<string, boolean>;
   const isAdmin = user?.role === "admin";
 
-  let items = await computeNotifications(userId, isAdmin ? null : permissions);
-
+  let items = await computeNotifications(user.id, isAdmin ? null : permissions);
   if (typeFilter) items = items.filter(n => n.type === typeFilter);
   if (readFilter === "read") items = items.filter(n => n.isRead);
   if (readFilter === "unread") items = items.filter(n => !n.isRead);
@@ -208,28 +169,20 @@ router.get("/", async (req: Request, res: Response) => {
 
 // ── Unread count ──────────────────────────────────────────────────────────────
 router.get("/count", async (req: Request, res: Response) => {
-  const { userId } = getAuth(req);
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
-
-  const { usersTable } = await import("@workspace/db/schema");
-  const [user] = await db.select({ permissions: usersTable.permissions, role: usersTable.role })
-    .from(usersTable).where(eq(usersTable.clerkUserId, userId));
-
+  const user = (req as any).__gymproUser;
   const permissions = (user?.permissions ?? {}) as Record<string, boolean>;
   const isAdmin = user?.role === "admin";
-
-  const items = await computeNotifications(userId, isAdmin ? null : permissions);
+  const items = await computeNotifications(user.id, isAdmin ? null : permissions);
   res.json({ unread: items.filter(n => !n.isRead).length });
 });
 
 // ── Mark one as read ──────────────────────────────────────────────────────────
 router.patch("/:key/read", async (req: Request, res: Response) => {
-  const { userId } = getAuth(req);
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const user = (req as any).__gymproUser;
   const key = req.params.key as string;
 
   await db.insert(notificationReadsTable).values({
-    userClerkId: userId,
+    userId: user.id,
     notificationKey: key,
   }).onConflictDoNothing();
 
@@ -239,23 +192,17 @@ router.patch("/:key/read", async (req: Request, res: Response) => {
 
 // ── Mark all read ─────────────────────────────────────────────────────────────
 router.patch("/read-all", async (req: Request, res: Response) => {
-  const { userId } = getAuth(req);
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
-
-  const { usersTable } = await import("@workspace/db/schema");
-  const [user] = await db.select({ permissions: usersTable.permissions, role: usersTable.role })
-    .from(usersTable).where(eq(usersTable.clerkUserId, userId));
-
+  const user = (req as any).__gymproUser;
   const permissions = (user?.permissions ?? {}) as Record<string, boolean>;
   const isAdmin = user?.role === "admin";
 
-  const items = await computeNotifications(userId, isAdmin ? null : permissions);
-  const unread = items.filter(n => !n.isRead);
+  const allItems = await computeNotifications(user.id, isAdmin ? null : permissions);
+  const unread = allItems.filter(n => !n.isRead);
 
   if (unread.length > 0) {
-    await db.insert(notificationReadsTable).values(
-      unread.map(n => ({ userClerkId: userId, notificationKey: n.key }))
-    ).onConflictDoNothing();
+    await db.insert(notificationReadsTable)
+      .values(unread.map(n => ({ userId: user.id, notificationKey: n.key })))
+      .onConflictDoNothing();
   }
 
   await logActivity(req, "notifications_read_all", "notification", undefined, { count: unread.length });

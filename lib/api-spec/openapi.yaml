@@ -50,6 +50,78 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
+  /auth/setup:
+    get:
+      operationId: getSetupStatus
+      tags: [auth]
+      summary: Check if first-admin setup is needed
+      responses:
+        "200":
+          description: Setup status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  needsSetup: { type: boolean }
+                required: [needsSetup]
+    post:
+      operationId: runSetup
+      tags: [auth]
+      summary: Create the first admin user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: { type: string }
+                password: { type: string }
+                fullName: { type: string }
+              required: [username, password, fullName]
+      responses:
+        "200":
+          description: Token + user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Log in with username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: { type: string }
+                password: { type: string }
+              required: [username, password]
+      responses:
+        "200":
+          description: Token + user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Log out (invalidates client token)
+      responses:
+        "200":
+          description: Logged out
+
   /auth/me:
     get:
       operationId: getMe
@@ -64,6 +136,26 @@ paths:
                 $ref: "#/components/schemas/CurrentUser"
         "401":
           description: Not authenticated
+
+  /auth/change-password:
+    post:
+      operationId: changePassword
+      tags: [auth]
+      summary: Change own password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string }
+                confirmPassword: { type: string }
+              required: [currentPassword, newPassword, confirmPassword]
+      responses:
+        "200":
+          description: Password changed
 
   /users:
     get:
@@ -1797,14 +1889,22 @@ components:
         - manageMembers
         - managePlans
 
+    AuthResponse:
+      type: object
+      properties:
+        token: { type: string }
+        user:
+          $ref: "#/components/schemas/CurrentUser"
+      required: [token, user]
+
     User:
       type: object
       properties:
         id: { type: integer }
-        clerkUserId:
-          type: ["string", "null"]
+        username: { type: string }
         name: { type: string }
-        email: { type: string }
+        email:
+          type: ["string", "null"]
         phone:
           type: ["string", "null"]
         role:
@@ -1815,6 +1915,9 @@ components:
           enum: [active, inactive]
         permissions:
           $ref: "#/components/schemas/PagePermissions"
+        lastLoginAt:
+          type: ["string", "null"]
+          format: date-time
         deletedAt:
           type: ["string", "null"]
           format: date-time
@@ -1823,8 +1926,8 @@ components:
           format: date-time
       required:
         - id
+        - username
         - name
-        - email
         - role
         - status
         - permissions
@@ -1833,9 +1936,13 @@ components:
     UserInput:
       type: object
       properties:
+        username: { type: string }
         name: { type: string }
-        email: { type: string }
+        email:
+          type: ["string", "null"]
         phone:
+          type: ["string", "null"]
+        password:
           type: ["string", "null"]
         role:
           type: string
@@ -1846,15 +1953,16 @@ components:
         permissions:
           $ref: "#/components/schemas/PagePermissions"
       required:
+        - username
         - name
-        - email
-        - role
 
     UserUpdate:
       type: object
       properties:
+        username: { type: string }
         name: { type: string }
-        email: { type: string }
+        email:
+          type: ["string", "null"]
         phone:
           type: ["string", "null"]
         role:
@@ -1876,20 +1984,25 @@ components:
       type: object
       properties:
         id: { type: integer }
-        clerkUserId: { type: string }
+        username: { type: string }
         name: { type: string }
-        email: { type: string }
+        email:
+          type: ["string", "null"]
         role:
           type: string
           enum: [admin, manager, staff]
+        status: { type: string }
         permissions:
           $ref: "#/components/schemas/PagePermissions"
+        lastLoginAt:
+          type: ["string", "null"]
+          format: date-time
       required:
         - id
-        - clerkUserId
+        - username
         - name
-        - email
         - role
+        - status
         - permissions
 
     Settings:

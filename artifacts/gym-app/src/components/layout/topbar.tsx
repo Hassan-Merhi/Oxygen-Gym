@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { useI18n } from "@/lib/i18n";
-import { useClerk, useUser } from "@clerk/react";
+import { useAuth } from "@/lib/auth";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { LogOut, Bell, Check, CheckCheck, AlertCircle, Package, DollarSign, UserX, Snowflake } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
   useGetNotificationCount,
@@ -71,7 +72,6 @@ function NotificationBell() {
     markAllRead.mutate(undefined, { onSuccess: invalidate });
   };
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -102,7 +102,6 @@ function NotificationBell() {
 
       {open && (
         <div className="absolute end-0 mt-2 w-80 rounded-xl border border-border bg-popover shadow-lg z-50 overflow-hidden">
-          {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm">{t("notif.title")}</span>
@@ -116,7 +115,6 @@ function NotificationBell() {
             )}
           </div>
 
-          {/* List */}
           <div className="max-h-80 overflow-y-auto">
             {recent.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2">
@@ -151,7 +149,6 @@ function NotificationBell() {
             )}
           </div>
 
-          {/* Footer */}
           <div className="px-4 py-2.5 border-t border-border">
             <a
               href="/notifications"
@@ -169,12 +166,17 @@ function NotificationBell() {
 
 export function Topbar() {
   const { t, language, setLanguage } = useI18n();
-  const { signOut } = useClerk();
-  const { user } = useUser();
+  const { user, logout } = useAuth();
+  const [, setLocation] = useLocation();
 
   const handleLogout = () => {
-    signOut({ redirectUrl: import.meta.env.BASE_URL.replace(/\/$/, "") || "/" });
+    logout();
+    setLocation("/login");
   };
+
+  const initials = user?.name
+    ? user.name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()
+    : user?.username?.charAt(0).toUpperCase() ?? "U";
 
   return (
     <header className="h-16 bg-background border-b border-border flex items-center justify-between px-6 sticky top-0 z-10 w-full">
@@ -202,11 +204,15 @@ export function Topbar() {
 
         <div className="flex items-center gap-3">
           <Avatar className="h-8 w-8 rounded-md border border-border">
-            <AvatarImage src={user?.imageUrl} />
-            <AvatarFallback className="rounded-md">
-              {user?.firstName?.charAt(0) || "U"}
+            <AvatarFallback className="rounded-md text-xs font-semibold bg-indigo-100 text-indigo-700">
+              {initials}
             </AvatarFallback>
           </Avatar>
+
+          <div className="hidden sm:flex flex-col leading-tight">
+            <span className="text-sm font-medium text-foreground">{user?.name ?? user?.username}</span>
+            <span className="text-xs text-muted-foreground capitalize">{user?.role}</span>
+          </div>
 
           <Button
             variant="ghost"
@@ -215,7 +221,7 @@ export function Topbar() {
             onClick={handleLogout}
             data-testid="button-logout"
           >
-            <LogOut className="w-4 h-4 mr-2" />
+            <LogOut className="w-4 h-4 me-2" />
             {t("nav.logout")}
           </Button>
         </div>

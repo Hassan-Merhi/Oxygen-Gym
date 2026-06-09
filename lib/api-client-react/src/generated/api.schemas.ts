@@ -35,6 +35,33 @@ export interface PagePermissions {
   managePlans: boolean;
 }
 
+export type CurrentUserRole = typeof CurrentUserRole[keyof typeof CurrentUserRole];
+
+
+export const CurrentUserRole = {
+  admin: 'admin',
+  manager: 'manager',
+  staff: 'staff',
+} as const;
+
+export interface CurrentUser {
+  id: number;
+  username: string;
+  name: string;
+  /** @nullable */
+  email?: string | null;
+  role: CurrentUserRole;
+  status: string;
+  permissions: PagePermissions;
+  /** @nullable */
+  lastLoginAt?: string | null;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: CurrentUser;
+}
+
 export type UserRole = typeof UserRole[keyof typeof UserRole];
 
 
@@ -54,15 +81,17 @@ export const UserStatus = {
 
 export interface User {
   id: number;
-  /** @nullable */
-  clerkUserId?: string | null;
+  username: string;
   name: string;
-  email: string;
+  /** @nullable */
+  email?: string | null;
   /** @nullable */
   phone?: string | null;
   role: UserRole;
   status: UserStatus;
   permissions: PagePermissions;
+  /** @nullable */
+  lastLoginAt?: string | null;
   /** @nullable */
   deletedAt?: string | null;
   createdAt: string;
@@ -86,11 +115,15 @@ export const UserInputStatus = {
 } as const;
 
 export interface UserInput {
+  username: string;
   name: string;
-  email: string;
+  /** @nullable */
+  email?: string | null;
   /** @nullable */
   phone?: string | null;
-  role: UserInputRole;
+  /** @nullable */
+  password?: string | null;
+  role?: UserInputRole;
   status?: UserInputStatus;
   permissions?: PagePermissions;
 }
@@ -113,8 +146,10 @@ export const UserUpdateStatus = {
 } as const;
 
 export interface UserUpdate {
+  username?: string;
   name?: string;
-  email?: string;
+  /** @nullable */
+  email?: string | null;
   /** @nullable */
   phone?: string | null;
   role?: UserUpdateRole;
@@ -122,24 +157,6 @@ export interface UserUpdate {
 }
 
 export interface PermissionsUpdate {
-  permissions: PagePermissions;
-}
-
-export type CurrentUserRole = typeof CurrentUserRole[keyof typeof CurrentUserRole];
-
-
-export const CurrentUserRole = {
-  admin: 'admin',
-  manager: 'manager',
-  staff: 'staff',
-} as const;
-
-export interface CurrentUser {
-  id: number;
-  clerkUserId: string;
-  name: string;
-  email: string;
-  role: CurrentUserRole;
   permissions: PagePermissions;
 }
 
@@ -1198,6 +1215,27 @@ export interface NotificationsResponse {
 export interface NotificationCountResponse {
   unread: number;
 }
+
+export type GetSetupStatus200 = {
+  needsSetup: boolean;
+};
+
+export type RunSetupBody = {
+  username: string;
+  password: string;
+  fullName: string;
+};
+
+export type LoginBody = {
+  username: string;
+  password: string;
+};
+
+export type ChangePasswordBody = {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+};
 
 export type ListActivityLogsParams = {
 limit?: number;

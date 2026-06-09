@@ -10,11 +10,15 @@ import type { UserInputRole } from './userInputRole';
 import type { UserInputStatus } from './userInputStatus';
 
 export interface UserInput {
+  username: string;
   name: string;
-  email: string;
+  /** @nullable */
+  email?: string | null;
   /** @nullable */
   phone?: string | null;
-  role: UserInputRole;
+  /** @nullable */
+  password?: string | null;
+  role?: UserInputRole;
   status?: UserInputStatus;
   permissions?: PagePermissions;
 }

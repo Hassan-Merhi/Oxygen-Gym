@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { requireAuth, getAuth } from "@clerk/express";
+import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
 import { paymentsTable, settingsTable, cashLedgerTable } from "@workspace/db/schema";
 import { eq, and, ilike, or, gte, lte, count, sum, desc, asc } from "drizzle-orm";
