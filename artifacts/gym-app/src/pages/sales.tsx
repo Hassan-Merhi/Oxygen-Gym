@@ -895,13 +895,11 @@ export default function Sales() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t("sales.history.number")}</TableHead>
                   <TableHead>{t("sales.history.date")}</TableHead>
                   <TableHead className="text-right">{t("sales.history.total")}</TableHead>
                   <TableHead>{t("sales.history.currency")}</TableHead>
                   <TableHead className="text-right">{t("sales.history.payment")}</TableHead>
                   <TableHead className="text-right">{t("sales.history.change")}</TableHead>
-                  <TableHead>{t("sales.history.by")}</TableHead>
                   <TableHead>{t("sales.history.status")}</TableHead>
                   <TableHead>{t("sales.history.actions")}</TableHead>
                 </TableRow>
@@ -909,7 +907,7 @@ export default function Sales() {
               <TableBody>
                 {!historyItems || historyItems.items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                       <div className="flex flex-col items-center gap-2">
                         <ReceiptText className="h-10 w-10 opacity-30" />
                         <p>{t("sales.empty")}</p>
@@ -922,13 +920,11 @@ export default function Sales() {
                   const fmtS = (n: number) => `${cur} ${(n as number).toFixed(2)}`;
                   return (
                     <TableRow key={sale.id as number} className={sale.status === "voided" ? "opacity-60" : ""}>
-                      <TableCell className="font-mono text-sm font-medium">{sale.saleNumber as string ?? "—"}</TableCell>
                       <TableCell className="text-sm">{new Date(sale.saleDate as string).toLocaleString()}</TableCell>
                       <TableCell className="text-right font-semibold">{fmtS(sale.totalAmount as number)}</TableCell>
                       <TableCell><Badge variant="outline">{cur}</Badge></TableCell>
                       <TableCell className="text-right">{fmtS(sale.paymentAmount as number)}</TableCell>
                       <TableCell className="text-right">{fmtS(sale.changeDue as number)}</TableCell>
-                      <TableCell className="text-sm">{sale.createdBy as string ?? "—"}</TableCell>
                       <TableCell>
                         <Badge variant={sale.status === "voided" ? "destructive" : "default"}>
                           {t(`sales.status.${sale.status as string}`)}
