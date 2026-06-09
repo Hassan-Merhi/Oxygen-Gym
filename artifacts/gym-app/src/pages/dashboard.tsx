@@ -1,15 +1,11 @@
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import { useGetMe, useGetDashboardKpis, useListNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useGetMe, useGetDashboardKpis } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
-  Users, CreditCard, Receipt, CalendarCheck, Clock,
+  Users, Receipt, CalendarCheck, Clock,
   PackageX, TrendingUp, TrendingDown, ChevronDown, ChevronUp,
-  Lock, Activity, Bell, AlertCircle, Package, DollarSign, UserX, Snowflake, Check, CheckCheck,
+  Lock, ArrowUpRight, ArrowDownRight,
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -17,195 +13,132 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 
-function fmt(n: number) {
+function fmtMoney(n: number) {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
   return `$${n.toFixed(2)}`;
 }
 
-function TrendBadge({ pct }: { pct: number }) {
+function TrendPill({ pct }: { pct: number }) {
   const up = pct >= 0;
   return (
-    <span className={cn("inline-flex items-center gap-0.5 text-xs font-medium", up ? "text-emerald-600" : "text-red-500")}>
-      {up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+    <span className={cn(
+      "inline-flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded-full",
+      up ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"
+    )}>
+      {up ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
       {Math.abs(pct)}%
     </span>
   );
 }
 
-function KpiCard({
-  icon: Icon,
+function StatCard({
   label,
   value,
+  trend,
   sub,
   loading,
-  restricted = false,
-  color = "text-primary",
+  restricted,
+  accentColor,
+  icon: Icon,
 }: {
-  icon: React.ElementType;
   label: string;
   value?: React.ReactNode;
-  sub?: React.ReactNode;
+  trend?: number;
+  sub?: string;
   loading?: boolean;
   restricted?: boolean;
-  color?: string;
+  accentColor: string;
+  icon: React.ElementType;
 }) {
   return (
-    <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow">
-      <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-        <Icon className={cn("w-4 h-4 opacity-70", color)} />
-      </CardHeader>
-      <CardContent className="px-4 pb-4">
-        {restricted ? (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Lock className="w-4 h-4" />
-            <span className="text-sm">Access Restricted</span>
-          </div>
-        ) : loading ? (
-          <>
-            <Skeleton className="h-8 w-24 mb-1" />
-            <Skeleton className="h-3 w-32" />
-          </>
-        ) : (
-          <>
-            <div className="text-2xl font-bold">{value}</div>
-            {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
-          </>
+    <div className="bg-white dark:bg-card rounded-2xl border border-border/50 shadow-sm p-5 flex flex-col gap-4 hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between">
+        <div className={cn("p-2.5 rounded-xl", accentColor)}>
+          <Icon className="w-5 h-5" />
+        </div>
+        {trend !== undefined && !restricted && !loading && (
+          <TrendPill pct={trend} />
         )}
-      </CardContent>
-    </Card>
+      </div>
+      {restricted ? (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Lock className="w-4 h-4" />
+          <span className="text-sm">Restricted</span>
+        </div>
+      ) : loading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-3 w-28" />
+        </div>
+      ) : (
+        <div>
+          <p className="text-2xl font-bold tracking-tight">{value}</p>
+          {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+        </div>
+      )}
+      <p className="text-sm font-medium text-muted-foreground -mt-1">{label}</p>
+    </div>
   );
 }
 
-function ExpandableCard({
-  icon: Icon,
+function ExpandCard({
   label,
   count,
   loading,
+  accentColor,
+  icon: Icon,
   children,
-  color = "text-primary",
 }: {
-  icon: React.ElementType;
   label: string;
   count: number;
   loading?: boolean;
+  accentColor: string;
+  icon: React.ElementType;
   children: React.ReactNode;
-  color?: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow">
-      <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-        <Icon className={cn("w-4 h-4 opacity-70", color)} />
-      </CardHeader>
-      <CardContent className="px-4 pb-3">
-        {loading ? (
-          <Skeleton className="h-8 w-16" />
-        ) : (
-          <>
-            <div className="text-2xl font-bold mb-2">{count}</div>
-            {count > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-xs -ml-2"
-                onClick={() => setOpen((v) => !v)}
-              >
-                {open ? <ChevronUp className="w-3 h-3 mr-1" /> : <ChevronDown className="w-3 h-3 mr-1" />}
-                {open ? "Hide" : "View"}
-              </Button>
-            )}
-            {open && <div className="mt-3 space-y-1">{children}</div>}
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-const CHART_COLORS = { revenue: "#6366f1", expense: "#f43f5e", growth: "#10b981" };
-
-const NTF_ICONS: Record<string, React.ElementType> = {
-  member_expiring: AlertCircle, stock_low: Package, stock_out: Package,
-  payroll_due: DollarSign, member_frozen: Snowflake, member_inactive: UserX,
-};
-const NTF_DOT: Record<string, string> = { high: "bg-red-500", medium: "bg-amber-400", low: "bg-slate-400" };
-
-function NotificationsWidget() {
-  const { t } = useI18n();
-  const queryClient = useQueryClient();
-  const { data, isLoading } = useListNotifications({ read: "unread" } as any, {
-    query: { queryKey: ["listNotifications", "unread"], refetchInterval: 60000 }
-  });
-  const notifications = (data?.items ?? []).slice(0, 6);
-  const unreadCount = data?.unreadCount ?? 0;
-
-  const markRead = useMarkNotificationRead();
-  const markAllRead = useMarkAllNotificationsRead();
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["listNotifications"] });
-
-  const handleMarkRead = (key: string) => markRead.mutate({ key }, { onSuccess: invalidate });
-  const handleMarkAll = () => markAllRead.mutate(undefined, { onSuccess: invalidate });
-
-  return (
-    <Card className="border-border/60 shadow-sm">
-      <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
-        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-          <Bell className="w-4 h-4 text-blue-500" />
-          {t("dashboard.notificationsWidget")}
-          {unreadCount > 0 && (
-            <Badge className="bg-red-500 text-white text-xs px-1.5 py-0 border-0 ml-1">{unreadCount}</Badge>
-          )}
-        </CardTitle>
-        <div className="flex items-center gap-2">
-          {unreadCount > 0 && (
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleMarkAll}>
-              <CheckCheck className="w-3 h-3 mr-1" />
-              {t("notif.markAllRead")}
-            </Button>
-          )}
-          <a href="/notifications" className="text-xs text-primary hover:underline font-medium">
-            {t("dashboard.seeAllNotifications")}
-          </a>
+    <div className="bg-white dark:bg-card rounded-2xl border border-border/50 shadow-sm p-5 flex flex-col gap-4 hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between">
+        <div className={cn("p-2.5 rounded-xl", accentColor)}>
+          <Icon className="w-5 h-5" />
         </div>
-      </CardHeader>
-      <CardContent className="px-4 pb-4">
-        {isLoading ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
-          </div>
-        ) : notifications.length === 0 ? (
-          <div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
-            <Bell className="w-5 h-5 opacity-30" />
-            <span className="text-sm">{t("notif.empty")}</span>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {notifications.map((n) => {
-              const Icon = NTF_ICONS[n.type] ?? Bell;
-              return (
-                <div key={n.key} className="flex items-center gap-3 py-2 border-b border-border/40 last:border-0">
-                  <div className={cn("w-2 h-2 rounded-full shrink-0", NTF_DOT[n.priority] ?? "bg-slate-400")} />
-                  <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-xs flex-1 text-foreground truncate">{n.message}</span>
-                  <button
-                    className="text-muted-foreground hover:text-green-500 shrink-0"
-                    onClick={() => handleMarkRead(n.key)}
-                    title={t("notif.markRead")}
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+        {count > 0 && !loading && (
+          <button
+            onClick={() => setOpen(v => !v)}
+            className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {open ? "Hide" : "View"}
+          </button>
         )}
-      </CardContent>
-    </Card>
+      </div>
+      {loading ? (
+        <Skeleton className="h-8 w-16" />
+      ) : (
+        <div>
+          <p className="text-2xl font-bold tracking-tight">{count}</p>
+          {open && count > 0 && (
+            <div className="mt-3 text-xs space-y-1 max-h-36 overflow-y-auto pr-1">{children}</div>
+          )}
+        </div>
+      )}
+      <p className="text-sm font-medium text-muted-foreground -mt-1">{label}</p>
+    </div>
   );
 }
+
+const CHART_COLORS = { revenue: "#6366f1", expense: "#f43f5e", growth: "#10b981", checkin: "#06b6d4" };
+
+const CustomTooltipStyle = {
+  contentStyle: {
+    fontSize: 12,
+    borderRadius: 8,
+    border: "1px solid var(--border)",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+  },
+};
 
 export default function Dashboard() {
   const { t } = useI18n();
@@ -213,85 +146,80 @@ export default function Dashboard() {
   const { data: kpis, isLoading: kpiLoading } = useGetDashboardKpis();
 
   const canViewProfit = me?.permissions?.viewProfit ?? false;
-  const canViewCost = me?.permissions?.viewCost ?? false;
-
   const loading = kpiLoading;
 
+  const now = new Date();
+  const dateStr = now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+
   return (
-    <div className="space-y-8">
+    <div className="p-6 max-w-7xl mx-auto space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">{t("dashboard.title")}</h1>
-        <p className="text-muted-foreground mt-1">
-          {meLoading ? <Skeleton className="h-5 w-48 inline-block" /> : `${t("dashboard.welcome")}, ${me?.name}`}
-        </p>
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">{dateStr}</p>
+          <h1 className="text-2xl font-bold tracking-tight mt-0.5">
+            {meLoading ? <Skeleton className="h-8 w-48 inline-block" /> : `${t("dashboard.welcome")}, ${me?.name} 👋`}
+          </h1>
+        </div>
       </div>
 
-      {/* KPI Cards Row */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {/* Active Members */}
-        <KpiCard
-          icon={Users}
-          label={t("dashboard.activeMembers")}
-          loading={loading}
-          value={kpis?.activeMembers.count.toLocaleString()}
-          sub="Currently active subscriptions"
-          color="text-blue-500"
-        />
+      {/* KPI Grid */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="xl:col-span-2">
+          <StatCard
+            icon={Users}
+            label={t("dashboard.activeMembers")}
+            loading={loading}
+            value={kpis?.activeMembers.count.toLocaleString()}
+            sub="Active subscriptions"
+            accentColor="bg-blue-50 text-blue-500"
+          />
+        </div>
 
-        {/* Monthly Revenue */}
-        <KpiCard
-          icon={CreditCard}
-          label={t("dashboard.monthlyRevenue")}
-          loading={loading}
-          value={fmt(kpis?.monthlyRevenue.current ?? 0)}
-          sub={
-            kpis ? (
-              <span className="flex items-center gap-1">
-                <TrendBadge pct={kpis.monthlyRevenue.changePercent} />
-                <span>vs last month</span>
-              </span>
-            ) : undefined
-          }
-          color="text-indigo-500"
-        />
+        <div className="xl:col-span-2">
+          <StatCard
+            icon={Receipt}
+            label={t("dashboard.monthlyExpenses")}
+            loading={loading}
+            value={fmtMoney(kpis?.monthlyExpenses.current ?? 0)}
+            trend={kpis?.monthlyExpenses.changePercent}
+            sub="vs last month"
+            accentColor="bg-rose-50 text-rose-500"
+          />
+        </div>
 
-        {/* Monthly Expenses */}
-        <KpiCard
-          icon={Receipt}
-          label={t("dashboard.monthlyExpenses")}
-          loading={loading}
-          value={fmt(kpis?.monthlyExpenses.current ?? 0)}
-          sub={
-            kpis ? (
-              <span className="flex items-center gap-1">
-                <TrendBadge pct={kpis.monthlyExpenses.changePercent} />
-                <span>vs last month</span>
-              </span>
-            ) : undefined
-          }
-          color="text-rose-500"
-        />
+        <div className="xl:col-span-2">
+          <StatCard
+            icon={TrendingUp}
+            label={t("dashboard.totalProfit")}
+            loading={loading}
+            restricted={!canViewProfit}
+            value={fmtMoney(kpis?.profit.current ?? 0)}
+            trend={canViewProfit ? kpis?.profit.changePercent : undefined}
+            sub="vs last month"
+            accentColor="bg-emerald-50 text-emerald-500"
+          />
+        </div>
 
-        {/* Today's Check-ins */}
-        <KpiCard
-          icon={CalendarCheck}
-          label={t("dashboard.todayCheckins")}
-          loading={loading}
-          value={kpis?.todayCheckins.count.toLocaleString()}
-          sub="Today's attendance"
-          color="text-cyan-500"
-        />
+        <div className="xl:col-span-2">
+          <StatCard
+            icon={CalendarCheck}
+            label={t("dashboard.todayCheckins")}
+            loading={loading}
+            value={kpis?.todayCheckins.count.toLocaleString()}
+            sub="Today's attendance"
+            accentColor="bg-cyan-50 text-cyan-500"
+          />
+        </div>
 
-        {/* Expiring Soon — expandable */}
-        <ExpandableCard
-          icon={Clock}
-          label={t("dashboard.expiringSoon")}
-          loading={loading}
-          count={kpis?.expiringSoon.in30Days.length ?? 0}
-          color="text-amber-500"
-        >
-          <div className="text-xs space-y-1 max-h-36 overflow-y-auto">
+        <div className="xl:col-span-1">
+          <ExpandCard
+            icon={Clock}
+            label={t("dashboard.expiringSoon")}
+            loading={loading}
+            count={kpis?.expiringSoon.in30Days.length ?? 0}
+            accentColor="bg-amber-50 text-amber-500"
+          >
             <div className="grid grid-cols-3 font-semibold text-muted-foreground border-b pb-1 mb-1">
               <span>Name</span><span>Plan</span><span className="text-right">Days</span>
             </div>
@@ -299,23 +227,22 @@ export default function Dashboard() {
               <div key={m.id} className="grid grid-cols-3">
                 <span className="truncate">{m.name}</span>
                 <span className="truncate text-muted-foreground">{m.planName ?? "—"}</span>
-                <span className={cn("text-right font-medium", m.daysRemaining <= 7 ? "text-red-500" : m.daysRemaining <= 14 ? "text-amber-500" : "text-green-600")}>
-                  {m.daysRemaining}d
-                </span>
+                <span className={cn("text-right font-medium",
+                  m.daysRemaining <= 7 ? "text-red-500" : m.daysRemaining <= 14 ? "text-amber-500" : "text-emerald-600"
+                )}>{m.daysRemaining}d</span>
               </div>
             ))}
-          </div>
-        </ExpandableCard>
+          </ExpandCard>
+        </div>
 
-        {/* Low Stock — expandable */}
-        <ExpandableCard
-          icon={PackageX}
-          label={t("dashboard.lowStock")}
-          loading={loading}
-          count={kpis?.lowStock.length ?? 0}
-          color="text-orange-500"
-        >
-          <div className="text-xs space-y-1 max-h-36 overflow-y-auto">
+        <div className="xl:col-span-1">
+          <ExpandCard
+            icon={PackageX}
+            label={t("dashboard.lowStock")}
+            loading={loading}
+            count={kpis?.lowStock.length ?? 0}
+            accentColor="bg-orange-50 text-orange-500"
+          >
             <div className="grid grid-cols-3 font-semibold text-muted-foreground border-b pb-1 mb-1">
               <span className="col-span-2">Product</span><span className="text-right">Qty</span>
             </div>
@@ -325,167 +252,82 @@ export default function Dashboard() {
                 <span className="text-right font-medium text-orange-500">{p.quantity}/{p.alertQuantity}</span>
               </div>
             ))}
-          </div>
-        </ExpandableCard>
-
-        {/* Total Profit — permission gated */}
-        <KpiCard
-          icon={TrendingUp}
-          label={t("dashboard.totalProfit")}
-          loading={loading}
-          restricted={!canViewProfit}
-          value={fmt(kpis?.profit.current ?? 0)}
-          sub={
-            kpis && canViewProfit ? (
-              <span className="flex items-center gap-1">
-                <TrendBadge pct={kpis.profit.changePercent} />
-                <span>vs last month</span>
-              </span>
-            ) : undefined
-          }
-          color="text-emerald-500"
-        />
+          </ExpandCard>
+        </div>
       </div>
 
-      {/* Notifications Widget */}
-      <NotificationsWidget />
-
-      {/* Charts */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Revenue Chart */}
-        <Card className="border-border/60 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Revenue — Last 12 Months</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-48 w-full" />
-            ) : (
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={kpis?.revenueChart ?? []} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={CHART_COLORS.revenue} stopOpacity={0.2} />
-                      <stop offset="95%" stopColor={CHART_COLORS.revenue} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />
-                  <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} />
-                  <Tooltip formatter={(v: number) => [`$${v.toFixed(2)}`, "Revenue"]} />
-                  <Area type="monotone" dataKey="amount" stroke={CHART_COLORS.revenue} fill="url(#revGrad)" strokeWidth={2} dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Expense Chart */}
-        <Card className="border-border/60 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Expenses — Last 12 Months</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-48 w-full" />
-            ) : (
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={kpis?.expenseChart ?? []} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />
-                  <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} />
-                  <Tooltip formatter={(v: number) => [`$${v.toFixed(2)}`, "Expenses"]} />
-                  <Bar dataKey="amount" fill={CHART_COLORS.expense} radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Membership Growth Chart */}
-        <Card className="border-border/60 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">New Members — Last 12 Months</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-48 w-full" />
-            ) : (
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={kpis?.membershipGrowth ?? []} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />
-                  <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
-                  <Tooltip formatter={(v: number) => [v, "New members"]} />
-                  <Line type="monotone" dataKey="count" stroke={CHART_COLORS.growth} strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Today's Check-ins Hourly Chart */}
-        <Card className="border-border/60 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Today's Check-ins by Hour</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-48 w-full" />
-            ) : (
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={kpis?.todayCheckins.hourly ?? []} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" />
-                  <XAxis dataKey="hour" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(h) => `${h}h`} />
-                  <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
-                  <Tooltip formatter={(v: number) => [v, "Check-ins"]} labelFormatter={(l) => `${l}:00`} />
-                  <Bar dataKey="count" fill="#06b6d4" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Activity */}
-      <Card className="border-border/60 shadow-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Activity className="w-4 h-4" />
-            Recent Activity
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-8 w-full" />
-              ))}
-            </div>
-          ) : !kpis?.recentActivity.length ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">No activity yet</p>
-          ) : (
-            <div className="divide-y divide-border/50">
-              {kpis.recentActivity.map((log) => (
-                <div key={log.id} className="flex items-start justify-between py-2.5">
-                  <div className="flex items-start gap-3">
-                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Activity className="w-3 h-3 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{log.action.replace(/_/g, " ")}</p>
-                      <p className="text-xs text-muted-foreground">by {log.userName}</p>
-                    </div>
-                  </div>
-                  <time className="text-xs text-muted-foreground whitespace-nowrap ml-4">
-                    {new Date(log.createdAt).toLocaleString()}
-                  </time>
-                </div>
-              ))}
-            </div>
+      {/* Charts — 2×2 grid */}
+      <div className="grid gap-5 lg:grid-cols-2">
+        {/* Revenue */}
+        <div className="bg-white dark:bg-card rounded-2xl border border-border/50 shadow-sm p-5">
+          <p className="text-sm font-semibold mb-4">Revenue — Last 12 Months</p>
+          {loading ? <Skeleton className="h-48 w-full" /> : (
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={kpis?.revenueChart ?? []} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={CHART_COLORS.revenue} stopOpacity={0.15} />
+                    <stop offset="95%" stopColor={CHART_COLORS.revenue} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border/30" />
+                <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} />
+                <Tooltip {...CustomTooltipStyle} formatter={(v: number) => [`$${v.toFixed(2)}`, "Revenue"]} />
+                <Area type="monotone" dataKey="amount" stroke={CHART_COLORS.revenue} fill="url(#revGrad)" strokeWidth={2.5} dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
           )}
-        </CardContent>
-      </Card>
+        </div>
+
+        {/* Expenses */}
+        <div className="bg-white dark:bg-card rounded-2xl border border-border/50 shadow-sm p-5">
+          <p className="text-sm font-semibold mb-4">Expenses — Last 12 Months</p>
+          {loading ? <Skeleton className="h-48 w-full" /> : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={kpis?.expenseChart ?? []} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border/30" />
+                <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} />
+                <Tooltip {...CustomTooltipStyle} formatter={(v: number) => [`$${v.toFixed(2)}`, "Expenses"]} />
+                <Bar dataKey="amount" fill={CHART_COLORS.expense} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* New Members */}
+        <div className="bg-white dark:bg-card rounded-2xl border border-border/50 shadow-sm p-5">
+          <p className="text-sm font-semibold mb-4">New Members — Last 12 Months</p>
+          {loading ? <Skeleton className="h-48 w-full" /> : (
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={kpis?.membershipGrowth ?? []} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border/30" />
+                <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip {...CustomTooltipStyle} formatter={(v: number) => [v, "New members"]} />
+                <Line type="monotone" dataKey="count" stroke={CHART_COLORS.growth} strokeWidth={2.5} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Check-ins by Hour */}
+        <div className="bg-white dark:bg-card rounded-2xl border border-border/50 shadow-sm p-5">
+          <p className="text-sm font-semibold mb-4">Today's Check-ins by Hour</p>
+          {loading ? <Skeleton className="h-48 w-full" /> : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={kpis?.todayCheckins.hourly ?? []} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border/30" />
+                <XAxis dataKey="hour" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(h) => `${h}h`} />
+                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip {...CustomTooltipStyle} formatter={(v: number) => [v, "Check-ins"]} labelFormatter={(l) => `${l}:00`} />
+                <Bar dataKey="count" fill={CHART_COLORS.checkin} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
