@@ -12,7 +12,6 @@ import {
   useDeleteVoucher,
   useGetVoucher,
   useGetSettings,
-  useListMembers,
   type PaymentInputDirection,
   type PaymentInputCategory,
   type VoucherInputVoucherType,
@@ -335,7 +334,7 @@ export default function CashBook() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">{t("nav.cashbook")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">All cash inflows and outflows</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("cashbook.subtitle")}</p>
         </div>
         {canManage && (
           <Button
@@ -343,7 +342,7 @@ export default function CashBook() {
             className="gap-2"
           >
             <Plus className="w-4 h-4" />
-            {tab === "transactions" ? "Record Payment" : "New Voucher"}
+            {tab === "transactions" ? t("pay.recordPayment") : t("vch.newVoucher")}
           </Button>
         )}
       </div>

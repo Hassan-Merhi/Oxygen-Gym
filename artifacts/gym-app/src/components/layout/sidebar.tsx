@@ -6,7 +6,6 @@ import {
   Dumbbell,
   UserCog,
   CreditCard,
-  Briefcase,
   Package,
   TrendingUp,
   Settings,
