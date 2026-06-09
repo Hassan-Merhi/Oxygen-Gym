@@ -333,61 +333,55 @@ export default function Payments() {
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-border overflow-hidden bg-card">
+      <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("pay.col.number")}</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("pay.col.date")}</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("pay.col.type")}</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("pay.col.category")}</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground">{t("pay.col.amount")}</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("pay.col.currency")}</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">{t("pay.col.usd")}</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden xl:table-cell">{t("pay.col.linked")}</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden xl:table-cell">{t("pay.col.notes")}</th>
-                {canManage && <th className="px-4 py-3" />}
+              <tr className="border-b border-border bg-muted/30">
+                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("pay.col.date")}</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("pay.col.type")}</th>
+                <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("pay.col.amount")}</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground hidden sm:table-cell">{t("pay.col.notes")}</th>
+                {canManage && <th className="px-5 py-3.5 w-20" />}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-border/40">
               {listQuery.isLoading ? (
-                <tr><td colSpan={10} className="text-center py-12 text-muted-foreground">{t("common.loading")}</td></tr>
+                <tr><td colSpan={5} className="text-center py-12 text-muted-foreground">{t("common.loading")}</td></tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-16">
+                  <td colSpan={5} className="text-center py-16">
                     <p className="text-muted-foreground font-medium">{t("pay.empty")}</p>
                     <p className="text-muted-foreground/60 text-xs mt-1">{t("pay.emptyHint")}</p>
                   </td>
                 </tr>
               ) : items.map((item) => (
-                <tr key={item.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{item.paymentNumber ?? "—"}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                    {fmtDate(item.paymentDate)}
+                <tr key={item.id} className="hover:bg-muted/20 transition-colors group">
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    <div className="font-medium text-sm">{fmtDate(item.paymentDate)}</div>
                   </td>
-                  <td className="px-4 py-3">{dirBadge(item.direction)}</td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full">
-                      {t(`pay.cat.${item.category}`)}
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {dirBadge(item.direction)}
+                      <span className="text-xs font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
+                        {t(`pay.cat.${item.category}`)}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                    <span className={`font-bold tabular-nums text-base ${item.direction === "in" ? "text-emerald-600" : "text-rose-600"}`}>
+                      {item.direction === "out" ? "−" : "+"}{fmt(item.amount)}
                     </span>
+                    <span className="ml-1.5 text-xs font-medium text-muted-foreground">{item.currency}</span>
                   </td>
-                  <td className="px-4 py-3 text-right font-semibold">
-                    {fmt(item.amount)}
-                  </td>
-                  <td className="px-4 py-3 text-xs font-medium text-muted-foreground">{item.currency}</td>
-                  <td className="px-4 py-3 text-right text-xs text-muted-foreground hidden lg:table-cell">
-                    {fmt(item.amountUsd)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground hidden xl:table-cell">
-                    {item.linkedEntityName ?? item.memberName ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground hidden xl:table-cell max-w-[160px] truncate">
-                    {item.notes ?? "—"}
+                  <td className="px-5 py-3.5 hidden sm:table-cell max-w-[220px]">
+                    <p className="text-sm text-muted-foreground truncate">
+                      {item.notes || "—"}
+                    </p>
                   </td>
                   {canManage && (
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1 justify-end">
+                    <td className="px-5 py-3.5">
+                      <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(item)}>
                           <Pencil className="w-3.5 h-3.5" />
                         </Button>
