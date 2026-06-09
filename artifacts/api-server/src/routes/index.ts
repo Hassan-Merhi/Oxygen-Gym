@@ -14,6 +14,8 @@ import ledgerRouter from "./ledger";
 import accountsRouter from "./accounts";
 import stockRouter from "./stock";
 import salesRouter from "./sales";
+import staffEmployeesRouter from "./staff-employees";
+import payrollRouter from "./payroll";
 
 const router: IRouter = Router();
 
@@ -32,5 +34,7 @@ router.use("/ledger", ledgerRouter);
 router.use("/accounts", accountsRouter);
 router.use("/stock", stockRouter);
 router.use("/sales", salesRouter);
+router.use("/staff-employees", staffEmployeesRouter);
+router.use("/payroll", payrollRouter);
 
 export default router;

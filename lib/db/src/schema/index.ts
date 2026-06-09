@@ -9,6 +9,7 @@ export * from "./payments";
 export * from "./expenses";
 export * from "./products";
 export * from "./payroll";
+export * from "./staff_employees";
 export * from "./sales";
 export * from "./vouchers";
 export * from "./cash_ledger";

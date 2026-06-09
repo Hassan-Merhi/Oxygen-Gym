@@ -827,6 +827,219 @@ paths:
               schema:
                 $ref: "#/components/schemas/LedgerBalance"
 
+  /staff-employees:
+    get:
+      operationId: listStaffEmployees
+      summary: List staff employee records
+      tags: [users]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated staff employee list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffEmployeeListResponse"
+    post:
+      operationId: createStaffEmployee
+      summary: Create a staff employee record
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffEmployeeInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffEmployee"
+
+  /staff-employees/{id}:
+    get:
+      operationId: getStaffEmployee
+      summary: Get a staff employee by ID
+      tags: [users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Staff employee
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffEmployee"
+    patch:
+      operationId: updateStaffEmployee
+      summary: Update a staff employee record
+      tags: [users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffEmployeeInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffEmployee"
+
+  /staff-employees/{id}/archive:
+    patch:
+      operationId: archiveStaffEmployee
+      summary: Archive a staff employee record
+      tags: [users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Archived
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffEmployee"
+
+  /payroll:
+    get:
+      operationId: listPayroll
+      summary: List payroll records
+      tags: [users]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: staffEmployeeId
+          in: query
+          schema: { type: string }
+        - name: dateFrom
+          in: query
+          schema: { type: string }
+        - name: dateTo
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated payroll list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayrollListResponse"
+    post:
+      operationId: createPayroll
+      summary: Generate a payroll record (draft)
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePayrollBody"
+      responses:
+        "201":
+          description: Created draft payroll
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayrollRecord"
+
+  /payroll/{id}:
+    get:
+      operationId: getPayroll
+      summary: Get a single payroll record
+      tags: [users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Payroll record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayrollRecord"
+
+  /payroll/{id}/pay:
+    patch:
+      operationId: markPayrollPaid
+      summary: Mark a payroll record as paid
+      tags: [users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Payroll marked paid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayrollRecord"
+
+  /payroll/{id}/cancel:
+    patch:
+      operationId: cancelPayroll
+      summary: Cancel a payroll record
+      tags: [users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelPayrollBody"
+      responses:
+        "200":
+          description: Payroll cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayrollRecord"
+
   /sales/lookup-barcode:
     get:
       operationId: lookupBarcode
@@ -2259,6 +2472,116 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SaleRecord"
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+      required: [items, total, page, limit]
+
+    StaffEmployee:
+      type: object
+      properties:
+        id: { type: integer }
+        staffNumber: { type: string, nullable: true }
+        linkedUserId: { type: integer, nullable: true }
+        name: { type: string }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        jobTitle: { type: string, nullable: true }
+        hireDate: { type: string, nullable: true }
+        salary: { type: number }
+        salaryCurrency: { type: string }
+        paymentFrequency: { type: string }
+        status: { type: string }
+        notes: { type: string, nullable: true }
+        createdBy: { type: string, nullable: true }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+      required: [id, name, salary, salaryCurrency, paymentFrequency, status, createdAt, updatedAt]
+
+    StaffEmployeeInput:
+      type: object
+      properties:
+        name: { type: string }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        jobTitle: { type: string, nullable: true }
+        hireDate: { type: string, nullable: true }
+        salary: { type: number }
+        salaryCurrency: { type: string }
+        paymentFrequency: { type: string }
+        linkedUserId: { type: integer, nullable: true }
+        notes: { type: string, nullable: true }
+        status: { type: string }
+      required: [name]
+
+    StaffEmployeeListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StaffEmployee"
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+      required: [items, total, page, limit]
+
+    PayrollRecord:
+      type: object
+      properties:
+        id: { type: integer }
+        payrollNumber: { type: string, nullable: true }
+        staffEmployeeId: { type: integer, nullable: true }
+        staffName: { type: string }
+        staffNumber: { type: string, nullable: true }
+        periodStart: { type: string, nullable: true }
+        periodEnd: { type: string, nullable: true }
+        baseSalary: { type: number }
+        bonus: { type: number }
+        deduction: { type: number }
+        netPay: { type: number }
+        currency: { type: string }
+        exchangeRate: { type: number }
+        netPayUsd: { type: number, nullable: true }
+        notes: { type: string, nullable: true }
+        status: { type: string }
+        paidAt: { type: string, nullable: true }
+        paidBy: { type: string, nullable: true }
+        paymentId: { type: integer, nullable: true }
+        cancelledAt: { type: string, nullable: true }
+        cancelledBy: { type: string, nullable: true }
+        cancelReason: { type: string, nullable: true }
+        createdBy: { type: string, nullable: true }
+        createdAt: { type: string }
+      required: [id, staffName, baseSalary, bonus, deduction, netPay, currency, exchangeRate, status, createdAt]
+
+    CreatePayrollBody:
+      type: object
+      properties:
+        staffEmployeeId: { type: integer }
+        periodStart: { type: string }
+        periodEnd: { type: string }
+        baseSalary: { type: number }
+        bonus: { type: number }
+        deduction: { type: number }
+        currency: { type: string }
+        exchangeRate: { type: number }
+        notes: { type: string, nullable: true }
+      required: [staffEmployeeId, periodStart, periodEnd, baseSalary]
+
+    CancelPayrollBody:
+      type: object
+      properties:
+        reason: { type: string }
+      required: [reason]
+
+    PayrollListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PayrollRecord"
         total: { type: integer }
         page: { type: integer }
         limit: { type: integer }

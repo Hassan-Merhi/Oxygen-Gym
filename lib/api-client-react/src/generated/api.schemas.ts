@@ -967,6 +967,96 @@ export interface SaleListResponse {
   limit: number;
 }
 
+export interface StaffEmployee {
+  id: number;
+  staffNumber?: string | null;
+  linkedUserId?: number | null;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  jobTitle?: string | null;
+  hireDate?: string | null;
+  salary: number;
+  salaryCurrency: string;
+  paymentFrequency: string;
+  status: string;
+  notes?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StaffEmployeeInput {
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  jobTitle?: string | null;
+  hireDate?: string | null;
+  salary?: number;
+  salaryCurrency?: string;
+  paymentFrequency?: string;
+  linkedUserId?: number | null;
+  notes?: string | null;
+  status?: string;
+}
+
+export interface StaffEmployeeListResponse {
+  items: StaffEmployee[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface PayrollRecord {
+  id: number;
+  payrollNumber?: string | null;
+  staffEmployeeId?: number | null;
+  staffName: string;
+  staffNumber?: string | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  baseSalary: number;
+  bonus: number;
+  deduction: number;
+  netPay: number;
+  currency: string;
+  exchangeRate: number;
+  netPayUsd?: number | null;
+  notes?: string | null;
+  status: string;
+  paidAt?: string | null;
+  paidBy?: string | null;
+  paymentId?: number | null;
+  cancelledAt?: string | null;
+  cancelledBy?: string | null;
+  cancelReason?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+}
+
+export interface CreatePayrollBody {
+  staffEmployeeId: number;
+  periodStart: string;
+  periodEnd: string;
+  baseSalary: number;
+  bonus?: number;
+  deduction?: number;
+  currency?: string;
+  exchangeRate?: number;
+  notes?: string | null;
+}
+
+export interface CancelPayrollBody {
+  reason: string;
+}
+
+export interface PayrollListResponse {
+  items: PayrollRecord[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export type ListActivityLogsParams = {
 limit?: number;
 offset?: number;
@@ -1010,6 +1100,23 @@ limit?: number;
 dateFrom?: string;
 dateTo?: string;
 direction?: string;
+};
+
+export type ListStaffEmployeesParams = {
+page?: string;
+limit?: string;
+search?: string;
+status?: string;
+};
+
+export type ListPayrollParams = {
+page?: string;
+limit?: string;
+search?: string;
+status?: string;
+staffEmployeeId?: string;
+dateFrom?: string;
+dateTo?: string;
 };
 
 export type LookupBarcodeParams = {

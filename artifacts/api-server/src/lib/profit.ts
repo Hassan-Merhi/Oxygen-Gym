@@ -86,7 +86,7 @@ export async function calculateProfit(from: Date, to: Date): Promise<ProfitBreak
 
   // Payroll (paid only, by paid date)
   const payrollRows = await db
-    .select({ amount: payrollTable.amount, currency: payrollTable.currency })
+    .select({ amount: payrollTable.baseSalary, currency: payrollTable.currency })
     .from(payrollTable)
     .where(
       and(

@@ -1291,6 +1291,325 @@ export const GetLedgerBalanceResponse = zod.object({
 
 
 /**
+ * @summary List staff employee records
+ */
+export const ListStaffEmployeesQueryParams = zod.object({
+  "page": zod.coerce.string().optional(),
+  "limit": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional()
+})
+
+export const ListStaffEmployeesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "staffNumber": zod.string().nullish(),
+  "linkedUserId": zod.number().nullish(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "jobTitle": zod.string().nullish(),
+  "hireDate": zod.string().nullish(),
+  "salary": zod.number(),
+  "salaryCurrency": zod.string(),
+  "paymentFrequency": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Create a staff employee record
+ */
+export const CreateStaffEmployeeBody = zod.object({
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "jobTitle": zod.string().nullish(),
+  "hireDate": zod.string().nullish(),
+  "salary": zod.number().optional(),
+  "salaryCurrency": zod.string().optional(),
+  "paymentFrequency": zod.string().optional(),
+  "linkedUserId": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "status": zod.string().optional()
+})
+
+
+/**
+ * @summary Get a staff employee by ID
+ */
+export const GetStaffEmployeeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetStaffEmployeeResponse = zod.object({
+  "id": zod.number(),
+  "staffNumber": zod.string().nullish(),
+  "linkedUserId": zod.number().nullish(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "jobTitle": zod.string().nullish(),
+  "hireDate": zod.string().nullish(),
+  "salary": zod.number(),
+  "salaryCurrency": zod.string(),
+  "paymentFrequency": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Update a staff employee record
+ */
+export const UpdateStaffEmployeeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateStaffEmployeeBody = zod.object({
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "jobTitle": zod.string().nullish(),
+  "hireDate": zod.string().nullish(),
+  "salary": zod.number().optional(),
+  "salaryCurrency": zod.string().optional(),
+  "paymentFrequency": zod.string().optional(),
+  "linkedUserId": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "status": zod.string().optional()
+})
+
+export const UpdateStaffEmployeeResponse = zod.object({
+  "id": zod.number(),
+  "staffNumber": zod.string().nullish(),
+  "linkedUserId": zod.number().nullish(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "jobTitle": zod.string().nullish(),
+  "hireDate": zod.string().nullish(),
+  "salary": zod.number(),
+  "salaryCurrency": zod.string(),
+  "paymentFrequency": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Archive a staff employee record
+ */
+export const ArchiveStaffEmployeeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ArchiveStaffEmployeeResponse = zod.object({
+  "id": zod.number(),
+  "staffNumber": zod.string().nullish(),
+  "linkedUserId": zod.number().nullish(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "jobTitle": zod.string().nullish(),
+  "hireDate": zod.string().nullish(),
+  "salary": zod.number(),
+  "salaryCurrency": zod.string(),
+  "paymentFrequency": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary List payroll records
+ */
+export const ListPayrollQueryParams = zod.object({
+  "page": zod.coerce.string().optional(),
+  "limit": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional(),
+  "staffEmployeeId": zod.coerce.string().optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional()
+})
+
+export const ListPayrollResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "payrollNumber": zod.string().nullish(),
+  "staffEmployeeId": zod.number().nullish(),
+  "staffName": zod.string(),
+  "staffNumber": zod.string().nullish(),
+  "periodStart": zod.string().nullish(),
+  "periodEnd": zod.string().nullish(),
+  "baseSalary": zod.number(),
+  "bonus": zod.number(),
+  "deduction": zod.number(),
+  "netPay": zod.number(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "netPayUsd": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "status": zod.string(),
+  "paidAt": zod.string().nullish(),
+  "paidBy": zod.string().nullish(),
+  "paymentId": zod.number().nullish(),
+  "cancelledAt": zod.string().nullish(),
+  "cancelledBy": zod.string().nullish(),
+  "cancelReason": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Generate a payroll record (draft)
+ */
+export const CreatePayrollBody = zod.object({
+  "staffEmployeeId": zod.number(),
+  "periodStart": zod.string(),
+  "periodEnd": zod.string(),
+  "baseSalary": zod.number(),
+  "bonus": zod.number().optional(),
+  "deduction": zod.number().optional(),
+  "currency": zod.string().optional(),
+  "exchangeRate": zod.number().optional(),
+  "notes": zod.string().nullish()
+})
+
+
+/**
+ * @summary Get a single payroll record
+ */
+export const GetPayrollParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetPayrollResponse = zod.object({
+  "id": zod.number(),
+  "payrollNumber": zod.string().nullish(),
+  "staffEmployeeId": zod.number().nullish(),
+  "staffName": zod.string(),
+  "staffNumber": zod.string().nullish(),
+  "periodStart": zod.string().nullish(),
+  "periodEnd": zod.string().nullish(),
+  "baseSalary": zod.number(),
+  "bonus": zod.number(),
+  "deduction": zod.number(),
+  "netPay": zod.number(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "netPayUsd": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "status": zod.string(),
+  "paidAt": zod.string().nullish(),
+  "paidBy": zod.string().nullish(),
+  "paymentId": zod.number().nullish(),
+  "cancelledAt": zod.string().nullish(),
+  "cancelledBy": zod.string().nullish(),
+  "cancelReason": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Mark a payroll record as paid
+ */
+export const MarkPayrollPaidParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const MarkPayrollPaidResponse = zod.object({
+  "id": zod.number(),
+  "payrollNumber": zod.string().nullish(),
+  "staffEmployeeId": zod.number().nullish(),
+  "staffName": zod.string(),
+  "staffNumber": zod.string().nullish(),
+  "periodStart": zod.string().nullish(),
+  "periodEnd": zod.string().nullish(),
+  "baseSalary": zod.number(),
+  "bonus": zod.number(),
+  "deduction": zod.number(),
+  "netPay": zod.number(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "netPayUsd": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "status": zod.string(),
+  "paidAt": zod.string().nullish(),
+  "paidBy": zod.string().nullish(),
+  "paymentId": zod.number().nullish(),
+  "cancelledAt": zod.string().nullish(),
+  "cancelledBy": zod.string().nullish(),
+  "cancelReason": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Cancel a payroll record
+ */
+export const CancelPayrollParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CancelPayrollBody = zod.object({
+  "reason": zod.string()
+})
+
+export const CancelPayrollResponse = zod.object({
+  "id": zod.number(),
+  "payrollNumber": zod.string().nullish(),
+  "staffEmployeeId": zod.number().nullish(),
+  "staffName": zod.string(),
+  "staffNumber": zod.string().nullish(),
+  "periodStart": zod.string().nullish(),
+  "periodEnd": zod.string().nullish(),
+  "baseSalary": zod.number(),
+  "bonus": zod.number(),
+  "deduction": zod.number(),
+  "netPay": zod.number(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "netPayUsd": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "status": zod.string(),
+  "paidAt": zod.string().nullish(),
+  "paidBy": zod.string().nullish(),
+  "paymentId": zod.number().nullish(),
+  "cancelledAt": zod.string().nullish(),
+  "cancelledBy": zod.string().nullish(),
+  "cancelReason": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
  * @summary Lookup a product by barcode
  */
 export const LookupBarcodeQueryParams = zod.object({
