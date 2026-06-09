@@ -40,6 +40,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { fmtDate } from "@/lib/date";
 import {
   Plus,
   Search,
@@ -322,7 +323,7 @@ export default function Vouchers() {
               ) : items.map((item) => (
                 <tr key={item.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors group">
                   <td className="px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
-                    {new Date(item.voucherDate).toLocaleDateString()}
+                    {fmtDate(item.voucherDate)}
                   </td>
                   <td className="px-5 py-3.5">{typeBadge(item.voucherType, item.direction)}</td>
                   <td className="px-5 py-3.5 text-sm font-medium">
@@ -393,7 +394,7 @@ export default function Vouchers() {
           <table>
             <tbody>
               <tr><td>{t("vch.col.number")}</td><td>{printVoucher.voucherNumber ?? "—"}</td></tr>
-              <tr><td>{t("vch.col.date")}</td><td>{new Date(printVoucher.voucherDate).toLocaleDateString()}</td></tr>
+              <tr><td>{t("vch.col.date")}</td><td>{fmtDate(printVoucher.voucherDate)}</td></tr>
               <tr><td>{t("vch.col.type")}</td><td>{t(`vch.type.${printVoucher.voucherType}`)}</td></tr>
               {printVoucher.receivedFrom && <tr><td>{t("vch.form.receivedFrom")}</td><td>{printVoucher.receivedFrom}</td></tr>}
               {printVoucher.paidTo && <tr><td>{t("vch.form.paidTo")}</td><td>{printVoucher.paidTo}</td></tr>}

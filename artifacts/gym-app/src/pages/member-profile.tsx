@@ -24,14 +24,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-function fmtDate(d: string | null | undefined): string {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString();
-}
-function fmtDateTime(d: string | null | undefined): string {
-  if (!d) return "—";
-  return new Date(d).toLocaleString();
-}
+import { fmtDate, fmtDateTime } from "@/lib/date";
 function fmtCurrency(amount: number | null | undefined, currency: string): string {
   if (amount == null) return "—";
   return `${currency} ${amount.toFixed(2)}`;
@@ -345,7 +338,7 @@ export default function MemberProfile({ id }: { id: number }) {
               <div className="flex flex-wrap gap-1.5">
                 {last30Days.map((day) => {
                   const attended = attendedSet.has(day);
-                  const label = new Date(day + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                  const label = new Date(day + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
                   return (
                     <div
                       key={day}

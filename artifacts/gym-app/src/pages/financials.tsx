@@ -187,7 +187,7 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
 
     const content = `
       <h2>Profit / Loss — ${pl.period}</h2>
-      <p>${new Date(pl.dateFrom).toLocaleDateString()} — ${new Date(pl.dateTo).toLocaleDateString()}</p>
+      <p>${new Date(pl.dateFrom).toLocaleDateString("en-GB")} — ${new Date(pl.dateTo).toLocaleDateString("en-GB")}</p>
       <table style="width:100%;border-collapse:collapse;margin:16px 0;">
         <tr style="background:#f0f0f0"><td style="padding:8px;font-weight:600">Item</td><td style="padding:8px;font-weight:600">USD</td><td style="padding:8px;font-weight:600">CDF</td></tr>
         <tr><td style="padding:8px">Revenue</td><td style="padding:8px">${pl.revenue.usd.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td><td style="padding:8px">${pl.revenue.cdf.toLocaleString(undefined, { minimumFractionDigits: 0 })}</td></tr>
@@ -307,7 +307,7 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
                                     {rows.map((r) => (
                                       <tr key={r.id} className="border-t border-border/20 hover:bg-muted/20">
                                         <td className="px-8 py-2 tabular-nums text-muted-foreground">
-                                          {new Date(r.date).toLocaleDateString()}
+                                          {new Date(r.date).toLocaleDateString("en-GB")}
                                         </td>
                                         <td className="px-4 py-2 max-w-[200px] truncate">{r.description ?? "—"}</td>
                                         <td className="px-4 py-2 text-muted-foreground">{r.party ?? "—"}</td>

@@ -59,6 +59,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { fmtDate, fmtDateTime } from "@/lib/date";
 
 type ProductStatus = "active" | "archived" | "deleted" | "all";
 
@@ -717,7 +718,7 @@ function HistoryModal({
                 <tbody>
                   {purchases.map((p) => (
                     <tr key={p.id} className="border-b border-border/50">
-                      <td className="px-3 py-2">{new Date(p.purchaseDate).toLocaleDateString()}</td>
+                      <td className="px-3 py-2">{fmtDate(p.purchaseDate)}</td>
                       <td className="px-3 py-2 font-mono text-muted-foreground">{p.purchaseNumber ?? "—"}</td>
                       <td className="px-3 py-2 font-bold">+{p.quantityAdded}</td>
                       {canViewCost && <td className="px-3 py-2">{p.totalCost.toLocaleString()} {p.currency}</td>}
@@ -744,7 +745,7 @@ function HistoryModal({
                     <span className="font-medium capitalize text-foreground">{h.action.replace(/_/g, " ")}</span>
                     {h.userName && <span className="text-muted-foreground ml-2">by {h.userName}</span>}
                   </div>
-                  <span className="text-muted-foreground whitespace-nowrap">{new Date(h.createdAt).toLocaleString()}</span>
+                  <span className="text-muted-foreground whitespace-nowrap">{fmtDateTime(h.createdAt)}</span>
                 </div>
               ))}
             </div>

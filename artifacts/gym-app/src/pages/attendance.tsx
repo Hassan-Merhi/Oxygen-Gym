@@ -30,6 +30,7 @@ import {
   Trophy, Filter, X, Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { fmtDate, fmtDateTime, fmtTime } from "@/lib/date";
 
 function StatCard({ icon: Icon, label, value, color, loading }: {
   icon: React.ElementType; label: string; value?: string | number;
@@ -210,7 +211,7 @@ export default function Attendance() {
                   <div key={c.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40">
                     <CalendarCheck className="w-4 h-4 text-indigo-400 shrink-0" />
                     <span className="flex-1 text-sm font-medium">{c.memberName}</span>
-                    <span className="text-xs text-muted-foreground">{new Date(c.checkedInAt).toLocaleTimeString()}</span>
+                    <span className="text-xs text-muted-foreground">{fmtTime(c.checkedInAt)}</span>
                   </div>
                 ))}
               </div>
@@ -235,7 +236,7 @@ export default function Attendance() {
                     <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
                     <span className="flex-1 text-sm font-medium">{c.memberName}</span>
                     <span className="text-xs text-muted-foreground">
-                      {new Date(c.checkedInAt).toLocaleDateString()} {new Date(c.checkedInAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {fmtDateTime(c.checkedInAt)}
                     </span>
                   </div>
                 ))}
@@ -355,7 +356,7 @@ function AttendanceReports() {
                       <TableCell className="text-sm font-medium">{r.memberName}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{r.planName ?? "—"}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {new Date(r.checkedInAt).toLocaleString()}
+                        {fmtDateTime(r.checkedInAt)}
                       </TableCell>
                     </TableRow>
                   ))}

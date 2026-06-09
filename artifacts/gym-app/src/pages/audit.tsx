@@ -22,6 +22,7 @@ import {
   Users, Receipt, Wallet, Wrench, Clock, AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { fmtDateTime } from "@/lib/date";
 
 function fmt$(n: number) {
   return `$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -219,7 +220,7 @@ export default function AuditPage() {
           <p className="text-muted-foreground mt-1">{t("audit.subtitle")}</p>
           {report && (
             <p className="text-xs text-muted-foreground mt-1">
-              {t("audit.lastRun")}: {new Date(report.generatedAt).toLocaleString()}
+              {t("audit.lastRun")}: {fmtDateTime(report.generatedAt)}
             </p>
           )}
         </div>

@@ -40,6 +40,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { fmtDate } from "@/lib/date";
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -363,7 +364,7 @@ export default function Payments() {
                 <tr key={item.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                   <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{item.paymentNumber ?? "—"}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                    {new Date(item.paymentDate).toLocaleDateString()}
+                    {fmtDate(item.paymentDate)}
                   </td>
                   <td className="px-4 py-3">{dirBadge(item.direction)}</td>
                   <td className="px-4 py-3">

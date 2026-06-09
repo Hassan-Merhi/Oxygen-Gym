@@ -12,6 +12,7 @@ import {
   LineChart, Line, CartesianGrid, AreaChart, Area,
 } from "recharts";
 import { cn } from "@/lib/utils";
+import { fmtDate } from "@/lib/date";
 
 function fmtMoney(n: number) {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
@@ -149,7 +150,7 @@ export default function Dashboard() {
   const loading = kpiLoading;
 
   const now = new Date();
-  const dateStr = now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  const dateStr = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-8">

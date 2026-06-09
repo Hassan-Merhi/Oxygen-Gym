@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useI18n } from "@/lib/i18n";
 import { useGetMe } from "@/hooks/use-me";
+import { fmtDate } from "@/lib/date";
 import {
   useListMembers,
   useCreateMember,
@@ -82,10 +83,6 @@ function addDays(date: string, days: number): string {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
   return d.toISOString().split("T")[0];
-}
-function fmtDate(d: string | null | undefined): string {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString();
 }
 function fmtCurrency(amount: number | null | undefined, currency: string): string {
   if (amount == null) return "—";

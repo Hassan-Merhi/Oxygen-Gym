@@ -27,6 +27,7 @@ import {
 import { Plus, BookOpen, ArrowLeft, TrendingUp, TrendingDown, Printer, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { fmtDate } from "@/lib/date";
 
 type AccountType = "asset" | "liability" | "income" | "expense" | "equity";
 
@@ -312,7 +313,7 @@ export default function AccountsPage() {
                   return (
                     <TableRow key={row.id} className="hover:bg-muted/30">
                       <TableCell className="tabular-nums text-sm">
-                        {new Date(row.voucherDate).toLocaleDateString()}
+                        {fmtDate(row.voucherDate)}
                       </TableCell>
                       <TableCell>
                         <span
