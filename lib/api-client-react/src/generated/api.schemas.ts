@@ -686,6 +686,91 @@ export interface LedgerBalance {
   balanceCdf: number;
 }
 
+export interface AccountCard {
+  todayUsd: number;
+  todayCdf: number;
+  monthUsd: number;
+  monthCdf: number;
+}
+
+export interface CashCard {
+  balanceUsd: number;
+  balanceCdf: number;
+  todayInUsd: number;
+  todayOutUsd: number;
+  monthInUsd: number;
+  monthOutUsd: number;
+}
+
+export interface AccountSummary {
+  cash: CashCard;
+  sales: AccountCard;
+  expenses: AccountCard;
+  profit: AccountCard;
+}
+
+export interface SalesEntry {
+  id: number;
+  paymentNumber?: string | null;
+  direction: string;
+  category: string;
+  memberName?: string | null;
+  linkedEntityName?: string | null;
+  planName?: string | null;
+  amount: number;
+  currency: string;
+  amountUsd?: number | null;
+  amountCdf?: number | null;
+  paymentDate: string;
+  createdBy?: string | null;
+}
+
+export interface SalesPage {
+  items: SalesEntry[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface ExpenseEntry {
+  id: string;
+  sourceType: string;
+  sourceNumber?: string | null;
+  date: string;
+  description?: string | null;
+  party?: string | null;
+  category?: string | null;
+  amount: number;
+  currency: string;
+  amountUsd: number;
+  amountCdf: number;
+  createdBy?: string | null;
+}
+
+export interface ExpensePage {
+  items: ExpenseEntry[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface AmountPair {
+  usd: number;
+  cdf: number;
+}
+
+export type ProfitLossBreakdown = {[key: string]: AmountPair};
+
+export interface ProfitLoss {
+  period: string;
+  dateFrom: string;
+  dateTo: string;
+  revenue: AmountPair;
+  expenses: AmountPair;
+  net: AmountPair;
+  breakdown: ProfitLossBreakdown;
+}
+
 export type ListActivityLogsParams = {
 limit?: number;
 offset?: number;
@@ -730,4 +815,39 @@ dateFrom?: string;
 dateTo?: string;
 direction?: string;
 };
+
+export type ListSalesEntriesParams = {
+page?: number;
+limit?: number;
+search?: string;
+currency?: string;
+dateFrom?: string;
+dateTo?: string;
+};
+
+export type ListExpenseEntriesParams = {
+page?: number;
+limit?: number;
+search?: string;
+currency?: string;
+dateFrom?: string;
+dateTo?: string;
+};
+
+export type GetProfitLossParams = {
+period?: GetProfitLossPeriod;
+dateFrom?: string;
+dateTo?: string;
+};
+
+export type GetProfitLossPeriod = typeof GetProfitLossPeriod[keyof typeof GetProfitLossPeriod];
+
+
+export const GetProfitLossPeriod = {
+  today: 'today',
+  month: 'month',
+  last_month: 'last_month',
+  year: 'year',
+  custom: 'custom',
+} as const;
 

@@ -1290,3 +1290,135 @@ export const GetLedgerBalanceResponse = zod.object({
 })
 
 
+/**
+ * @summary Get account cards overview with balances and movements
+ */
+export const GetAccountSummaryResponse = zod.object({
+  "cash": zod.object({
+  "balanceUsd": zod.number(),
+  "balanceCdf": zod.number(),
+  "todayInUsd": zod.number(),
+  "todayOutUsd": zod.number(),
+  "monthInUsd": zod.number(),
+  "monthOutUsd": zod.number()
+}),
+  "sales": zod.object({
+  "todayUsd": zod.number(),
+  "todayCdf": zod.number(),
+  "monthUsd": zod.number(),
+  "monthCdf": zod.number()
+}),
+  "expenses": zod.object({
+  "todayUsd": zod.number(),
+  "todayCdf": zod.number(),
+  "monthUsd": zod.number(),
+  "monthCdf": zod.number()
+}),
+  "profit": zod.object({
+  "todayUsd": zod.number(),
+  "todayCdf": zod.number(),
+  "monthUsd": zod.number(),
+  "monthCdf": zod.number()
+})
+})
+
+
+/**
+ * @summary List sales/income entries
+ */
+export const ListSalesEntriesQueryParams = zod.object({
+  "page": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().optional(),
+  "search": zod.coerce.string().optional(),
+  "currency": zod.coerce.string().optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional()
+})
+
+export const ListSalesEntriesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "paymentNumber": zod.string().nullish(),
+  "direction": zod.string(),
+  "category": zod.string(),
+  "memberName": zod.string().nullish(),
+  "linkedEntityName": zod.string().nullish(),
+  "planName": zod.string().nullish(),
+  "amount": zod.number(),
+  "currency": zod.string(),
+  "amountUsd": zod.number().nullish(),
+  "amountCdf": zod.number().nullish(),
+  "paymentDate": zod.string(),
+  "createdBy": zod.string().nullish()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary List expense entries (payments + vouchers)
+ */
+export const ListExpenseEntriesQueryParams = zod.object({
+  "page": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().optional(),
+  "search": zod.coerce.string().optional(),
+  "currency": zod.coerce.string().optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional()
+})
+
+export const ListExpenseEntriesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.string(),
+  "sourceType": zod.string(),
+  "sourceNumber": zod.string().nullish(),
+  "date": zod.string(),
+  "description": zod.string().nullish(),
+  "party": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "amount": zod.number(),
+  "currency": zod.string(),
+  "amountUsd": zod.number(),
+  "amountCdf": zod.number(),
+  "createdBy": zod.string().nullish()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Get profit and loss report
+ */
+export const GetProfitLossQueryParams = zod.object({
+  "period": zod.enum(['today', 'month', 'last_month', 'year', 'custom']).optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional()
+})
+
+export const GetProfitLossResponse = zod.object({
+  "period": zod.string(),
+  "dateFrom": zod.string(),
+  "dateTo": zod.string(),
+  "revenue": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "expenses": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "net": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "breakdown": zod.record(zod.string(), zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}))
+})
+
+

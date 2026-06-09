@@ -30,6 +30,8 @@ tags:
     description: Cash vouchers
   - name: ledger
     description: Cash ledger
+  - name: accounts
+    description: Accounts overview and accounting reports
 paths:
   /healthz:
     get:
@@ -821,6 +823,106 @@ paths:
               schema:
                 $ref: "#/components/schemas/LedgerBalance"
 
+  /accounts/summary:
+    get:
+      operationId: getAccountSummary
+      tags: [accounts]
+      summary: Get account cards overview with balances and movements
+      responses:
+        "200":
+          description: Account summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountSummary"
+
+  /accounts/sales:
+    get:
+      operationId: listSalesEntries
+      tags: [accounts]
+      summary: List sales/income entries
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: currency
+          in: query
+          schema: { type: string }
+        - name: dateFrom
+          in: query
+          schema: { type: string }
+        - name: dateTo
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated sales entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesPage"
+
+  /accounts/expenses:
+    get:
+      operationId: listExpenseEntries
+      tags: [accounts]
+      summary: List expense entries (payments + vouchers)
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: currency
+          in: query
+          schema: { type: string }
+        - name: dateFrom
+          in: query
+          schema: { type: string }
+        - name: dateTo
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated expense entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpensePage"
+
+  /accounts/profit-loss:
+    get:
+      operationId: getProfitLoss
+      tags: [accounts]
+      summary: Get profit and loss report
+      parameters:
+        - name: period
+          in: query
+          schema: { type: string, enum: [today, month, last_month, year, custom] }
+        - name: dateFrom
+          in: query
+          schema: { type: string }
+        - name: dateTo
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Profit/loss report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfitLoss"
+
 components:
   schemas:
     HealthStatus:
@@ -1540,3 +1642,120 @@ components:
         balanceUsd: { type: number }
         balanceCdf: { type: number }
       required: [balanceUsd, balanceCdf]
+
+    AccountCard:
+      type: object
+      properties:
+        todayUsd: { type: number }
+        todayCdf: { type: number }
+        monthUsd: { type: number }
+        monthCdf: { type: number }
+      required: [todayUsd, todayCdf, monthUsd, monthCdf]
+
+    CashCard:
+      type: object
+      properties:
+        balanceUsd: { type: number }
+        balanceCdf: { type: number }
+        todayInUsd: { type: number }
+        todayOutUsd: { type: number }
+        monthInUsd: { type: number }
+        monthOutUsd: { type: number }
+      required: [balanceUsd, balanceCdf, todayInUsd, todayOutUsd, monthInUsd, monthOutUsd]
+
+    AccountSummary:
+      type: object
+      properties:
+        cash:
+          $ref: "#/components/schemas/CashCard"
+        sales:
+          $ref: "#/components/schemas/AccountCard"
+        expenses:
+          $ref: "#/components/schemas/AccountCard"
+        profit:
+          $ref: "#/components/schemas/AccountCard"
+      required: [cash, sales, expenses, profit]
+
+    SalesEntry:
+      type: object
+      properties:
+        id: { type: integer }
+        paymentNumber: { type: string, nullable: true }
+        direction: { type: string }
+        category: { type: string }
+        memberName: { type: string, nullable: true }
+        linkedEntityName: { type: string, nullable: true }
+        planName: { type: string, nullable: true }
+        amount: { type: number }
+        currency: { type: string }
+        amountUsd: { type: number, nullable: true }
+        amountCdf: { type: number, nullable: true }
+        paymentDate: { type: string }
+        createdBy: { type: string, nullable: true }
+      required: [id, direction, category, amount, currency, paymentDate]
+
+    SalesPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SalesEntry"
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+      required: [items, total, page, limit]
+
+    ExpenseEntry:
+      type: object
+      properties:
+        id: { type: string }
+        sourceType: { type: string }
+        sourceNumber: { type: string, nullable: true }
+        date: { type: string }
+        description: { type: string, nullable: true }
+        party: { type: string, nullable: true }
+        category: { type: string, nullable: true }
+        amount: { type: number }
+        currency: { type: string }
+        amountUsd: { type: number }
+        amountCdf: { type: number }
+        createdBy: { type: string, nullable: true }
+      required: [id, sourceType, date, amount, currency, amountUsd, amountCdf]
+
+    ExpensePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExpenseEntry"
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+      required: [items, total, page, limit]
+
+    AmountPair:
+      type: object
+      properties:
+        usd: { type: number }
+        cdf: { type: number }
+      required: [usd, cdf]
+
+    ProfitLoss:
+      type: object
+      properties:
+        period: { type: string }
+        dateFrom: { type: string }
+        dateTo: { type: string }
+        revenue:
+          $ref: "#/components/schemas/AmountPair"
+        expenses:
+          $ref: "#/components/schemas/AmountPair"
+        net:
+          $ref: "#/components/schemas/AmountPair"
+        breakdown:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/AmountPair"
+      required: [period, dateFrom, dateTo, revenue, expenses, net, breakdown]

@@ -1,0 +1,137 @@
+PHASE 6 – ACCOUNTS PAGE + ACCOUNTING REPORTS
+
+Build the Accounts page and reporting layer using the existing payments, vouchers, cash_ledger, payroll, stock, and sales structures.
+
+Important:
+- Cash only for now.
+- USD and CDF must both be supported.
+- Old transactions must keep their original exchange rate.
+- Do not edit cash_ledger directly.
+- Ledger must remain append-only.
+- Users without viewAccounting cannot access this page.
+- Users without viewProfit cannot see profit/loss reports.
+
+1. Accounts Page
+
+Create /accounts page with account cards:
+- Cash Account
+- Sales Account
+- Expense Account
+- Payroll Account
+- Inventory Account
+- Profit/Loss Account
+
+Each card should show:
+- Current balance USD
+- Current balance CDF
+- Today movement
+- This month movement
+
+2. Cash Account Ledger
+
+Show full cash ledger table:
+- Date
+- Source type
+- Source number
+- Description
+- In/Out
+- Amount
+- Currency
+- Exchange rate used
+- USD value
+- CDF value
+- Running balance USD
+- Running balance CDF
+- Created by
+
+Filters:
+- Date range
+- Source type
+- In/Out
+- Currency
+- Search by source number or description
+
+3. Sales Account
+
+Show income from:
+- Membership payments
+- Product sales
+- Future service sales
+
+Columns:
+- Date
+- Source
+- Customer/member
+- Amount
+- Currency
+- USD value
+- CDF value
+- Created by
+
+4. Expense Account
+
+Show:
+- Expense vouchers
+- Paid payments with category Expense
+- Payroll when paid
+- Stock purchases when paid
+
+5. Inventory Account
+
+Show:
+- Stock purchases
+- Product sales cost deduction
+- Current inventory value
+- Stock value USD and CDF
+
+Users without View Cost must not see inventory cost/value.
+
+6. Profit / Loss Report
+
+Calculate:
+Revenue
+minus COGS
+minus Expenses
+minus Payroll
+
+Show:
+- Today
+- This month
+- Last month
+- This year
+- Custom date range
+
+Use centralized profit engine only.
+Do not create a different formula.
+
+7. Reports
+
+Add printable reports:
+- Cash ledger report
+- Sales report
+- Expense report
+- Profit/loss report
+
+For now, print to browser window is enough. PDF export can be placeholder unless easy to add.
+
+8. Activity Logs
+
+Log:
+- Accounts report viewed
+- Cash ledger report printed
+- Sales report printed
+- Expense report printed
+- Profit/loss report printed
+
+9. UI Requirements
+
+- Clean account cards
+- Tabs for Cash, Sales, Expenses, Inventory, Profit/Loss
+- Search/filter/date range
+- Summary totals at the top of each tab
+- Loading states
+- Empty states
+- Toast notifications
+- Full EN / FR / AR translations
+
+Stop after Phase 6 and wait for approval.

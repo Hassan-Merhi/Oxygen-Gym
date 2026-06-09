@@ -20,20 +20,25 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AccountSummary,
   ActivityLog,
   CheckInBody,
   CheckInRecord,
   CheckInResult,
   CurrentUser,
   DashboardKpis,
+  ExpensePage,
   FreezeBody,
+  GetProfitLossParams,
   HealthStatus,
   LedgerBalance,
   LedgerPage,
   ListActivityLogsParams,
+  ListExpenseEntriesParams,
   ListLedgerParams,
   ListMembersParams,
   ListPaymentsParams,
+  ListSalesEntriesParams,
   ListVouchersParams,
   Member,
   MemberInput,
@@ -48,7 +53,9 @@ import type {
   PermissionsUpdate,
   Plan,
   PlanInput,
+  ProfitLoss,
   RenewBody,
+  SalesPage,
   Settings,
   SettingsUpdate,
   User,
@@ -3046,6 +3053,335 @@ export function useGetLedgerBalance<TData = Awaited<ReturnType<typeof getLedgerB
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetLedgerBalanceQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetAccountSummaryUrl = () => {
+
+
+
+
+  return `/api/accounts/summary`
+}
+
+/**
+ * @summary Get account cards overview with balances and movements
+ */
+export const getAccountSummary = async ( options?: RequestInit): Promise<AccountSummary> => {
+
+  return customFetch<AccountSummary>(getGetAccountSummaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAccountSummaryQueryKey = () => {
+    return [
+    `/api/accounts/summary`
+    ] as const;
+    }
+
+
+export const getGetAccountSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getAccountSummary>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAccountSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAccountSummaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAccountSummary>>> = ({ signal }) => getAccountSummary({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAccountSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAccountSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getAccountSummary>>>
+export type GetAccountSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get account cards overview with balances and movements
+ */
+
+export function useGetAccountSummary<TData = Awaited<ReturnType<typeof getAccountSummary>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAccountSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAccountSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListSalesEntriesUrl = (params?: ListSalesEntriesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/accounts/sales?${stringifiedParams}` : `/api/accounts/sales`
+}
+
+/**
+ * @summary List sales/income entries
+ */
+export const listSalesEntries = async (params?: ListSalesEntriesParams, options?: RequestInit): Promise<SalesPage> => {
+
+  return customFetch<SalesPage>(getListSalesEntriesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSalesEntriesQueryKey = (params?: ListSalesEntriesParams,) => {
+    return [
+    `/api/accounts/sales`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListSalesEntriesQueryOptions = <TData = Awaited<ReturnType<typeof listSalesEntries>>, TError = ErrorType<unknown>>(params?: ListSalesEntriesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSalesEntries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSalesEntriesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSalesEntries>>> = ({ signal }) => listSalesEntries(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSalesEntries>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSalesEntriesQueryResult = NonNullable<Awaited<ReturnType<typeof listSalesEntries>>>
+export type ListSalesEntriesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List sales/income entries
+ */
+
+export function useListSalesEntries<TData = Awaited<ReturnType<typeof listSalesEntries>>, TError = ErrorType<unknown>>(
+ params?: ListSalesEntriesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSalesEntries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSalesEntriesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListExpenseEntriesUrl = (params?: ListExpenseEntriesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/accounts/expenses?${stringifiedParams}` : `/api/accounts/expenses`
+}
+
+/**
+ * @summary List expense entries (payments + vouchers)
+ */
+export const listExpenseEntries = async (params?: ListExpenseEntriesParams, options?: RequestInit): Promise<ExpensePage> => {
+
+  return customFetch<ExpensePage>(getListExpenseEntriesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListExpenseEntriesQueryKey = (params?: ListExpenseEntriesParams,) => {
+    return [
+    `/api/accounts/expenses`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListExpenseEntriesQueryOptions = <TData = Awaited<ReturnType<typeof listExpenseEntries>>, TError = ErrorType<unknown>>(params?: ListExpenseEntriesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listExpenseEntries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListExpenseEntriesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listExpenseEntries>>> = ({ signal }) => listExpenseEntries(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listExpenseEntries>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListExpenseEntriesQueryResult = NonNullable<Awaited<ReturnType<typeof listExpenseEntries>>>
+export type ListExpenseEntriesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List expense entries (payments + vouchers)
+ */
+
+export function useListExpenseEntries<TData = Awaited<ReturnType<typeof listExpenseEntries>>, TError = ErrorType<unknown>>(
+ params?: ListExpenseEntriesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listExpenseEntries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListExpenseEntriesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetProfitLossUrl = (params?: GetProfitLossParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/accounts/profit-loss?${stringifiedParams}` : `/api/accounts/profit-loss`
+}
+
+/**
+ * @summary Get profit and loss report
+ */
+export const getProfitLoss = async (params?: GetProfitLossParams, options?: RequestInit): Promise<ProfitLoss> => {
+
+  return customFetch<ProfitLoss>(getGetProfitLossUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProfitLossQueryKey = (params?: GetProfitLossParams,) => {
+    return [
+    `/api/accounts/profit-loss`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetProfitLossQueryOptions = <TData = Awaited<ReturnType<typeof getProfitLoss>>, TError = ErrorType<unknown>>(params?: GetProfitLossParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProfitLoss>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProfitLossQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProfitLoss>>> = ({ signal }) => getProfitLoss(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProfitLoss>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProfitLossQueryResult = NonNullable<Awaited<ReturnType<typeof getProfitLoss>>>
+export type GetProfitLossQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get profit and loss report
+ */
+
+export function useGetProfitLoss<TData = Awaited<ReturnType<typeof getProfitLoss>>, TError = ErrorType<unknown>>(
+ params?: GetProfitLossParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProfitLoss>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProfitLossQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

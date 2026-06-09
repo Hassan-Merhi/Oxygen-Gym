@@ -11,6 +11,7 @@ import membersRouter from "./members";
 import paymentsRouter from "./payments";
 import vouchersRouter from "./vouchers";
 import ledgerRouter from "./ledger";
+import accountsRouter from "./accounts";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use("/members", membersRouter);
 router.use("/payments", paymentsRouter);
 router.use("/vouchers", vouchersRouter);
 router.use("/ledger", ledgerRouter);
+router.use("/accounts", accountsRouter);
 
 export default router;
