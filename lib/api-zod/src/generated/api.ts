@@ -464,6 +464,7 @@ export const ListActivityLogsResponse = zod.array(ListActivityLogsResponseItem)
  */
 export const ListPlansResponseItem = zod.object({
   "id": zod.number(),
+  "planNumber": zod.string().nullish(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "durationDays": zod.number(),
@@ -507,6 +508,7 @@ export const UpdatePlanBody = zod.object({
 
 export const UpdatePlanResponse = zod.object({
   "id": zod.number(),
+  "planNumber": zod.string().nullish(),
   "name": zod.string(),
   "description": zod.string().nullish(),
   "durationDays": zod.number(),

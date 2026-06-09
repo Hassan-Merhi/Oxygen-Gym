@@ -21,6 +21,7 @@ import Accounts from "@/pages/accounts";
 import Stock from "@/pages/stock";
 import Sales from "@/pages/sales";
 import Payroll from "@/pages/payroll";
+import Plans from "@/pages/plans";
 import Attendance from "@/pages/attendance";
 import NotificationsPage from "@/pages/notifications";
 import AuditPage from "@/pages/audit";
@@ -203,7 +204,7 @@ function ClerkProviderWithRoutes() {
                 </Show>
               </>
             )}</Route>
-            <Route path="/plans"><ProtectedRoute component={ComingSoon} /></Route>
+            <Route path="/plans"><ProtectedRoute component={Plans} /></Route>
             <Route path="/payroll"><ProtectedRoute component={Payroll} /></Route>
             <Route path="/attendance"><ProtectedRoute component={Attendance} /></Route>
             <Route path="/notifications"><ProtectedRoute component={NotificationsPage} /></Route>

@@ -8,6 +8,7 @@
 
 export interface Plan {
   id: number;
+  planNumber?: string | null;
   name: string;
   description?: string | null;
   durationDays: number;

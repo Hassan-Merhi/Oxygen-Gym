@@ -78,7 +78,7 @@ function EmployeeRecordsTab() {
     defaultValues: { name: "", phone: "", email: "", jobTitle: "", hireDate: "", salary: 0, salaryCurrency: "USD", paymentFrequency: "monthly", status: "active", notes: "" },
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["listStaffEmployees"] });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/staff-employees"] });
 
   const onAddSubmit = (data: z.infer<typeof empSchema>) => {
     createEmp.mutate({ data: { ...data, email: data.email || undefined, hireDate: data.hireDate || undefined } as any }, {

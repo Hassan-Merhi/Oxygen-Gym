@@ -126,8 +126,8 @@ export default function Stock() {
   const updateMutation = useUpdateProduct();
 
   function invalidate() {
-    qc.invalidateQueries({ queryKey: ["listProducts"] });
-    qc.invalidateQueries({ queryKey: ["getStockSummary"] });
+    qc.invalidateQueries({ queryKey: ["/api/stock"] });
+    qc.invalidateQueries({ queryKey: ["/api/stock/summary"] });
   }
 
   function openAdd() { setEditingProduct(null); setShowProductModal(true); }

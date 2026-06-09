@@ -91,7 +91,7 @@ export default function Payroll() {
   const watchEmpId = form.watch("staffEmployeeId");
   const selectedEmployee = employees.find(e => e.id === Number(watchEmpId));
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["listPayroll"] });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
 
   const onEmployeeSelect = (empId: string) => {
     form.setValue("staffEmployeeId", Number(empId));

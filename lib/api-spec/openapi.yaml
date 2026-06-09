@@ -2115,6 +2115,7 @@ components:
       type: object
       properties:
         id: { type: integer }
+        planNumber: { type: string, nullable: true }
         name: { type: string }
         description: { type: string, nullable: true }
         durationDays: { type: integer }

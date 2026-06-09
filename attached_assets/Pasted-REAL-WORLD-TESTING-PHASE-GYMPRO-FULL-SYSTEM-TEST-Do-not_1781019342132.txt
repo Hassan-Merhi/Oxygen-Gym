@@ -1,0 +1,217 @@
+REAL-WORLD TESTING PHASE – GYMPRO FULL SYSTEM TEST
+
+Do not add new features unless a bug fix is required.
+
+Use Replit testing tools to run a full real-world test of the GymPro application.
+
+Goal:
+Verify that all major modules work together correctly and produce accurate accounting, inventory, payroll, membership, and audit results.
+
+Create test data, run workflows, validate results, and return a checklist with PASS / FAIL / WARNING.
+
+Test these areas:
+
+1. Authentication & Permissions
+- Admin login
+- Manager login
+- Staff login
+- Page access restrictions
+- View Cost restriction
+- View Profit restriction
+- View Accounting restriction
+- Manage Members restriction
+- Manage Payroll restriction
+- Manage Inventory restriction
+
+2. Settings
+- Gym name saves correctly
+- Logo settings save correctly
+- USD/CDF exchange rate saves correctly
+- Language switching works for EN / FR / AR
+- Arabic RTL layout works
+- Receipt footer/settings appear on print templates
+
+3. Members
+Create at least 20 test members.
+Test:
+- Add member
+- Edit member
+- Renew member
+- Freeze member
+- Reactivate member
+- Mark inactive
+- Archive member
+- Manual check-in
+- Duplicate same-day check-in prevention
+- Expiry date calculation
+- Balance calculation
+- Member profile history
+
+4. Subscription Plans
+Create at least 5 plans.
+Test:
+- Add plan
+- Edit plan
+- Archive plan
+- Assign plan to member
+- Plan duration calculation
+- Revenue by plan
+
+5. Payments & Vouchers
+Create:
+- Membership payment
+- Balance payment
+- Cash received voucher
+- Cash payment voucher
+- Expense voucher
+
+Validate:
+- Payment numbers
+- Voucher numbers
+- USD/CDF values
+- Exchange rate stored per transaction
+- Cash ledger entry created
+- Cash balance updates correctly
+
+6. Accounts & Reports
+Validate:
+- Cash account balance
+- Sales account
+- Expense account
+- Payroll account
+- Inventory account
+- Profit/Loss report
+- Date filters
+- Print report buttons
+
+Expected formula:
+Cash Balance =
+Cash In
+-
+Cash Out
+
+Profit =
+Revenue
+-
+COGS
+-
+Expenses
+-
+Payroll
+
+7. Inventory
+Create at least 20 products.
+Test:
+- Add product
+- Edit product
+- Add barcode
+- Prevent duplicate barcode
+- Add stock purchase
+- Paid stock purchase creates cash ledger OUT entry
+- Quantity increases correctly
+- Average cost recalculates correctly
+- Low stock warning triggers
+- Stock value hides from users without View Cost
+
+8. POS / Sales
+Create at least 10 product sales.
+Test:
+- Product search
+- Barcode lookup
+- Add to cart
+- Quantity change
+- Discount
+- Payment amount
+- Change due
+- Complete sale
+- Receipt print
+- Stock deducts correctly
+- Cash ledger IN entry created
+- Product profit calculated correctly
+- Void sale restores stock
+- Void sale reverses ledger
+- Voided sale remains in history
+
+9. Staff & Payroll
+Create at least 5 staff employees.
+Test:
+- Add staff employee
+- Edit staff employee
+- Archive staff employee
+- Generate payroll draft
+- Mark payroll paid
+- Payroll creates payment record
+- Payroll creates ledger OUT entry
+- Cancel unpaid payroll
+- Cancel paid payroll creates reversal
+- Payroll slip print
+
+10. Attendance & Notifications
+Test:
+- Attendance page loads
+- Today / week / month check-in totals
+- Member attendance history
+- Expiring membership notifications
+- Low stock notifications
+- Payroll due notifications
+- Mark notification read
+- Mark all read
+
+11. Printing
+Test:
+- Sales receipt print
+- Payment receipt print
+- Voucher print
+- Payroll slip print
+- Membership card print
+- Barcode label print
+- Print logs created
+
+12. Audit Page
+Run full audit after all test workflows.
+
+Validate:
+- Cash reconciliation
+- Sales audit
+- Voided sales audit
+- Inventory audit
+- Payroll audit
+- Membership audit
+- Multi-currency audit
+- Permission audit
+- Data integrity audit
+- System health
+
+The audit should clearly show:
+- PASS / FAIL / WARNING
+- Issue count
+- Issue details
+- Suggested fixes
+
+13. Error Handling
+Test:
+- Invalid form entries
+- Missing required fields
+- Selling more stock than available
+- Payment less than sale total
+- Duplicate barcode
+- Unauthorized access
+- Archived product/member usage prevention
+
+14. Final Output
+
+Return a final checklist table with:
+- Module
+- Test performed
+- Result: PASS / FAIL / WARNING
+- Issue found
+- Recommended fix
+
+Also return:
+- Critical bugs
+- Accounting bugs
+- Permission bugs
+- UI bugs
+- Minor improvements
+
+Do not mark the project production-ready unless all accounting, inventory, payroll, sales, and permission tests pass.
