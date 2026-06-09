@@ -21,7 +21,12 @@ const BASE = import.meta.env.BASE_URL;
 async function uploadFile(file: File): Promise<string> {
   const fd = new FormData();
   fd.append("file", file);
-  const res = await fetch(`${BASE}api/upload`, { method: "POST", body: fd });
+  const token = localStorage.getItem("gym_token");
+  const res = await fetch(`${BASE}api/upload`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: fd,
+  });
   if (!res.ok) throw new Error("Upload failed");
   const json = await res.json();
   return json.url as string;
