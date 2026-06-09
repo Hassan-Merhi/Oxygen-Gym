@@ -30,6 +30,7 @@ import type {
   AttendanceMonthlyEntry,
   AttendanceSummary,
   AttendanceTopMember,
+  AuditReport,
   BarcodeProduct,
   CancelPayrollBody,
   CheckInBody,
@@ -41,6 +42,9 @@ import type {
   CurrentUser,
   DashboardKpis,
   ExpensePage,
+  FixAuditAccounts200,
+  FixAuditDashboard200,
+  FixAuditInventory200,
   FreezeBody,
   GetAttendanceDailyParams,
   GetAttendanceMonthlyParams,
@@ -3106,6 +3110,293 @@ export function useGetLedgerBalance<TData = Awaited<ReturnType<typeof getLedgerB
 
 
 
+
+export const getRunAuditUrl = () => {
+
+
+
+
+  return `/api/audit/run`
+}
+
+/**
+ * @summary Run full system audit
+ */
+export const runAudit = async ( options?: RequestInit): Promise<AuditReport> => {
+
+  return customFetch<AuditReport>(getRunAuditUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getRunAuditQueryKey = () => {
+    return [
+    `/api/audit/run`
+    ] as const;
+    }
+
+
+export const getRunAuditQueryOptions = <TData = Awaited<ReturnType<typeof runAudit>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof runAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getRunAuditQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof runAudit>>> = ({ signal }) => runAudit({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof runAudit>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type RunAuditQueryResult = NonNullable<Awaited<ReturnType<typeof runAudit>>>
+export type RunAuditQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Run full system audit
+ */
+
+export function useRunAudit<TData = Awaited<ReturnType<typeof runAudit>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof runAudit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getRunAuditQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getFixAuditInventoryUrl = () => {
+
+
+
+
+  return `/api/audit/fix/inventory`
+}
+
+/**
+ * @summary Recalculate product inventory quantities
+ */
+export const fixAuditInventory = async ( options?: RequestInit): Promise<FixAuditInventory200> => {
+
+  return customFetch<FixAuditInventory200>(getFixAuditInventoryUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getFixAuditInventoryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof fixAuditInventory>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof fixAuditInventory>>, TError,void, TContext> => {
+
+const mutationKey = ['fixAuditInventory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof fixAuditInventory>>, void> = () => {
+
+
+          return  fixAuditInventory(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FixAuditInventoryMutationResult = NonNullable<Awaited<ReturnType<typeof fixAuditInventory>>>
+
+    export type FixAuditInventoryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Recalculate product inventory quantities
+ */
+export const useFixAuditInventory = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof fixAuditInventory>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof fixAuditInventory>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getFixAuditInventoryMutationOptions(options));
+    }
+
+export const getFixAuditDashboardUrl = () => {
+
+
+
+
+  return `/api/audit/fix/dashboard`
+}
+
+/**
+ * @summary Rebuild dashboard KPI cache
+ */
+export const fixAuditDashboard = async ( options?: RequestInit): Promise<FixAuditDashboard200> => {
+
+  return customFetch<FixAuditDashboard200>(getFixAuditDashboardUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getFixAuditDashboardMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof fixAuditDashboard>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof fixAuditDashboard>>, TError,void, TContext> => {
+
+const mutationKey = ['fixAuditDashboard'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof fixAuditDashboard>>, void> = () => {
+
+
+          return  fixAuditDashboard(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FixAuditDashboardMutationResult = NonNullable<Awaited<ReturnType<typeof fixAuditDashboard>>>
+
+    export type FixAuditDashboardMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Rebuild dashboard KPI cache
+ */
+export const useFixAuditDashboard = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof fixAuditDashboard>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof fixAuditDashboard>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getFixAuditDashboardMutationOptions(options));
+    }
+
+export const getFixAuditAccountsUrl = () => {
+
+
+
+
+  return `/api/audit/fix/accounts`
+}
+
+/**
+ * @summary Rebuild account summaries
+ */
+export const fixAuditAccounts = async ( options?: RequestInit): Promise<FixAuditAccounts200> => {
+
+  return customFetch<FixAuditAccounts200>(getFixAuditAccountsUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getFixAuditAccountsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof fixAuditAccounts>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof fixAuditAccounts>>, TError,void, TContext> => {
+
+const mutationKey = ['fixAuditAccounts'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof fixAuditAccounts>>, void> = () => {
+
+
+          return  fixAuditAccounts(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FixAuditAccountsMutationResult = NonNullable<Awaited<ReturnType<typeof fixAuditAccounts>>>
+
+    export type FixAuditAccountsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Rebuild account summaries
+ */
+export const useFixAuditAccounts = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof fixAuditAccounts>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof fixAuditAccounts>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getFixAuditAccountsMutationOptions(options));
+    }
 
 export const getListAttendanceUrl = (params?: ListAttendanceParams,) => {
   const normalizedParams = new URLSearchParams();

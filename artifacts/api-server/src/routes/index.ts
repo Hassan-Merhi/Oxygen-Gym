@@ -18,6 +18,7 @@ import staffEmployeesRouter from "./staff-employees";
 import payrollRouter from "./payroll";
 import attendanceRouter from "./attendance";
 import notificationsRouter from "./notifications";
+import auditRouter from "./audit";
 
 const router: IRouter = Router();
 
@@ -40,5 +41,6 @@ router.use("/staff-employees", staffEmployeesRouter);
 router.use("/payroll", payrollRouter);
 router.use("/attendance", attendanceRouter);
 router.use("/notifications", notificationsRouter);
+router.use("/audit", auditRouter);
 
 export default router;

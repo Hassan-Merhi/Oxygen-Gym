@@ -1291,6 +1291,81 @@ export const GetLedgerBalanceResponse = zod.object({
 
 
 /**
+ * @summary Run full system audit
+ */
+export const RunAuditResponse = zod.object({
+  "generatedAt": zod.string(),
+  "totalIssues": zod.number(),
+  "accounting": zod.object({
+  "totalRevenue": zod.number(),
+  "totalExpenses": zod.number(),
+  "totalPayroll": zod.number(),
+  "totalInventoryCost": zod.number(),
+  "totalProfit": zod.number(),
+  "cashBalanceUsd": zod.number(),
+  "cashBalanceCdf": zod.number()
+}),
+  "sections": zod.array(zod.object({
+  "name": zod.string(),
+  "pass": zod.boolean(),
+  "issueCount": zod.number(),
+  "issues": zod.array(zod.object({
+  "id": zod.union([zod.string(),zod.number()]).nullish(),
+  "description": zod.string(),
+  "severity": zod.enum(['error', 'warning'])
+}))
+})),
+  "inventoryRows": zod.array(zod.object({
+
+}).passthrough()),
+  "systemHealth": zod.object({
+  "records": zod.object({
+  "members": zod.number(),
+  "staff": zod.number(),
+  "products": zod.number(),
+  "sales": zod.number(),
+  "payments": zod.number(),
+  "payroll": zod.number(),
+  "vouchers": zod.number(),
+  "checkIns": zod.number()
+}),
+  "dbSize": zod.string(),
+  "dbResponseMs": zod.number(),
+  "tableSizes": zod.array(zod.object({
+
+}).passthrough())
+})
+})
+
+
+/**
+ * @summary Recalculate product inventory quantities
+ */
+export const FixAuditInventoryResponse = zod.object({
+  "fixed": zod.number(),
+  "rows": zod.array(zod.object({
+
+}).passthrough())
+})
+
+
+/**
+ * @summary Rebuild dashboard KPI cache
+ */
+export const FixAuditDashboardResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Rebuild account summaries
+ */
+export const FixAuditAccountsResponse = zod.object({
+
+}).passthrough()
+
+
+/**
  * @summary Get filtered attendance list
  */
 export const ListAttendanceQueryParams = zod.object({

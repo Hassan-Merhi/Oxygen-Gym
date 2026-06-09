@@ -13,6 +13,7 @@ import {
   TrendingUp,
   Settings,
   CalendarCheck,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { id: "accounts", href: "/accounts", icon: Briefcase, labelKey: "nav.accounts" },
   { id: "stock", href: "/stock", icon: Package, labelKey: "nav.stock" },
   { id: "sales", href: "/sales", icon: TrendingUp, labelKey: "nav.sales" },
+  { id: "audit", href: "/audit", icon: ShieldCheck, labelKey: "nav.audit" },
   { id: "settings", href: "/settings", icon: Settings, labelKey: "nav.settings" },
 ];
 

@@ -1072,6 +1072,68 @@ export interface AttendanceListResponse {
   limit: number;
 }
 
+export type AuditIssueSeverity = typeof AuditIssueSeverity[keyof typeof AuditIssueSeverity];
+
+
+export const AuditIssueSeverity = {
+  error: 'error',
+  warning: 'warning',
+} as const;
+
+export interface AuditIssue {
+  id?: string | number | null;
+  description: string;
+  severity: AuditIssueSeverity;
+}
+
+export interface AuditSection {
+  name: string;
+  pass: boolean;
+  issueCount: number;
+  issues: AuditIssue[];
+}
+
+export interface AuditAccounting {
+  totalRevenue: number;
+  totalExpenses: number;
+  totalPayroll: number;
+  totalInventoryCost: number;
+  totalProfit: number;
+  cashBalanceUsd: number;
+  cashBalanceCdf: number;
+}
+
+export type AuditSystemHealthRecords = {
+  members: number;
+  staff: number;
+  products: number;
+  sales: number;
+  payments: number;
+  payroll: number;
+  vouchers: number;
+  checkIns: number;
+};
+
+export type AuditSystemHealthTableSizesItem = { [key: string]: unknown };
+
+export interface AuditSystemHealth {
+  records: AuditSystemHealthRecords;
+  dbSize: string;
+  dbResponseMs: number;
+  tableSizes: AuditSystemHealthTableSizesItem[];
+}
+
+export type AuditReportInventoryRowsItem = { [key: string]: unknown };
+
+export interface AuditReport {
+  generatedAt: string;
+  totalIssues: number;
+  accounting: AuditAccounting;
+  sections: AuditSection[];
+  inventoryRows: AuditReportInventoryRowsItem[];
+  systemHealth: AuditSystemHealth;
+}
+
 export interface AttendanceSummary {
   today: number;
   thisWeek: number;
@@ -1180,6 +1242,19 @@ dateFrom?: string;
 dateTo?: string;
 direction?: string;
 };
+
+export type FixAuditInventory200RowsItem = { [key: string]: unknown };
+
+export type FixAuditInventory200 = {
+  fixed: number;
+  rows: FixAuditInventory200RowsItem[];
+};
+
+export type FixAuditDashboard200 = {
+  message: string;
+};
+
+export type FixAuditAccounts200 = { [key: string]: unknown };
 
 export type ListAttendanceParams = {
 from?: string;

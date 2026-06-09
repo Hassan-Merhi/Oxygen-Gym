@@ -827,6 +827,65 @@ paths:
               schema:
                 $ref: "#/components/schemas/LedgerBalance"
 
+  /audit/run:
+    get:
+      operationId: runAudit
+      summary: Run full system audit
+      tags: [audit]
+      responses:
+        "200":
+          description: Full audit report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditReport"
+
+  /audit/fix/inventory:
+    post:
+      operationId: fixAuditInventory
+      summary: Recalculate product inventory quantities
+      tags: [audit]
+      responses:
+        "200":
+          description: Fixed rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fixed: { type: integer }
+                  rows: { type: array, items: { type: object } }
+                required: [fixed, rows]
+
+  /audit/fix/dashboard:
+    post:
+      operationId: fixAuditDashboard
+      summary: Rebuild dashboard KPI cache
+      tags: [audit]
+      responses:
+        "200":
+          description: Result message
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                required: [message]
+
+  /audit/fix/accounts:
+    post:
+      operationId: fixAuditAccounts
+      summary: Rebuild account summaries
+      tags: [audit]
+      responses:
+        "200":
+          description: Account summary
+          content:
+            application/json:
+              schema:
+                type: object
+
   /attendance/list:
     get:
       operationId: listAttendance
@@ -2858,6 +2917,78 @@ components:
         page: { type: integer }
         limit: { type: integer }
       required: [items, total, page, limit]
+
+    AuditIssue:
+      type: object
+      properties:
+        id: { oneOf: [{ type: string }, { type: integer }], nullable: true }
+        description: { type: string }
+        severity: { type: string, enum: [error, warning] }
+      required: [description, severity]
+
+    AuditSection:
+      type: object
+      properties:
+        name: { type: string }
+        pass: { type: boolean }
+        issueCount: { type: integer }
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditIssue"
+      required: [name, pass, issueCount, issues]
+
+    AuditAccounting:
+      type: object
+      properties:
+        totalRevenue: { type: number }
+        totalExpenses: { type: number }
+        totalPayroll: { type: number }
+        totalInventoryCost: { type: number }
+        totalProfit: { type: number }
+        cashBalanceUsd: { type: number }
+        cashBalanceCdf: { type: number }
+      required: [totalRevenue, totalExpenses, totalPayroll, totalInventoryCost, totalProfit, cashBalanceUsd, cashBalanceCdf]
+
+    AuditSystemHealth:
+      type: object
+      properties:
+        records:
+          type: object
+          properties:
+            members: { type: integer }
+            staff: { type: integer }
+            products: { type: integer }
+            sales: { type: integer }
+            payments: { type: integer }
+            payroll: { type: integer }
+            vouchers: { type: integer }
+            checkIns: { type: integer }
+          required: [members, staff, products, sales, payments, payroll, vouchers, checkIns]
+        dbSize: { type: string }
+        dbResponseMs: { type: integer }
+        tableSizes:
+          type: array
+          items: { type: object }
+      required: [records, dbSize, dbResponseMs, tableSizes]
+
+    AuditReport:
+      type: object
+      properties:
+        generatedAt: { type: string }
+        totalIssues: { type: integer }
+        accounting:
+          $ref: "#/components/schemas/AuditAccounting"
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditSection"
+        inventoryRows:
+          type: array
+          items: { type: object }
+        systemHealth:
+          $ref: "#/components/schemas/AuditSystemHealth"
+      required: [generatedAt, totalIssues, accounting, sections, inventoryRows, systemHealth]
 
     AttendanceSummary:
       type: object
