@@ -39,7 +39,7 @@ export default function Financials() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6">
       {/* Header */}
       <h1 className="text-2xl font-bold text-foreground">{t("acc.title")}</h1>
 

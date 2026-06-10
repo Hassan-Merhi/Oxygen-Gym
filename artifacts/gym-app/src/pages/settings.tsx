@@ -180,7 +180,7 @@ export default function Settings() {
   const backupEnabled = form.watch("backupEnabled");
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="max-w-5xl space-y-6">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-500/20 to-slate-400/10 flex items-center justify-center">
           <Settings2 className="w-5 h-5 text-slate-600" />
