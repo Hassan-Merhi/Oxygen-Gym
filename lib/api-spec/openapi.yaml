@@ -2301,6 +2301,7 @@ components:
         amountPaid: { type: number }
         discount: { type: number }
         currency: { type: string, enum: [USD, CDF] }
+        cashAccountId: { type: integer, nullable: true }
         photoUrl: { type: string, nullable: true }
         fingerprintId: { type: string, nullable: true }
         qrCodeId: { type: string, nullable: true }
@@ -2311,12 +2312,7 @@ components:
       type: object
       properties:
         name: { type: string }
-        email: { type: string, nullable: true }
         phone: { type: string, nullable: true }
-        address: { type: string, nullable: true }
-        emergencyContact: { type: string, nullable: true }
-        gender: { type: string, nullable: true }
-        joinDate: { type: string, nullable: true }
         planId: { type: integer, nullable: true }
         startDate: { type: string, nullable: true }
         expiryDate: { type: string, nullable: true }
@@ -2324,6 +2320,7 @@ components:
         amountPaid: { type: number, nullable: true }
         discount: { type: number, nullable: true }
         currency: { type: string, nullable: true }
+        cashAccountId: { type: integer, nullable: true }
         photoUrl: { type: string, nullable: true }
         fingerprintId: { type: string, nullable: true }
         qrCodeId: { type: string, nullable: true }
@@ -2378,6 +2375,7 @@ components:
         amountPaid: { type: number }
         discount: { type: number }
         currency: { type: string, enum: [USD, CDF] }
+        cashAccountId: { type: integer, nullable: true }
         notes: { type: string, nullable: true }
       required: [planId, startDate, expiryDate, amountPaid, discount, currency]
 

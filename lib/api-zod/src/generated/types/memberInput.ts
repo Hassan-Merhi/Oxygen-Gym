@@ -22,6 +22,7 @@ export interface MemberInput {
   amountPaid: number;
   discount: number;
   currency: MemberInputCurrency;
+  cashAccountId?: number | null;
   photoUrl?: string | null;
   fingerprintId?: string | null;
   qrCodeId?: string | null;

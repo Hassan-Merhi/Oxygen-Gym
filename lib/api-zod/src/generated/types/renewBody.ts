@@ -14,5 +14,6 @@ export interface RenewBody {
   amountPaid: number;
   discount: number;
   currency: RenewBodyCurrency;
+  cashAccountId?: number | null;
   notes?: string | null;
 }

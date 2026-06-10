@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useI18n } from "@/lib/i18n";
 import { useGetMe } from "@/hooks/use-me";
+import { useQuery } from "@tanstack/react-query";
 import { fmtDate } from "@/lib/date";
 import {
   useListMembers,
@@ -114,11 +115,6 @@ function StatusBadge({ status, t }: { status: string; t: (k: string) => string }
 const memberSchema = z.object({
   name: z.string().min(1, "Name is required"),
   phone: z.string().optional(),
-  email: z.string().optional(),
-  address: z.string().optional(),
-  emergencyContact: z.string().optional(),
-  gender: z.string().optional(),
-  joinDate: z.string().optional(),
   planId: z.string().optional(),
   startDate: z.string().optional(),
   expiryDate: z.string().optional(),
@@ -126,6 +122,7 @@ const memberSchema = z.object({
   amountPaid: z.coerce.number().min(0).default(0),
   discount: z.coerce.number().min(0).default(0),
   currency: z.enum(["USD", "CDF"]).default("USD"),
+  cashAccountId: z.string().optional(),
   notes: z.string().optional(),
   fingerprintId: z.string().optional(),
   qrCodeId: z.string().optional(),
@@ -139,6 +136,7 @@ const renewSchema = z.object({
   amountPaid: z.coerce.number().min(0).default(0),
   discount: z.coerce.number().min(0).default(0),
   currency: z.enum(["USD", "CDF"]).default("USD"),
+  cashAccountId: z.string().optional(),
   notes: z.string().optional(),
 });
 type RenewFormValues = z.infer<typeof renewSchema>;
@@ -184,6 +182,17 @@ export default function MembersPage() {
   const [checkInMember, setCheckInMember] = useState<Member | null>(null);
   const [checkInForce, setCheckInForce] = useState(false);
   const [reactivateMember, setReactivateMember] = useState<Member | null>(null);
+
+  // ── Chart of accounts (cash accounts for voucher selection)
+  const { data: chartAccounts = [] } = useQuery<{ id: number; name: string; type: string; isActive: boolean }[]>({
+    queryKey: ["/api/accounts/chart"],
+    queryFn: async () => {
+      const token = localStorage.getItem("gym_token");
+      const res = await fetch("/api/accounts/chart", { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    },
+  });
+  const cashAccounts = chartAccounts.filter((a) => a.type === "asset" && a.isActive);
 
   // ── Queries
   const { data: membersData, isLoading } = useListMembers({
@@ -231,19 +240,18 @@ export default function MembersPage() {
 
   function openAdd() {
     const today = new Date().toISOString().split("T")[0];
-    form.reset({ status: "active", currency: "USD", amountPaid: 0, discount: 0, joinDate: today, startDate: today });
+    form.reset({ status: "active", currency: "USD", amountPaid: 0, discount: 0, startDate: today, cashAccountId: "" });
     setPlanPrice(0);
     setAddOpen(true);
   }
   function openEdit(m: Member) {
     form.reset({
-      name: m.name, phone: m.phone ?? "", email: m.email ?? "",
-      address: m.address ?? "", emergencyContact: m.emergencyContact ?? "",
-      gender: m.gender ?? "", joinDate: toDateInput(m.joinDate),
+      name: m.name, phone: m.phone ?? "",
       planId: m.planId ? String(m.planId) : "",
       startDate: toDateInput(m.startDate), expiryDate: toDateInput(m.expiryDate),
       status: m.status, amountPaid: m.amountPaid ?? 0, discount: m.discount ?? 0,
       currency: (m.currency as "USD" | "CDF") ?? "USD",
+      cashAccountId: "",
       notes: m.notes ?? "", fingerprintId: m.fingerprintId ?? "", qrCodeId: m.qrCodeId ?? "",
     });
     setPlanPrice(m.planPrice ?? 0);
@@ -267,9 +275,9 @@ export default function MembersPage() {
     const payload = {
       ...values,
       planId: values.planId ? parseInt(values.planId) : undefined,
-      joinDate: values.joinDate || undefined,
       startDate: values.startDate || undefined,
       expiryDate: values.expiryDate || undefined,
+      cashAccountId: values.cashAccountId ? parseInt(values.cashAccountId) : undefined,
     };
     if (editMember) {
       updateMutation.mutate({ id: editMember.id, data: payload });
@@ -303,7 +311,11 @@ export default function MembersPage() {
 
   async function onRenewSubmit(values: RenewFormValues) {
     if (!renewMember) return;
-    renewMutation.mutate({ id: renewMember.id, data: { ...values, planId: parseInt(values.planId) } });
+    renewMutation.mutate({ id: renewMember.id, data: {
+      ...values,
+      planId: parseInt(values.planId),
+      cashAccountId: values.cashAccountId ? parseInt(values.cashAccountId) : undefined,
+    }});
   }
 
   // ── Freeze form
@@ -588,29 +600,6 @@ export default function MembersPage() {
                   <Label>{t("members.form.phone")}</Label>
                   <Input {...form.register("phone")} className="mt-1" />
                 </div>
-                <div>
-                  <Label>{t("members.form.email")}</Label>
-                  <Input {...form.register("email")} type="email" className="mt-1" />
-                </div>
-                <div className="col-span-2">
-                  <Label>{t("members.form.address")}</Label>
-                  <Input {...form.register("address")} className="mt-1" />
-                </div>
-                <div>
-                  <Label>{t("members.form.emergencyContact")}</Label>
-                  <Input {...form.register("emergencyContact")} className="mt-1" />
-                </div>
-                <div>
-                  <Label>{t("members.form.gender")}</Label>
-                  <Select value={form.watch("gender") ?? ""} onValueChange={(v) => form.setValue("gender", v)}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder="—" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="male">{t("members.form.gender.male")}</SelectItem>
-                      <SelectItem value="female">{t("members.form.gender.female")}</SelectItem>
-                      <SelectItem value="other">{t("members.form.gender.other")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
             </div>
 
@@ -638,10 +627,6 @@ export default function MembersPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div>
-                  <Label>{t("members.form.joinDate")}</Label>
-                  <Input type="date" {...form.register("joinDate")} className="mt-1" />
                 </div>
                 <div>
                   <Label>{t("members.form.startDate")}</Label>
@@ -691,6 +676,20 @@ export default function MembersPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                {(amountPaid > 0) && (
+                  <div className="col-span-2">
+                    <Label>{t("members.form.cashAccount")}</Label>
+                    <Select value={form.watch("cashAccountId") ?? ""} onValueChange={(v) => form.setValue("cashAccountId", v)}>
+                      <SelectTrigger className="mt-1"><SelectValue placeholder={t("members.form.selectCashAccount")} /></SelectTrigger>
+                      <SelectContent>
+                        {cashAccounts.map((a) => (
+                          <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">{t("members.form.cashAccountHint")}</p>
+                  </div>
+                )}
                 {planPrice > 0 && (
                   <div>
                     <Label>{t("members.form.balance")}</Label>
@@ -770,6 +769,19 @@ export default function MembersPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {(renewAmountPaid > 0) && (
+                <div className="col-span-2">
+                  <Label>{t("members.form.cashAccount")}</Label>
+                  <Select value={renewForm.watch("cashAccountId") ?? ""} onValueChange={(v) => renewForm.setValue("cashAccountId", v)}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder={t("members.form.selectCashAccount")} /></SelectTrigger>
+                    <SelectContent>
+                      {cashAccounts.map((a) => (
+                        <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               {renewPlanPrice > 0 && (
                 <div>
                   <Label>{t("members.renew.balance")}</Label>

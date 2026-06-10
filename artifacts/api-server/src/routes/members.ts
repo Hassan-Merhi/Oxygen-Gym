@@ -5,6 +5,8 @@ import {
   checkInsTable,
   paymentsTable,
   plansTable,
+  vouchersTable,
+  chartOfAccountsTable,
 } from "@workspace/db/schema";
 import {
   eq,
@@ -90,12 +92,7 @@ router.get("/", async (req: Request, res: Response) => {
 router.post("/", async (req: Request, res: Response) => {
   const body = req.body as {
     name: string;
-    email?: string;
     phone?: string;
-    address?: string;
-    emergencyContact?: string;
-    gender?: string;
-    joinDate?: string;
     planId?: number;
     startDate?: string;
     expiryDate?: string;
@@ -103,6 +100,7 @@ router.post("/", async (req: Request, res: Response) => {
     amountPaid?: number;
     discount?: number;
     currency?: string;
+    cashAccountId?: number;
     photoUrl?: string;
     fingerprintId?: string;
     qrCodeId?: string;
@@ -127,12 +125,8 @@ router.post("/", async (req: Request, res: Response) => {
   const [member] = await db.insert(membersTable).values({
     memberNumber,
     name: body.name,
-    email: body.email,
     phone: body.phone,
-    address: body.address,
-    emergencyContact: body.emergencyContact,
-    gender: body.gender,
-    joinDate: body.joinDate ? new Date(body.joinDate) : new Date(),
+    joinDate: new Date(),
     planId: body.planId,
     planName,
     planPrice,
@@ -167,6 +161,28 @@ router.post("/", async (req: Request, res: Response) => {
     });
   }
 
+  if (amountPaid > 0 && body.cashAccountId) {
+    let accountName = "cash";
+    const [acct] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, body.cashAccountId));
+    if (acct) accountName = acct.name.toLowerCase().replace(/ /g, "_");
+    const voucherNumber = await getNextNumber("VCH");
+    await db.insert(vouchersTable).values({
+      voucherNumber,
+      voucherType: "cash_receipt",
+      direction: "in",
+      receivedFrom: member.name,
+      linkedEntity: "member",
+      linkedEntityId: member.id,
+      linkedEntityName: member.name,
+      amount: amountPaid,
+      currency: member.currency,
+      account: accountName,
+      category: "membership",
+      description: `Membership payment — ${planName ?? ""}`,
+      status: "recorded",
+    });
+  }
+
   await logActivity(req, "create_member", "member", member.id, { name: member.name, memberNumber });
   res.status(201).json(member);
 });
@@ -196,8 +212,8 @@ router.patch("/:id", async (req: Request, res: Response) => {
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
   const updateData: Record<string, unknown> = {};
-  const dateFields = ["joinDate", "startDate", "expiryDate"];
-  const allowed = ["name","email","phone","address","emergencyContact","gender","joinDate","planId","startDate","expiryDate","status","amountPaid","discount","currency","photoUrl","fingerprintId","qrCodeId","notes"];
+  const dateFields = ["startDate", "expiryDate"];
+  const allowed = ["name","phone","planId","startDate","expiryDate","status","amountPaid","discount","currency","photoUrl","fingerprintId","qrCodeId","notes"];
   for (const key of allowed) {
     if (body[key] !== undefined) {
       updateData[key] = dateFields.includes(key) && body[key]
@@ -213,6 +229,31 @@ router.patch("/:id", async (req: Request, res: Response) => {
   updateData.balance = pp - disc - ap;
 
   const [member] = await db.update(membersTable).set(updateData).where(eq(membersTable.id, id)).returning();
+
+  const cashAccountId = body.cashAccountId as number | undefined;
+  const newAmountPaid = updateData.amountPaid as number | undefined;
+  if (newAmountPaid !== undefined && newAmountPaid > 0 && cashAccountId) {
+    let accountName = "cash";
+    const [acct] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, cashAccountId));
+    if (acct) accountName = acct.name.toLowerCase().replace(/ /g, "_");
+    const voucherNumber = await getNextNumber("VCH");
+    await db.insert(vouchersTable).values({
+      voucherNumber,
+      voucherType: "cash_receipt",
+      direction: "in",
+      receivedFrom: member.name,
+      linkedEntity: "member",
+      linkedEntityId: member.id,
+      linkedEntityName: member.name,
+      amount: newAmountPaid,
+      currency: member.currency,
+      account: accountName,
+      category: "membership",
+      description: `Membership payment — ${member.planName ?? ""}`,
+      status: "recorded",
+    });
+  }
+
   await logActivity(req, "update_member", "member", id, { name: member.name });
   res.json(member);
 });
@@ -266,7 +307,7 @@ router.post("/:id/checkin", async (req: Request, res: Response) => {
 // ─── Renew ───────────────────────────────────────────────────────────────────
 router.post("/:id/renew", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const body = req.body as { planId: number; startDate: string; expiryDate: string; amountPaid: number; discount: number; currency: string; notes?: string };
+  const body = req.body as { planId: number; startDate: string; expiryDate: string; amountPaid: number; discount: number; currency: string; cashAccountId?: number; notes?: string };
 
   const [existing] = await db.select().from(membersTable).where(eq(membersTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
@@ -291,6 +332,28 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
     currency: body.currency, type: "membership", notes: body.notes,
     paymentDate: new Date(), status: "completed",
   });
+
+  if ((body.amountPaid ?? 0) > 0 && body.cashAccountId) {
+    let accountName = "cash";
+    const [acct] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, body.cashAccountId));
+    if (acct) accountName = acct.name.toLowerCase().replace(/ /g, "_");
+    const voucherNumber = await getNextNumber("VCH");
+    await db.insert(vouchersTable).values({
+      voucherNumber,
+      voucherType: "cash_receipt",
+      direction: "in",
+      receivedFrom: existing.name,
+      linkedEntity: "member",
+      linkedEntityId: id,
+      linkedEntityName: existing.name,
+      amount: body.amountPaid,
+      currency: body.currency,
+      account: accountName,
+      category: "membership",
+      description: `Membership renewal — ${plan.name}`,
+      status: "recorded",
+    });
+  }
 
   await logActivity(req, "renew_member", "member", id, { name: existing.name, plan: plan.name });
   res.json(member);

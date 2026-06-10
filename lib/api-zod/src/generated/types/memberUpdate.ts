@@ -8,12 +8,7 @@
 
 export interface MemberUpdate {
   name?: string;
-  email?: string | null;
   phone?: string | null;
-  address?: string | null;
-  emergencyContact?: string | null;
-  gender?: string | null;
-  joinDate?: string | null;
   planId?: number | null;
   startDate?: string | null;
   expiryDate?: string | null;
@@ -21,6 +16,7 @@ export interface MemberUpdate {
   amountPaid?: number | null;
   discount?: number | null;
   currency?: string | null;
+  cashAccountId?: number | null;
   photoUrl?: string | null;
   fingerprintId?: string | null;
   qrCodeId?: string | null;

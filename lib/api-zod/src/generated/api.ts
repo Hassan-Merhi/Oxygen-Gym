@@ -717,6 +717,7 @@ export const CreateMemberBody = zod.object({
   "amountPaid": zod.number(),
   "discount": zod.number(),
   "currency": zod.enum(['USD', 'CDF']),
+  "cashAccountId": zod.number().nullish(),
   "photoUrl": zod.string().nullish(),
   "fingerprintId": zod.string().nullish(),
   "qrCodeId": zod.string().nullish(),
@@ -773,12 +774,7 @@ export const UpdateMemberParams = zod.object({
 
 export const UpdateMemberBody = zod.object({
   "name": zod.string().optional(),
-  "email": zod.string().nullish(),
   "phone": zod.string().nullish(),
-  "address": zod.string().nullish(),
-  "emergencyContact": zod.string().nullish(),
-  "gender": zod.string().nullish(),
-  "joinDate": zod.string().nullish(),
   "planId": zod.number().nullish(),
   "startDate": zod.string().nullish(),
   "expiryDate": zod.string().nullish(),
@@ -786,6 +782,7 @@ export const UpdateMemberBody = zod.object({
   "amountPaid": zod.number().nullish(),
   "discount": zod.number().nullish(),
   "currency": zod.string().nullish(),
+  "cashAccountId": zod.number().nullish(),
   "photoUrl": zod.string().nullish(),
   "fingerprintId": zod.string().nullish(),
   "qrCodeId": zod.string().nullish(),
@@ -872,6 +869,7 @@ export const RenewMemberBody = zod.object({
   "amountPaid": zod.number(),
   "discount": zod.number(),
   "currency": zod.enum(['USD', 'CDF']),
+  "cashAccountId": zod.number().nullish(),
   "notes": zod.string().nullish()
 })
 
