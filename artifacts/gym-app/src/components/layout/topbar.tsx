@@ -3,7 +3,7 @@ import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { LogOut, Bell, Check, CheckCheck, AlertCircle, Package, DollarSign, UserX, Snowflake } from "lucide-react";
+import { LogOut, Bell, Check, CheckCheck, AlertCircle, Package, DollarSign, UserX, Snowflake, Sun, Moon } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -18,6 +18,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/lib/theme";
 
 const TYPE_ICONS: Record<string, React.ElementType> = {
   member_expiring: AlertCircle,
@@ -168,6 +169,7 @@ export function Topbar() {
   const { t, language, setLanguage } = useI18n();
   const { user, logout } = useAuth();
   const [, setLocation] = useLocation();
+  const { theme, toggle } = useTheme();
 
   const handleLogout = () => {
     logout();
@@ -195,6 +197,16 @@ export function Topbar() {
             <SelectItem value="ar">العربية</SelectItem>
           </SelectContent>
         </Select>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9"
+          onClick={toggle}
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+        </Button>
 
         <div className="h-8 w-px bg-border" />
 
