@@ -1072,32 +1072,44 @@ export default function StaffPage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{t("staff.title")}</h1>
-          <p className="text-sm text-muted-foreground">Manage your team, roles, and payroll</p>
+          <p className="text-sm text-muted-foreground">{t("staff.subtitle")}</p>
         </div>
       </div>
 
-      <Tabs defaultValue="login-users">
+      <Tabs defaultValue="staff">
         <TabsList className="h-10">
-          <TabsTrigger value="login-users" className="gap-2">
-            <ShieldAlert className="w-3.5 h-3.5" />
-            {t("staff.tabs.loginUsers")}
-          </TabsTrigger>
-          <TabsTrigger value="employees" className="gap-2">
+          <TabsTrigger value="staff" className="gap-2">
             <Users className="w-3.5 h-3.5" />
-            {t("staff.tabs.employees")}
+            {t("staff.tabUsers")}
           </TabsTrigger>
           <TabsTrigger value="payroll" className="gap-2">
             <CreditCard className="w-3.5 h-3.5" />
-            Payroll
+            {t("nav.payroll")}
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="login-users" className="mt-6">
-          <LoginUsersTab />
+        <TabsContent value="staff" className="mt-6 space-y-8">
+          {/* Login users section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-violet-500" />
+              <h2 className="text-base font-semibold">{t("staff.tabUsers")}</h2>
+            </div>
+            <LoginUsersTab />
+          </div>
+
+          <div className="border-t dark:border-slate-700" />
+
+          {/* Employee records section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-blue-500" />
+              <h2 className="text-base font-semibold">{t("staff.tabEmployees")}</h2>
+            </div>
+            <EmployeeRecordsTab />
+          </div>
         </TabsContent>
-        <TabsContent value="employees" className="mt-6">
-          <EmployeeRecordsTab />
-        </TabsContent>
+
         <TabsContent value="payroll" className="mt-6">
           <PayrollTab />
         </TabsContent>

@@ -81,6 +81,7 @@ const en: Translations = {
   "dashboard.welcome": "Welcome back",
 
   "staff.title": "Staff Management",
+  "staff.subtitle": "Manage your team, roles, and payroll",
   "staff.addStaff": "Add Staff",
   "staff.table.name": "Name",
   "staff.table.email": "Email",
@@ -783,6 +784,7 @@ const fr: Translations = {
   "dashboard.welcome": "Bon retour",
 
   "staff.title": "Gestion du Personnel",
+  "staff.subtitle": "Gérez votre équipe, les rôles et la paie",
   "staff.addStaff": "Ajouter du Personnel",
   "staff.table.name": "Nom",
   "staff.table.email": "Email",
@@ -1485,6 +1487,7 @@ const ar: Translations = {
   "dashboard.welcome": "مرحباً بعودتك",
 
   "staff.title": "إدارة الموظفين",
+  "staff.subtitle": "إدارة فريقك والأدوار والرواتب",
   "staff.addStaff": "إضافة موظف",
   "staff.table.name": "الاسم",
   "staff.table.email": "البريد الإلكتروني",
