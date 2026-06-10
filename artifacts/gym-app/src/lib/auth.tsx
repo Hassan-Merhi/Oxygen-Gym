@@ -1,35 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
+import { AuthContext, TOKEN_KEY } from "./auth-context";
+import type { AuthState } from "./auth-context";
 
-const TOKEN_KEY = "gym_token";
-
-export interface AuthUser {
-  id: number;
-  username: string;
-  name: string;
-  email?: string | null;
-  role: string;
-  status: string;
-  permissions: Record<string, boolean>;
-  lastLoginAt?: string | null;
-}
-
-interface AuthState {
-  user: AuthUser | null;
-  isLoading: boolean;
-  token: string | null;
-}
-
-interface AuthContextValue extends AuthState {
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => void;
-  isAuthenticated: boolean;
-  refreshUser: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
-
-async function fetchMe(token: string): Promise<AuthUser | null> {
+async function fetchMe(token: string) {
   try {
     const res = await fetch("/api/auth/me", {
       headers: { Authorization: `Bearer ${token}` },
@@ -49,7 +23,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    // Wire up the token getter for all generated API hooks
     setAuthTokenGetter(() => localStorage.getItem(TOKEN_KEY));
 
     const storedToken = localStorage.getItem(TOKEN_KEY);
@@ -105,10 +78,4 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
 }

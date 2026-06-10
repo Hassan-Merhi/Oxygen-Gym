@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useI18n } from "@/lib/i18n";
-import { useAuth } from "@/lib/auth";
+import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { LogOut, Bell, Check, CheckCheck, AlertCircle, Package, DollarSign, UserX, Snowflake, Sun, Moon } from "lucide-react";

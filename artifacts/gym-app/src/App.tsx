@@ -4,7 +4,8 @@ import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/reac
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useI18nDirection } from "@/lib/i18n";
-import { AuthProvider, useAuth } from "@/lib/auth";
+import { AuthProvider } from "@/lib/auth";
+import { useAuth } from "@/lib/auth-context";
 
 // Pages
 import Dashboard from "@/pages/dashboard";
