@@ -21,6 +21,7 @@ export const payrollTable = pgTable("payroll", {
   exchangeRate: doublePrecision("exchange_rate").notNull().default(1),
   netPayUsd: doublePrecision("amount_usd"),
   // Status
+  commissionBonus: doublePrecision("commission_bonus").notNull().default(0),
   notes: text("notes"),
   status: text("status").notNull().default("draft"), // 'draft' | 'paid' | 'cancelled'
   paidAt: timestamp("paid_at", { withTimezone: true }),

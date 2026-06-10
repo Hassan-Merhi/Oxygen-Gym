@@ -16,6 +16,7 @@ export interface PayrollRecord {
   periodEnd?: string | null;
   baseSalary: number;
   bonus: number;
+  commissionBonus?: number;
   deduction: number;
   netPay: number;
   currency: string;

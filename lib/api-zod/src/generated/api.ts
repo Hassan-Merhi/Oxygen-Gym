@@ -690,6 +690,8 @@ export const ListMembersResponse = zod.object({
   "fingerprintId": zod.string().nullish(),
   "qrCodeId": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "coachId": zod.number().nullish(),
+  "commissionAmount": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })),
@@ -721,7 +723,9 @@ export const CreateMemberBody = zod.object({
   "photoUrl": zod.string().nullish(),
   "fingerprintId": zod.string().nullish(),
   "qrCodeId": zod.string().nullish(),
-  "notes": zod.string().nullish()
+  "notes": zod.string().nullish(),
+  "coachId": zod.number().nullish(),
+  "commissionAmount": zod.number().nullish()
 })
 
 
@@ -760,6 +764,8 @@ export const GetMemberResponse = zod.object({
   "fingerprintId": zod.string().nullish(),
   "qrCodeId": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "coachId": zod.number().nullish(),
+  "commissionAmount": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -786,7 +792,9 @@ export const UpdateMemberBody = zod.object({
   "photoUrl": zod.string().nullish(),
   "fingerprintId": zod.string().nullish(),
   "qrCodeId": zod.string().nullish(),
-  "notes": zod.string().nullish()
+  "notes": zod.string().nullish(),
+  "coachId": zod.number().nullish(),
+  "commissionAmount": zod.number().nullish()
 })
 
 export const UpdateMemberResponse = zod.object({
@@ -817,6 +825,8 @@ export const UpdateMemberResponse = zod.object({
   "fingerprintId": zod.string().nullish(),
   "qrCodeId": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "coachId": zod.number().nullish(),
+  "commissionAmount": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -901,6 +911,8 @@ export const RenewMemberResponse = zod.object({
   "fingerprintId": zod.string().nullish(),
   "qrCodeId": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "coachId": zod.number().nullish(),
+  "commissionAmount": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -947,6 +959,8 @@ export const FreezeMemberResponse = zod.object({
   "fingerprintId": zod.string().nullish(),
   "qrCodeId": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "coachId": zod.number().nullish(),
+  "commissionAmount": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -987,6 +1001,8 @@ export const ReactivateMemberResponse = zod.object({
   "fingerprintId": zod.string().nullish(),
   "qrCodeId": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "coachId": zod.number().nullish(),
+  "commissionAmount": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -1031,6 +1047,8 @@ export const SetMemberStatusResponse = zod.object({
   "fingerprintId": zod.string().nullish(),
   "qrCodeId": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "coachId": zod.number().nullish(),
+  "commissionAmount": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -1823,6 +1841,19 @@ export const ArchiveStaffEmployeeResponse = zod.object({
 
 
 /**
+ * @summary Pending commission totals per staff employee
+ */
+export const GetCommissionSummaryResponseItem = zod.object({
+  "staffEmployeeId": zod.number(),
+  "staffName": zod.string(),
+  "pendingAmount": zod.number(),
+  "currency": zod.string(),
+  "pendingCount": zod.number()
+})
+export const GetCommissionSummaryResponse = zod.array(GetCommissionSummaryResponseItem)
+
+
+/**
  * @summary List payroll records
  */
 export const ListPayrollQueryParams = zod.object({
@@ -1846,6 +1877,7 @@ export const ListPayrollResponse = zod.object({
   "periodEnd": zod.string().nullish(),
   "baseSalary": zod.number(),
   "bonus": zod.number(),
+  "commissionBonus": zod.number().optional(),
   "deduction": zod.number(),
   "netPay": zod.number(),
   "currency": zod.string(),
@@ -1901,6 +1933,7 @@ export const GetPayrollResponse = zod.object({
   "periodEnd": zod.string().nullish(),
   "baseSalary": zod.number(),
   "bonus": zod.number(),
+  "commissionBonus": zod.number().optional(),
   "deduction": zod.number(),
   "netPay": zod.number(),
   "currency": zod.string(),
@@ -1936,6 +1969,7 @@ export const MarkPayrollPaidResponse = zod.object({
   "periodEnd": zod.string().nullish(),
   "baseSalary": zod.number(),
   "bonus": zod.number(),
+  "commissionBonus": zod.number().optional(),
   "deduction": zod.number(),
   "netPay": zod.number(),
   "currency": zod.string(),
@@ -1975,6 +2009,7 @@ export const CancelPayrollResponse = zod.object({
   "periodEnd": zod.string().nullish(),
   "baseSalary": zod.number(),
   "bonus": zod.number(),
+  "commissionBonus": zod.number().optional(),
   "deduction": zod.number(),
   "netPay": zod.number(),
   "currency": zod.string(),

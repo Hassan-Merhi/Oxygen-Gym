@@ -1,0 +1,130 @@
+WINDOWS DESKTOP APP PHASE – BUILD DOWNLOADABLE .EXE INSTALLER
+
+Convert the completed GymPro web app into a downloadable Windows desktop application.
+
+Goal:
+Create a Windows .exe installer that I can download and install on any Windows computer.
+This is NOT for Microsoft Store.
+This should be a normal desktop installer.
+
+Use Electron.
+
+Important:
+- Do not change the business logic.
+- Do not remove any existing features.
+- The app should open like a normal Windows program.
+- It should package the existing frontend and backend.
+- It should keep local username/password login.
+- It should use PostgreSQL for now.
+- Later we may add fully offline/local database, but not now.
+
+1. Add Electron
+
+Install and configure:
+- electron
+- electron-builder
+- concurrently if needed
+- wait-on if needed
+
+2. Electron Main Process
+
+Create electron/main.js.
+
+Requirements:
+- Open the GymPro app in a desktop window
+- Window title: GymPro
+- Default size: 1400x900
+- Minimum size: 1100x700
+- App icon support
+- Production mode loads built frontend
+- Development mode loads local Replit/dev server
+
+3. Backend Startup
+
+When the desktop app starts:
+- Start the existing backend server automatically
+- Wait until backend is ready
+- Then load the frontend
+- If backend fails, show a clear error screen
+
+4. Frontend Build
+
+Configure frontend production build.
+
+Electron should load:
+- Built frontend files
+- API should still connect to backend properly
+
+Make sure API URLs work in desktop mode.
+
+5. Packaging
+
+Configure electron-builder to create:
+
+- Windows NSIS installer .exe
+- Portable .exe if easy
+- App name: GymPro
+- Product name: GymPro
+- Output folder: dist-desktop
+
+6. App Icon
+
+Add placeholder app icon if no logo exists.
+Use GymPro branding.
+Support:
+- .ico for Windows
+- png for development
+
+7. Package Scripts
+
+Add scripts:
+
+- npm run dev:desktop
+- npm run build:web
+- npm run build:desktop
+- npm run dist:windows
+
+The final command should create a downloadable .exe installer.
+
+8. Environment Variables
+
+Make sure desktop build can read:
+- DATABASE_URL
+- JWT_SECRET
+- Any other required variables
+
+Create clear instructions in README:
+
+How to run in development
+How to build Windows installer
+How to install on another PC
+What environment variables are needed
+
+9. Database Note
+
+For now:
+- Desktop app still connects to PostgreSQL database using DATABASE_URL.
+
+Add README note:
+If installing on another PC, it needs access to the same database or a database connection string.
+
+Do not attempt full offline SQLite conversion in this phase.
+
+10. Security
+
+- Disable dev tools in production
+- Use secure Electron settings:
+  - contextIsolation true
+  - nodeIntegration false
+  - sandbox where possible
+
+11. Final Output
+
+When finished, return:
+
+- What files were added
+- What package scripts were added
+- How to build the .exe
+- Where the .exe installer will appear
+- Any errors or warnings
+- Exact next command I should run

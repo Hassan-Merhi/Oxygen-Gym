@@ -38,6 +38,7 @@ import type {
   CheckInBody,
   CheckInRecord,
   CheckInResult,
+  CommissionSummaryItem,
   CompleteSaleBody,
   CreatePayrollBody,
   CreateProductBody,
@@ -5235,6 +5236,83 @@ export const useArchiveStaffEmployee = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getArchiveStaffEmployeeMutationOptions(options));
     }
+
+export const getGetCommissionSummaryUrl = () => {
+
+
+
+
+  return `/api/commissions/summary`
+}
+
+/**
+ * @summary Pending commission totals per staff employee
+ */
+export const getCommissionSummary = async ( options?: RequestInit): Promise<CommissionSummaryItem[]> => {
+
+  return customFetch<CommissionSummaryItem[]>(getGetCommissionSummaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCommissionSummaryQueryKey = () => {
+    return [
+    `/api/commissions/summary`
+    ] as const;
+    }
+
+
+export const getGetCommissionSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getCommissionSummary>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommissionSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCommissionSummaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCommissionSummary>>> = ({ signal }) => getCommissionSummary({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCommissionSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCommissionSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getCommissionSummary>>>
+export type GetCommissionSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Pending commission totals per staff employee
+ */
+
+export function useGetCommissionSummary<TData = Awaited<ReturnType<typeof getCommissionSummary>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommissionSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCommissionSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getListPayrollUrl = (params?: ListPayrollParams,) => {
   const normalizedParams = new URLSearchParams();

@@ -393,6 +393,8 @@ export interface Member {
   fingerprintId?: string | null;
   qrCodeId?: string | null;
   notes?: string | null;
+  coachId?: number | null;
+  commissionAmount?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -425,6 +427,8 @@ export interface MemberInput {
   fingerprintId?: string | null;
   qrCodeId?: string | null;
   notes?: string | null;
+  coachId?: number | null;
+  commissionAmount?: number | null;
 }
 
 export interface MemberUpdate {
@@ -442,6 +446,8 @@ export interface MemberUpdate {
   fingerprintId?: string | null;
   qrCodeId?: string | null;
   notes?: string | null;
+  coachId?: number | null;
+  commissionAmount?: number | null;
 }
 
 export interface MembersPage {
@@ -1033,6 +1039,7 @@ export interface PayrollRecord {
   periodEnd?: string | null;
   baseSalary: number;
   bonus: number;
+  commissionBonus?: number;
   deduction: number;
   netPay: number;
   currency: string;
@@ -1202,6 +1209,14 @@ export interface GymNotification {
   message: string;
   date: string;
   isRead: boolean;
+}
+
+export interface CommissionSummaryItem {
+  staffEmployeeId: number;
+  staffName: string;
+  pendingAmount: number;
+  currency: string;
+  pendingCount: number;
 }
 
 export interface NotificationsResponse {

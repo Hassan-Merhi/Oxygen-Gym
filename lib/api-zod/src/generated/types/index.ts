@@ -38,6 +38,7 @@ export * from './chartPoint';
 export * from './checkInBody';
 export * from './checkInRecord';
 export * from './checkInResult';
+export * from './commissionSummaryItem';
 export * from './completeSaleBody';
 export * from './createPayrollBody';
 export * from './createProductBody';

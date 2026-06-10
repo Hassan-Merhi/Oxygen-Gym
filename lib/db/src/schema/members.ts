@@ -36,6 +36,9 @@ export const membersTable = pgTable("members", {
   fingerprintId: text("fingerprint_id"),
   qrCodeId: text("qr_code_id"),
   notes: text("notes"),
+  // Coach commission
+  coachId: integer("coach_id"),
+  commissionAmount: doublePrecision("commission_amount").default(0),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

@@ -642,6 +642,7 @@ function PayrollTab() {
                 <TableHead className="font-semibold">Period</TableHead>
                 <TableHead className="font-semibold text-right">Base</TableHead>
                 <TableHead className="font-semibold text-right">Bonus</TableHead>
+                <TableHead className="font-semibold text-right text-violet-600">Commission</TableHead>
                 <TableHead className="font-semibold text-right">Deduction</TableHead>
                 <TableHead className="font-semibold text-right">Net Pay</TableHead>
                 <TableHead className="font-semibold">Status</TableHead>
@@ -650,9 +651,9 @@ function PayrollTab() {
             </TableHeader>
             <TableBody>
               {histLoading ? (
-                <TableRow><TableCell colSpan={canManage ? 9 : 8} className="text-center py-12"><Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={canManage ? 10 : 9} className="text-center py-12"><Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
               ) : records.length === 0 ? (
-                <TableRow><TableCell colSpan={canManage ? 9 : 8} className="text-center py-12 text-muted-foreground">{t("payroll.empty")}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={canManage ? 10 : 9} className="text-center py-12 text-muted-foreground">{t("payroll.empty")}</TableCell></TableRow>
               ) : records.map(r => (
                 <TableRow key={r.id} className="hover:bg-muted/20">
                   <TableCell className="font-mono text-xs text-muted-foreground">{r.payrollNumber ?? "-"}</TableCell>
@@ -669,6 +670,9 @@ function PayrollTab() {
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-sm">{fmtMoney(r.baseSalary, r.currency)}</TableCell>
                   <TableCell className="text-right tabular-nums text-sm text-emerald-600">+{fmtMoney(r.bonus, r.currency)}</TableCell>
+                  <TableCell className="text-right tabular-nums text-sm text-violet-600">
+                    {(r as any).commissionBonus > 0 ? `+${fmtMoney((r as any).commissionBonus, r.currency)}` : "—"}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums text-sm text-red-500">-{fmtMoney(r.deduction, r.currency)}</TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">{fmtMoney(r.netPay, r.currency)}</TableCell>
                   <TableCell>

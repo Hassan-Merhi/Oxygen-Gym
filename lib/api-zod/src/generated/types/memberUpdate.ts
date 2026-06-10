@@ -21,4 +21,6 @@ export interface MemberUpdate {
   fingerprintId?: string | null;
   qrCodeId?: string | null;
   notes?: string | null;
+  coachId?: number | null;
+  commissionAmount?: number | null;
 }

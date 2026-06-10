@@ -6,8 +6,9 @@ import {
   staffEmployeesTable,
   settingsTable,
   paymentsTable,
+  commissionsTable,
 } from "@workspace/db/schema";
-import { eq, and, ilike, desc, count, gte, lte, or } from "drizzle-orm";
+import { eq, and, ilike, desc, count, gte, lte, or, sum } from "drizzle-orm";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 import { appendLedgerEntry } from "../lib/ledger";
@@ -86,8 +87,16 @@ router.post("/", async (req: Request, res: Response) => {
   const rate = exchangeRate ?? (await getExchangeRate());
   const bonusAmt = bonus ?? 0;
   const deductionAmt = deduction ?? 0;
-  const netPay = baseSalary + bonusAmt - deductionAmt;
   const salCurrency = currency ?? employee.salaryCurrency ?? "USD";
+
+  // Auto-fetch pending commissions for this employee
+  const pendingCommissions = await db
+    .select()
+    .from(commissionsTable)
+    .where(and(eq(commissionsTable.staffEmployeeId, staffEmployeeId), eq(commissionsTable.status, "pending")));
+  const commissionBonus = pendingCommissions.reduce((sum, c) => sum + (c.amount ?? 0), 0);
+
+  const netPay = baseSalary + bonusAmt + commissionBonus - deductionAmt;
   const netPayUsd = salCurrency === "USD" ? netPay : netPay / rate;
 
   const payrollNumber = await getNextNumber("payroll");
@@ -102,6 +111,7 @@ router.post("/", async (req: Request, res: Response) => {
     periodEnd: periodEnd ? new Date(periodEnd) : null,
     baseSalary,
     bonus: bonusAmt,
+    commissionBonus,
     deduction: deductionAmt,
     netPay,
     currency: salCurrency,
@@ -111,6 +121,14 @@ router.post("/", async (req: Request, res: Response) => {
     status: "draft",
     createdBy: creator,
   }).returning();
+
+  // Link pending commissions to this payroll run
+  if (pendingCommissions.length > 0) {
+    await db
+      .update(commissionsTable)
+      .set({ payrollId: record.id, status: "pending" })
+      .where(and(eq(commissionsTable.staffEmployeeId, staffEmployeeId), eq(commissionsTable.status, "pending")));
+  }
 
   await logActivity(req, "payroll_generated", "payroll", record.id, {
     payrollNumber,
@@ -165,7 +183,13 @@ router.patch("/:id/pay", async (req: Request, res: Response) => {
     createdBy: creator,
   });
 
-  // 3. Update payroll record
+  // 3. Mark linked commissions as paid
+  await db
+    .update(commissionsTable)
+    .set({ status: "paid", paidAt: new Date() })
+    .where(and(eq(commissionsTable.payrollId, id), eq(commissionsTable.status, "pending")));
+
+  // 4. Update payroll record
   const [updated] = await db.update(payrollTable).set({
     status: "paid",
     paidAt: new Date(),

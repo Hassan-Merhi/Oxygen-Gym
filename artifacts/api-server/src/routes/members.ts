@@ -7,6 +7,8 @@ import {
   plansTable,
   vouchersTable,
   chartOfAccountsTable,
+  commissionsTable,
+  staffEmployeesTable,
 } from "@workspace/db/schema";
 import {
   eq,
@@ -105,6 +107,8 @@ router.post("/", async (req: Request, res: Response) => {
     fingerprintId?: string;
     qrCodeId?: string;
     notes?: string;
+    coachId?: number;
+    commissionAmount?: number;
   };
 
   if (!body.name) { res.status(400).json({ error: "name is required" }); return; }
@@ -141,6 +145,8 @@ router.post("/", async (req: Request, res: Response) => {
     fingerprintId: body.fingerprintId,
     qrCodeId: body.qrCodeId,
     notes: body.notes,
+    coachId: body.coachId ?? null,
+    commissionAmount: body.commissionAmount ?? 0,
   }).returning();
 
   if (body.planId && (amountPaid > 0 || planPrice)) {
@@ -183,6 +189,19 @@ router.post("/", async (req: Request, res: Response) => {
     });
   }
 
+  // Auto-commission: if coach assigned and amount > 0
+  if (amountPaid > 0 && member.coachId && (member.commissionAmount ?? 0) > 0) {
+    await db.insert(commissionsTable).values({
+      staffEmployeeId: member.coachId,
+      memberId: member.id,
+      memberName: member.name,
+      amount: member.commissionAmount!,
+      currency: member.currency,
+      status: "pending",
+      note: `Commission — ${member.name} (membership payment)`,
+    });
+  }
+
   await logActivity(req, "create_member", "member", member.id, { name: member.name, memberNumber });
   res.status(201).json(member);
 });
@@ -213,7 +232,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
   const updateData: Record<string, unknown> = {};
   const dateFields = ["startDate", "expiryDate"];
-  const allowed = ["name","phone","planId","startDate","expiryDate","status","amountPaid","discount","currency","photoUrl","fingerprintId","qrCodeId","notes"];
+  const allowed = ["name","phone","planId","startDate","expiryDate","status","amountPaid","discount","currency","photoUrl","fingerprintId","qrCodeId","notes","coachId","commissionAmount"];
   for (const key of allowed) {
     if (body[key] !== undefined) {
       updateData[key] = dateFields.includes(key) && body[key]
@@ -252,6 +271,19 @@ router.patch("/:id", async (req: Request, res: Response) => {
       description: `Membership payment — ${member.planName ?? ""}`,
       status: "recorded",
     });
+
+    // Auto-commission on payment edit
+    if (member.coachId && (member.commissionAmount ?? 0) > 0) {
+      await db.insert(commissionsTable).values({
+        staffEmployeeId: member.coachId,
+        memberId: member.id,
+        memberName: member.name,
+        amount: member.commissionAmount!,
+        currency: member.currency,
+        status: "pending",
+        note: `Commission — ${member.name} (payment update)`,
+      });
+    }
   }
 
   await logActivity(req, "update_member", "member", id, { name: member.name });
@@ -352,6 +384,19 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
       category: "membership",
       description: `Membership renewal — ${plan.name}`,
       status: "recorded",
+    });
+  }
+
+  // Auto-commission on renewal
+  if ((body.amountPaid ?? 0) > 0 && member.coachId && (member.commissionAmount ?? 0) > 0) {
+    await db.insert(commissionsTable).values({
+      staffEmployeeId: member.coachId,
+      memberId: member.id,
+      memberName: member.name,
+      amount: member.commissionAmount!,
+      currency: member.currency,
+      status: "pending",
+      note: `Commission — ${member.name} (renewal: ${plan.name})`,
     });
   }
 

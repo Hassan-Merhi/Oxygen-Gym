@@ -1329,6 +1329,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/StaffEmployee"
 
+  /commissions/summary:
+    get:
+      operationId: getCommissionSummary
+      summary: Pending commission totals per staff employee
+      tags: [users]
+      responses:
+        "200":
+          description: Commission summary list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CommissionSummaryItem"
+
   /payroll:
     get:
       operationId: listPayroll
@@ -2280,6 +2295,8 @@ components:
         fingerprintId: { type: string, nullable: true }
         qrCodeId: { type: string, nullable: true }
         notes: { type: string, nullable: true }
+        coachId: { type: integer, nullable: true }
+        commissionAmount: { type: number, nullable: true }
         createdAt: { type: string }
         updatedAt: { type: string }
       required: [id, name, status, currency, joinDate, createdAt, updatedAt]
@@ -2306,6 +2323,8 @@ components:
         fingerprintId: { type: string, nullable: true }
         qrCodeId: { type: string, nullable: true }
         notes: { type: string, nullable: true }
+        coachId: { type: integer, nullable: true }
+        commissionAmount: { type: number, nullable: true }
       required: [name, status, currency, amountPaid, discount]
 
     MemberUpdate:
@@ -2325,6 +2344,8 @@ components:
         fingerprintId: { type: string, nullable: true }
         qrCodeId: { type: string, nullable: true }
         notes: { type: string, nullable: true }
+        coachId: { type: integer, nullable: true }
+        commissionAmount: { type: number, nullable: true }
 
     MembersPage:
       type: object
@@ -2959,6 +2980,7 @@ components:
         periodEnd: { type: string, nullable: true }
         baseSalary: { type: number }
         bonus: { type: number }
+        commissionBonus: { type: number }
         deduction: { type: number }
         netPay: { type: number }
         currency: { type: string }
@@ -3176,6 +3198,16 @@ components:
         date: { type: string }
         isRead: { type: boolean }
       required: [key, type, priority, message, date, isRead]
+
+    CommissionSummaryItem:
+      type: object
+      properties:
+        staffEmployeeId: { type: integer }
+        staffName: { type: string }
+        pendingAmount: { type: number }
+        currency: { type: string }
+        pendingCount: { type: integer }
+      required: [staffEmployeeId, staffName, pendingAmount, currency, pendingCount]
 
     NotificationsResponse:
       type: object

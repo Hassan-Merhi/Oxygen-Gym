@@ -34,6 +34,8 @@ export interface Member {
   fingerprintId?: string | null;
   qrCodeId?: string | null;
   notes?: string | null;
+  coachId?: number | null;
+  commissionAmount?: number | null;
   createdAt: string;
   updatedAt: string;
 }

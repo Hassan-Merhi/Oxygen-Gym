@@ -20,6 +20,7 @@ import {
   useListPlans,
 } from "@workspace/api-client-react";
 import type { Member, Plan } from "@workspace/api-client-react";
+import { useListStaffEmployees, getListStaffEmployeesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -126,6 +127,8 @@ const memberSchema = z.object({
   notes: z.string().optional(),
   fingerprintId: z.string().optional(),
   qrCodeId: z.string().optional(),
+  coachId: z.string().optional(),
+  commissionAmount: z.coerce.number().min(0).default(0),
 });
 type MemberFormValues = z.infer<typeof memberSchema>;
 
@@ -182,6 +185,12 @@ export default function MembersPage() {
   const [checkInMember, setCheckInMember] = useState<Member | null>(null);
   const [checkInForce, setCheckInForce] = useState(false);
   const [reactivateMember, setReactivateMember] = useState<Member | null>(null);
+
+  // ── Staff employees (coaches)
+  const { data: staffData } = useListStaffEmployees({ limit: "200", status: "active" } as any, {
+    query: { queryKey: getListStaffEmployeesQueryKey({ limit: "200", status: "active" } as any) }
+  });
+  const coaches = staffData?.items ?? [];
 
   // ── Chart of accounts (cash accounts for voucher selection)
   const { data: chartAccounts = [] } = useQuery<{ id: number; name: string; type: string; isActive: boolean }[]>({
@@ -253,6 +262,8 @@ export default function MembersPage() {
       currency: (m.currency as "USD" | "CDF") ?? "USD",
       cashAccountId: "",
       notes: m.notes ?? "", fingerprintId: m.fingerprintId ?? "", qrCodeId: m.qrCodeId ?? "",
+      coachId: m.coachId ? String(m.coachId) : "",
+      commissionAmount: (m as any).commissionAmount ?? 0,
     });
     setPlanPrice(m.planPrice ?? 0);
     setEditMember(m);
@@ -278,6 +289,8 @@ export default function MembersPage() {
       startDate: values.startDate || undefined,
       expiryDate: values.expiryDate || undefined,
       cashAccountId: values.cashAccountId ? parseInt(values.cashAccountId) : undefined,
+      coachId: values.coachId ? parseInt(values.coachId) : undefined,
+      commissionAmount: values.commissionAmount ?? 0,
     };
     if (editMember) {
       updateMutation.mutate({ id: editMember.id, data: payload });
@@ -700,6 +713,32 @@ export default function MembersPage() {
                 )}
               </div>
             </div>
+
+            {/* Coach & Commission */}
+            {coaches.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 pb-2 border-b dark:border-slate-700">Coach & Commission</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Assigned Coach</Label>
+                    <Select value={form.watch("coachId") || "none"} onValueChange={(v) => form.setValue("coachId", v === "none" ? "" : v)}>
+                      <SelectTrigger className="mt-1"><SelectValue placeholder="No coach assigned" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No coach</SelectItem>
+                        {coaches.map((e) => (
+                          <SelectItem key={e.id} value={String(e.id)}>{e.name}{e.jobTitle ? ` — ${e.jobTitle}` : ""}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Commission per Payment</Label>
+                    <Input type="number" step="0.01" min="0" {...form.register("commissionAmount")} className="mt-1" placeholder="0" />
+                    <p className="text-xs text-muted-foreground mt-1">Fixed amount credited to coach on each payment</p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Notes */}
             <div>
