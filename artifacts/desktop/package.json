@@ -1,0 +1,21 @@
+{
+  "name": "@workspace/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GymPro Windows Desktop App",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev:desktop": "node scripts/build.mjs --dev",
+    "build:web": "node scripts/build.mjs --web-only",
+    "build:server": "pnpm --filter @workspace/api-server run build",
+    "build:desktop": "node scripts/build.mjs",
+    "dist:windows": "node scripts/build.mjs --dist"
+  },
+  "devDependencies": {
+    "electron": "^35.3.0",
+    "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0"
+  }
+}

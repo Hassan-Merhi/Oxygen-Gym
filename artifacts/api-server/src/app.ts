@@ -37,4 +37,13 @@ app.use("/api/uploads", express.static(UPLOAD_DIR));
 
 app.use("/api", router);
 
+// ── Electron / desktop mode: serve the built frontend ─────────────────────────
+if (process.env.ELECTRON_STATIC_DIR) {
+  const frontendDir = process.env.ELECTRON_STATIC_DIR;
+  app.use(express.static(frontendDir));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(frontendDir, "index.html"));
+  });
+}
+
 export default app;

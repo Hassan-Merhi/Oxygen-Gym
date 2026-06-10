@@ -1,0 +1,48 @@
+appId: com.oxygengym.gympro
+productName: GymPro
+copyright: Copyright © 2026 GymPro
+
+directories:
+  output: dist-desktop
+  buildResources: assets
+
+files:
+  - electron/**/*
+  - node_modules/**/*
+  - package.json
+
+extraResources:
+  - from: ../../artifacts/api-server/dist
+    to: server
+    filter:
+      - "**/*"
+  - from: ../../artifacts/gym-app/dist/public
+    to: frontend
+    filter:
+      - "**/*"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  icon: assets/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: assets/icon.ico
+  installerHeaderIcon: assets/icon.ico
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: GymPro
+  runAfterFinish: true
+
+portable:
+  artifactName: GymPro-Portable-${version}.exe
+
+artifactName: GymPro-Setup-${version}.exe
