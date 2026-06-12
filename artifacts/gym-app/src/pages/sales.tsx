@@ -126,29 +126,30 @@ function printReceipt(sale: Record<string, unknown>, settings: Record<string, un
       <meta charset="utf-8">
       <title>Receipt — ${saleNum}</title>
       <style>
+        @page { size: 80mm auto; margin: 0; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 340px; margin: 0 auto; padding: 24px 20px; font-size: 13px; color: #111; background: #fff; }
-        .gym-name { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
-        .gym-sub { font-size: 12px; color: #666; margin-top: 2px; }
-        .divider { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
-        .divider-dashed { border: none; border-top: 1px dashed #d1d5db; margin: 14px 0; }
-        .meta-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 80mm; padding: 6mm 4mm 10mm; font-size: 11px; color: #111; background: #fff; }
+        .gym-name { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
+        .gym-sub { font-size: 10px; color: #666; margin-top: 2px; }
+        .divider { border: none; border-top: 1px solid #e5e7eb; margin: 8px 0; }
+        .divider-dashed { border: none; border-top: 1px dashed #d1d5db; margin: 8px 0; }
+        .meta-row { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 4px; }
         .meta-label { color: #6b7280; }
         .meta-val { font-weight: 500; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        thead th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #9ca3af; font-weight: 600; padding: 0 0 8px; border-bottom: 1px solid #e5e7eb; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        thead th { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #9ca3af; font-weight: 600; padding: 0 0 6px; border-bottom: 1px solid #e5e7eb; }
         thead th:last-child { text-align: right; }
         thead th:nth-child(2) { text-align: center; }
         thead th:nth-child(3), thead th:nth-child(4) { text-align: right; }
         tbody tr { border-bottom: 1px solid #f3f4f6; }
-        .summary { margin-top: 14px; }
-        .summary-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; }
-        .summary-row.total { font-size: 16px; font-weight: 700; padding: 8px 0; border-top: 2px solid #111; margin-top: 4px; }
+        .summary { margin-top: 10px; }
+        .summary-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 11px; }
+        .summary-row.total { font-size: 13px; font-weight: 700; padding: 6px 0; border-top: 2px solid #111; margin-top: 3px; }
         .summary-row .label { color: #6b7280; }
         .summary-row.total .label { color: #111; }
-        .badge { display: inline-block; background: #f3f4f6; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 600; color: #374151; }
-        .footer { margin-top: 24px; text-align: center; font-size: 12px; color: #9ca3af; }
-        @media print { body { padding: 12px; } }
+        .badge { display: inline-block; background: #f3f4f6; border-radius: 3px; padding: 1px 4px; font-size: 9px; font-weight: 600; color: #374151; }
+        .footer { margin-top: 14px; text-align: center; font-size: 10px; color: #9ca3af; }
+        @media print { html, body { width: 80mm; } }
       </style>
     </head>
     <body>

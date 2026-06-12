@@ -117,22 +117,23 @@ function printMemberInvoice(inv: MemberInvoiceData, settings: Record<string, unk
   <meta charset="utf-8">
   <title>${inv.invoiceNum}</title>
   <style>
+    @page { size: 80mm auto; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 340px; margin: 0 auto; padding: 24px 20px; font-size: 13px; color: #111; background: #fff; }
-    .gym-name { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
-    .gym-sub { font-size: 12px; color: #666; margin-top: 2px; }
-    .divider { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
-    .divider-dashed { border: none; border-top: 1px dashed #d1d5db; margin: 14px 0; }
-    .row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 80mm; padding: 6mm 4mm 10mm; font-size: 11px; color: #111; background: #fff; }
+    .gym-name { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
+    .gym-sub { font-size: 10px; color: #666; margin-top: 2px; }
+    .divider { border: none; border-top: 1px solid #e5e7eb; margin: 8px 0; }
+    .divider-dashed { border: none; border-top: 1px dashed #d1d5db; margin: 8px 0; }
+    .row { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 4px; }
     .label { color: #6b7280; }
     .val { font-weight: 500; }
-    .badge { display: inline-block; background: #f3f4f6; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 600; color: #374151; }
-    .total-row { display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; padding: 8px 0; border-top: 2px solid #111; margin-top: 4px; }
-    .sum-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; }
+    .badge { display: inline-block; background: #f3f4f6; border-radius: 3px; padding: 1px 4px; font-size: 9px; font-weight: 600; color: #374151; }
+    .total-row { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; padding: 6px 0; border-top: 2px solid #111; margin-top: 3px; }
+    .sum-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 11px; }
     .balance-due { color: #dc2626; font-weight: 600; }
     .balance-ok { color: #059669; font-weight: 600; }
-    .footer { margin-top: 24px; text-align: center; font-size: 12px; color: #9ca3af; }
-    @media print { body { padding: 12px; } }
+    .footer { margin-top: 14px; text-align: center; font-size: 10px; color: #9ca3af; }
+    @media print { html, body { width: 80mm; } }
   </style>
 </head>
 <body>
