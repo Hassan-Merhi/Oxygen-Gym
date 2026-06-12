@@ -1,0 +1,53 @@
+Here's a full summary of what was built:
+
+✅ Windows Desktop App — What was created
+New files
+File	Purpose
+artifacts/desktop/package.json	Desktop workspace package — electron + electron-builder
+artifacts/desktop/electron/main.js	Main process: spawns backend, waits for it, opens window
+artifacts/desktop/electron/preload.js	Secure preload (contextIsolation, no nodeIntegration)
+artifacts/desktop/electron-builder.yml	Packaging config: NSIS installer + Portable .exe
+artifacts/desktop/scripts/build.mjs	Orchestrates full build pipeline
+artifacts/desktop/README.md	Full setup + deployment instructions
+Modified files
+File	Change
+artifacts/api-server/src/app.ts	Added ELECTRON_STATIC_DIR support — serves frontend from Express when in desktop mode
+pnpm-workspace.yaml	Added electron to onlyBuiltDependencies so the binary installs
+package.json (root)	Added dev:desktop, build:web, build:desktop, dist:windows shortcuts
+How to build the .exe
+One command from the repo root:
+
+pnpm dist:windows
+
+This automatically:
+
+Bundles the API server (esbuild → single index.mjs)
+Builds the frontend (Vite production build)
+Packages with electron-builder → creates the installer
+Output → artifacts/desktop/dist-desktop/
+
+GymPro-Setup-1.0.0.exe — NSIS installer (runs on any Windows PC)
+GymPro-Portable-1.0.0.exe — Portable, no installation needed
+How it works at runtime
+GymPro.exe
+  └─ Electron opens a 1400×900 window
+       ├─ Reads GymPro.env → loads DATABASE_URL
+       ├─ Spawns: node server/index.mjs on port 9999
+       │     └─ Express serves both /api/... AND the frontend /
+       ├─ Polls http://localhost:9999/api/healthz until ready
+       └─ Opens window → http://localhost:9999
+
+No separate ports or proxies needed — frontend and API share one port.
+
+After installing on another PC
+Create GymPro.env next to the .exe:
+
+DATABASE_URL=postgres://user:password@your-server:5432/gympro
+
+Next step to run now
+pnpm dist:windows
+
+Note: The .exe must be built on Windows or using a Windows cross-compilation environment — electron-builder creates platform-native installers. On Replit (Linux), it will build a Linux binary. To get a Windows .exe, run pnpm dist:windows on a Windows machine with Node.js and pnpm installed, pointing at this same repo.
+
+
+now what do i do?
