@@ -167,10 +167,8 @@ function printMemberInvoice(inv: MemberInvoiceData, settings: Record<string, unk
 
   const win = window.open("", "_blank", "width=380,height=650");
   if (!win) return;
-  win.document.write(html);
+  win.document.write(html.replace("</body>", "<script>window.onload=function(){window.focus();window.print();}<\/script></body>"));
   win.document.close();
-  win.focus();
-  win.print();
 }
 function fmtCurrency(amount: number | null | undefined, currency: string): string {
   if (amount == null) return "—";
