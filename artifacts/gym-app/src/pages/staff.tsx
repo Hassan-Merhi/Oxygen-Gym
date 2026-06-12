@@ -81,7 +81,7 @@ function avatarColor(name: string) {
 }
 
 // ─── Employee Records Tab ──────────────────────────────────────────────────────
-function EmployeeRecordsTab() {
+export function EmployeeRecordsTab() {
   const { t } = useI18n();
   const { toast } = useToast();
   const queryClient = useQueryClient();

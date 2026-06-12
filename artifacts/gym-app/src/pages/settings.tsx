@@ -26,7 +26,7 @@ import {
   Plus, Trash2, Send, Eye, EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { LoginUsersTab } from "@/pages/staff";
+import { LoginUsersTab, EmployeeRecordsTab } from "@/pages/staff";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -429,6 +429,10 @@ export default function Settings() {
             <Users className="w-3.5 h-3.5" />
             Users
           </TabsTrigger>
+          <TabsTrigger value="staff" className="gap-2">
+            <Users className="w-3.5 h-3.5" />
+            {t("nav.staff")}
+          </TabsTrigger>
           <TabsTrigger value="whatsapp" className="gap-2">
             <MessageCircle className="w-3.5 h-3.5" />
             {t("settings.whatsappTab")}
@@ -555,6 +559,11 @@ export default function Settings() {
         {/* ── Users Tab ─────────────────────────────────────────────────────── */}
         <TabsContent value="users" className="mt-6">
           <LoginUsersTab />
+        </TabsContent>
+
+        {/* ── Staff Tab ─────────────────────────────────────────────────────── */}
+        <TabsContent value="staff" className="mt-6">
+          <EmployeeRecordsTab />
         </TabsContent>
 
         {/* ── WhatsApp Tab ───────────────────────────────────────────────────── */}
