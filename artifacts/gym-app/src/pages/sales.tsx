@@ -189,10 +189,12 @@ function printReceipt(sale: Record<string, unknown>, settings: Record<string, un
     </html>
   `;
 
-  const win = window.open("", "_blank", "width=380,height=650");
-  if (!win) return;
-  win.document.write(html.replace("</body>", "<script>setTimeout(function(){window.focus();window.print();},600);<\/script></body>"));
-  win.document.close();
+  const printHtml = html.replace("</head>", `<script>window.addEventListener('load',function(){setTimeout(function(){window.focus();window.print();},250);});<\/script></head>`);
+  const blob = new Blob([printHtml], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, "_blank", "width=400,height=600");
+  if (!win) { alert("Please allow popups to print receipts."); URL.revokeObjectURL(url); return; }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 // ─── Cart Item Row ─────────────────────────────────────────────────────────────

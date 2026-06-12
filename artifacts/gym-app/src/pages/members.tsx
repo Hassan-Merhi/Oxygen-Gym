@@ -165,10 +165,12 @@ function printMemberInvoice(inv: MemberInvoiceData, settings: Record<string, unk
 </body>
 </html>`;
 
-  const win = window.open("", "_blank", "width=380,height=650");
-  if (!win) return;
-  win.document.write(html.replace("</body>", "<script>setTimeout(function(){window.focus();window.print();},600);<\/script></body>"));
-  win.document.close();
+  const printHtml = html.replace("</head>", `<script>window.addEventListener('load',function(){setTimeout(function(){window.focus();window.print();},250);});<\/script></head>`);
+  const blob = new Blob([printHtml], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, "_blank", "width=400,height=600");
+  if (!win) { alert("Veuillez autoriser les pop-ups pour imprimer."); URL.revokeObjectURL(url); return; }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 function fmtCurrency(amount: number | null | undefined, currency: string): string {
   if (amount == null) return "—";
