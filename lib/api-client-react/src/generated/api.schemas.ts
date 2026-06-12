@@ -199,6 +199,10 @@ export interface Settings {
   membershipCardFooter?: string | null;
   backupEnabled: string;
   backupTime: string;
+  /** @nullable */
+  greenApiInstanceId?: string | null;
+  /** @nullable */
+  greenApiToken?: string | null;
   updatedAt: string;
 }
 
@@ -240,6 +244,29 @@ export interface SettingsUpdate {
   membershipCardFooter?: string | null;
   backupEnabled?: string;
   backupTime?: string;
+  /** @nullable */
+  greenApiInstanceId?: string | null;
+  /** @nullable */
+  greenApiToken?: string | null;
+}
+
+export interface WhatsappChat {
+  id: number;
+  label: string;
+  chatId: string;
+  enabled: boolean;
+  createdAt: string;
+}
+
+export interface WhatsappChatInput {
+  label: string;
+  chatId: string;
+}
+
+export interface WhatsappChatUpdate {
+  label?: string;
+  chatId?: string;
+  enabled?: boolean;
 }
 
 export interface ActivityLog {
@@ -1248,6 +1275,10 @@ export type ChangePasswordBody = {
   currentPassword: string;
   newPassword: string;
   confirmPassword: string;
+};
+
+export type TestWhatsappConnection200 = {
+  ok: boolean;
 };
 
 export type ListActivityLogsParams = {

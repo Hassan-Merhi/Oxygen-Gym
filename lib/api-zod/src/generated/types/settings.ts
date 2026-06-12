@@ -30,5 +30,9 @@ export interface Settings {
   membershipCardFooter?: string | null;
   backupEnabled: string;
   backupTime: string;
+  /** @nullable */
+  greenApiInstanceId?: string | null;
+  /** @nullable */
+  greenApiToken?: string | null;
   updatedAt: Date;
 }

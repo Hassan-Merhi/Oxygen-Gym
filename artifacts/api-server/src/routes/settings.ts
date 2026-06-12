@@ -77,6 +77,8 @@ router.patch("/", async (req, res) => {
         ...(data.membershipCardFooter !== undefined && { membershipCardFooter: data.membershipCardFooter }),
         ...(data.backupEnabled !== undefined && { backupEnabled: data.backupEnabled }),
         ...(data.backupTime !== undefined && { backupTime: data.backupTime }),
+        ...(data.greenApiInstanceId !== undefined && { greenApiInstanceId: data.greenApiInstanceId }),
+        ...(data.greenApiToken !== undefined && { greenApiToken: data.greenApiToken }),
       })
       .returning();
 

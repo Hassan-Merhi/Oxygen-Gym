@@ -108,6 +108,7 @@ import type {
   StaffEmployeeListResponse,
   StockPurchaseRecord,
   StockSummary,
+  TestWhatsappConnection200,
   UpdateProductBody,
   User,
   UserInput,
@@ -115,7 +116,10 @@ import type {
   VoidSaleBody,
   VoucherInput,
   VoucherRecord,
-  VouchersPage
+  VouchersPage,
+  WhatsappChat,
+  WhatsappChatInput,
+  WhatsappChatUpdate
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -1081,6 +1085,366 @@ export const useUpdateUserPermissions = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateUserPermissionsMutationOptions(options));
+    }
+
+export const getListWhatsappChatsUrl = () => {
+
+
+
+
+  return `/api/whatsapp/chats`
+}
+
+/**
+ * @summary List WhatsApp recipient chats
+ */
+export const listWhatsappChats = async ( options?: RequestInit): Promise<WhatsappChat[]> => {
+
+  return customFetch<WhatsappChat[]>(getListWhatsappChatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWhatsappChatsQueryKey = () => {
+    return [
+    `/api/whatsapp/chats`
+    ] as const;
+    }
+
+
+export const getListWhatsappChatsQueryOptions = <TData = Awaited<ReturnType<typeof listWhatsappChats>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWhatsappChats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWhatsappChatsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWhatsappChats>>> = ({ signal }) => listWhatsappChats({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWhatsappChats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWhatsappChatsQueryResult = NonNullable<Awaited<ReturnType<typeof listWhatsappChats>>>
+export type ListWhatsappChatsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List WhatsApp recipient chats
+ */
+
+export function useListWhatsappChats<TData = Awaited<ReturnType<typeof listWhatsappChats>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWhatsappChats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWhatsappChatsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateWhatsappChatUrl = () => {
+
+
+
+
+  return `/api/whatsapp/chats`
+}
+
+/**
+ * @summary Add a WhatsApp recipient chat
+ */
+export const createWhatsappChat = async (whatsappChatInput: WhatsappChatInput, options?: RequestInit): Promise<WhatsappChat> => {
+
+  return customFetch<WhatsappChat>(getCreateWhatsappChatUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      whatsappChatInput,)
+  }
+);}
+
+
+
+
+export const getCreateWhatsappChatMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWhatsappChat>>, TError,{data: BodyType<WhatsappChatInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createWhatsappChat>>, TError,{data: BodyType<WhatsappChatInput>}, TContext> => {
+
+const mutationKey = ['createWhatsappChat'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createWhatsappChat>>, {data: BodyType<WhatsappChatInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createWhatsappChat(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateWhatsappChatMutationResult = NonNullable<Awaited<ReturnType<typeof createWhatsappChat>>>
+    export type CreateWhatsappChatMutationBody = BodyType<WhatsappChatInput>
+    export type CreateWhatsappChatMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Add a WhatsApp recipient chat
+ */
+export const useCreateWhatsappChat = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWhatsappChat>>, TError,{data: BodyType<WhatsappChatInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createWhatsappChat>>,
+        TError,
+        {data: BodyType<WhatsappChatInput>},
+        TContext
+      > => {
+      return useMutation(getCreateWhatsappChatMutationOptions(options));
+    }
+
+export const getUpdateWhatsappChatUrl = (id: number,) => {
+
+
+
+
+  return `/api/whatsapp/chats/${id}`
+}
+
+/**
+ * @summary Update a WhatsApp chat (toggle enabled, change label)
+ */
+export const updateWhatsappChat = async (id: number,
+    whatsappChatUpdate: WhatsappChatUpdate, options?: RequestInit): Promise<WhatsappChat> => {
+
+  return customFetch<WhatsappChat>(getUpdateWhatsappChatUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      whatsappChatUpdate,)
+  }
+);}
+
+
+
+
+export const getUpdateWhatsappChatMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWhatsappChat>>, TError,{id: number;data: BodyType<WhatsappChatUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateWhatsappChat>>, TError,{id: number;data: BodyType<WhatsappChatUpdate>}, TContext> => {
+
+const mutationKey = ['updateWhatsappChat'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateWhatsappChat>>, {id: number;data: BodyType<WhatsappChatUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateWhatsappChat(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateWhatsappChatMutationResult = NonNullable<Awaited<ReturnType<typeof updateWhatsappChat>>>
+    export type UpdateWhatsappChatMutationBody = BodyType<WhatsappChatUpdate>
+    export type UpdateWhatsappChatMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a WhatsApp chat (toggle enabled, change label)
+ */
+export const useUpdateWhatsappChat = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWhatsappChat>>, TError,{id: number;data: BodyType<WhatsappChatUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateWhatsappChat>>,
+        TError,
+        {id: number;data: BodyType<WhatsappChatUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateWhatsappChatMutationOptions(options));
+    }
+
+export const getDeleteWhatsappChatUrl = (id: number,) => {
+
+
+
+
+  return `/api/whatsapp/chats/${id}`
+}
+
+/**
+ * @summary Remove a WhatsApp chat
+ */
+export const deleteWhatsappChat = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteWhatsappChatUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteWhatsappChatMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWhatsappChat>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteWhatsappChat>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteWhatsappChat'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteWhatsappChat>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteWhatsappChat(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteWhatsappChatMutationResult = NonNullable<Awaited<ReturnType<typeof deleteWhatsappChat>>>
+
+    export type DeleteWhatsappChatMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Remove a WhatsApp chat
+ */
+export const useDeleteWhatsappChat = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWhatsappChat>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteWhatsappChat>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteWhatsappChatMutationOptions(options));
+    }
+
+export const getTestWhatsappConnectionUrl = () => {
+
+
+
+
+  return `/api/whatsapp/test`
+}
+
+/**
+ * @summary Send a test WhatsApp message to all enabled chats
+ */
+export const testWhatsappConnection = async ( options?: RequestInit): Promise<TestWhatsappConnection200> => {
+
+  return customFetch<TestWhatsappConnection200>(getTestWhatsappConnectionUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getTestWhatsappConnectionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testWhatsappConnection>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof testWhatsappConnection>>, TError,void, TContext> => {
+
+const mutationKey = ['testWhatsappConnection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof testWhatsappConnection>>, void> = () => {
+
+
+          return  testWhatsappConnection(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TestWhatsappConnectionMutationResult = NonNullable<Awaited<ReturnType<typeof testWhatsappConnection>>>
+
+    export type TestWhatsappConnectionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Send a test WhatsApp message to all enabled chats
+ */
+export const useTestWhatsappConnection = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testWhatsappConnection>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof testWhatsappConnection>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getTestWhatsappConnectionMutationOptions(options));
     }
 
 export const getGetSettingsUrl = () => {

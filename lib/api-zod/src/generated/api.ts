@@ -407,6 +407,66 @@ export const UpdateUserPermissionsResponse = zod.object({
 
 
 /**
+ * @summary List WhatsApp recipient chats
+ */
+export const ListWhatsappChatsResponseItem = zod.object({
+  "id": zod.number(),
+  "label": zod.string(),
+  "chatId": zod.string(),
+  "enabled": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+export const ListWhatsappChatsResponse = zod.array(ListWhatsappChatsResponseItem)
+
+
+/**
+ * @summary Add a WhatsApp recipient chat
+ */
+export const CreateWhatsappChatBody = zod.object({
+  "label": zod.string(),
+  "chatId": zod.string()
+})
+
+
+/**
+ * @summary Update a WhatsApp chat (toggle enabled, change label)
+ */
+export const UpdateWhatsappChatParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateWhatsappChatBody = zod.object({
+  "label": zod.string().optional(),
+  "chatId": zod.string().optional(),
+  "enabled": zod.boolean().optional()
+})
+
+export const UpdateWhatsappChatResponse = zod.object({
+  "id": zod.number(),
+  "label": zod.string(),
+  "chatId": zod.string(),
+  "enabled": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Remove a WhatsApp chat
+ */
+export const DeleteWhatsappChatParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+/**
+ * @summary Send a test WhatsApp message to all enabled chats
+ */
+export const TestWhatsappConnectionResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
  * @summary Get gym settings
  */
 export const GetSettingsResponse = zod.object({
@@ -424,6 +484,8 @@ export const GetSettingsResponse = zod.object({
   "membershipCardFooter": zod.string().nullish(),
   "backupEnabled": zod.string(),
   "backupTime": zod.string(),
+  "greenApiInstanceId": zod.string().nullish(),
+  "greenApiToken": zod.string().nullish(),
   "updatedAt": zod.coerce.date()
 })
 
@@ -444,7 +506,9 @@ export const UpdateSettingsBody = zod.object({
   "receiptFooter": zod.string().nullish(),
   "membershipCardFooter": zod.string().nullish(),
   "backupEnabled": zod.string().optional(),
-  "backupTime": zod.string().optional()
+  "backupTime": zod.string().optional(),
+  "greenApiInstanceId": zod.string().nullish(),
+  "greenApiToken": zod.string().nullish()
 })
 
 export const UpdateSettingsResponse = zod.object({
@@ -462,6 +526,8 @@ export const UpdateSettingsResponse = zod.object({
   "membershipCardFooter": zod.string().nullish(),
   "backupEnabled": zod.string(),
   "backupTime": zod.string(),
+  "greenApiInstanceId": zod.string().nullish(),
+  "greenApiToken": zod.string().nullish(),
   "updatedAt": zod.coerce.date()
 })
 

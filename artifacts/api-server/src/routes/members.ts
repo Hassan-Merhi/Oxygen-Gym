@@ -9,7 +9,10 @@ import {
   chartOfAccountsTable,
   commissionsTable,
   staffEmployeesTable,
+  settingsTable,
 } from "@workspace/db/schema";
+import { sendToAllChats, formatNewMemberMessage } from "../lib/whatsapp";
+import { logger } from "../lib/logger";
 import {
   eq,
   isNull,
@@ -204,6 +207,16 @@ router.post("/", async (req: Request, res: Response) => {
 
   await logActivity(req, "create_member", "member", member.id, { name: member.name, memberNumber });
   res.status(201).json(member);
+
+  // Fire-and-forget WhatsApp notification
+  db.query.settingsTable.findFirst().then((settings) => {
+    if (settings?.greenApiInstanceId && settings?.greenApiToken) {
+      const message = formatNewMemberMessage(member);
+      sendToAllChats(settings.greenApiInstanceId, settings.greenApiToken, message).catch((err) =>
+        logger.error({ err }, "WhatsApp new-member notification failed")
+      );
+    }
+  }).catch(() => {});
 });
 
 // ─── Get by ID ───────────────────────────────────────────────────────────────

@@ -16,3 +16,5 @@ export * from "./cash_ledger";
 export * from "./notification_reads";
 export * from "./chart_of_accounts";
 export * from "./commissions";
+export * from "./whatsapp_chats";
+export * from "./whatsapp_reminder_logs";

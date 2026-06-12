@@ -20,6 +20,7 @@ import commissionsRouter from "./commissions";
 import attendanceRouter from "./attendance";
 import notificationsRouter from "./notifications";
 import auditRouter from "./audit";
+import whatsappRouter from "./whatsapp";
 
 const router: IRouter = Router();
 
@@ -44,5 +45,6 @@ router.use("/commissions", commissionsRouter);
 router.use("/attendance", attendanceRouter);
 router.use("/notifications", notificationsRouter);
 router.use("/audit", auditRouter);
+router.use("/whatsapp", whatsappRouter);
 
 export default router;

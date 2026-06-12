@@ -21,6 +21,9 @@ export const settingsTable = pgTable("settings", {
   // Backup
   backupEnabled: text("backup_enabled").notNull().default("false"),
   backupTime: text("backup_time").notNull().default("02:00"),
+  // WhatsApp / Green API
+  greenApiInstanceId: text("green_api_instance_id"),
+  greenApiToken: text("green_api_token"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 

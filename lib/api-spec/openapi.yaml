@@ -271,6 +271,90 @@ paths:
               schema:
                 $ref: "#/components/schemas/User"
 
+  /whatsapp/chats:
+    get:
+      operationId: listWhatsappChats
+      tags: [settings]
+      summary: List WhatsApp recipient chats
+      responses:
+        "200":
+          description: List of chats
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WhatsappChat"
+    post:
+      operationId: createWhatsappChat
+      tags: [settings]
+      summary: Add a WhatsApp recipient chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WhatsappChatInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhatsappChat"
+
+  /whatsapp/chats/{id}:
+    patch:
+      operationId: updateWhatsappChat
+      tags: [settings]
+      summary: Update a WhatsApp chat (toggle enabled, change label)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WhatsappChatUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhatsappChat"
+    delete:
+      operationId: deleteWhatsappChat
+      tags: [settings]
+      summary: Remove a WhatsApp chat
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Deleted
+
+  /whatsapp/test:
+    post:
+      operationId: testWhatsappConnection
+      tags: [settings]
+      summary: Send a test WhatsApp message to all enabled chats
+      responses:
+        "200":
+          description: Test sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                required: [ok]
+
   /settings:
     get:
       operationId: getSettings
@@ -2048,6 +2132,10 @@ components:
           type: ["string", "null"]
         backupEnabled: { type: string }
         backupTime: { type: string }
+        greenApiInstanceId:
+          type: ["string", "null"]
+        greenApiToken:
+          type: ["string", "null"]
         updatedAt:
           type: string
           format: date-time
@@ -2088,6 +2176,36 @@ components:
           type: ["string", "null"]
         backupEnabled: { type: string }
         backupTime: { type: string }
+        greenApiInstanceId:
+          type: ["string", "null"]
+        greenApiToken:
+          type: ["string", "null"]
+
+    WhatsappChat:
+      type: object
+      properties:
+        id: { type: integer }
+        label: { type: string }
+        chatId: { type: string }
+        enabled: { type: boolean }
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, label, chatId, enabled, createdAt]
+
+    WhatsappChatInput:
+      type: object
+      properties:
+        label: { type: string }
+        chatId: { type: string }
+      required: [label, chatId]
+
+    WhatsappChatUpdate:
+      type: object
+      properties:
+        label: { type: string }
+        chatId: { type: string }
+        enabled: { type: boolean }
 
     ActivityLog:
       type: object
