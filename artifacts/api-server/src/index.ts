@@ -78,8 +78,8 @@ cron.schedule("0 9 * * *", async () => {
     for (const member of expiring5) {
       if (await alreadySent(member.id, "5day")) continue;
       const message = formatExpiryReminderMessage(member, 5);
-      await sendToAllChats(instanceId, token, message);
-      await logReminder(member.id, "5day");
+      const sent = await sendToAllChats(instanceId, token, message);
+      if (sent) await logReminder(member.id, "5day");
     }
 
     // ── 1–2 day reminder ──────────────────────────────────────────────────────
@@ -103,8 +103,8 @@ cron.schedule("0 9 * * *", async () => {
       const daysLeft = Math.ceil((new Date(member.expiryDate!).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
       if (await alreadySent(member.id, "2day")) continue;
       const message = formatExpiryReminderMessage(member, daysLeft);
-      await sendToAllChats(instanceId, token, message);
-      await logReminder(member.id, "2day");
+      const sent = await sendToAllChats(instanceId, token, message);
+      if (sent) await logReminder(member.id, "2day");
     }
 
     logger.info("WhatsApp expiry reminder job completed");

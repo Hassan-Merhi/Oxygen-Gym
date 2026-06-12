@@ -8,8 +8,19 @@ import { sendToAllChats } from "../lib/whatsapp";
 const router = Router();
 router.use(requireAuth());
 
+// All WhatsApp routes require admin role
+function requireAdmin(req: Request, res: Response): boolean {
+  const caller = (req as any).__gymproUser;
+  if (caller?.role !== "admin") {
+    res.status(403).json({ error: "Admin only" });
+    return false;
+  }
+  return true;
+}
+
 // GET /api/whatsapp/chats
 router.get("/chats", async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
   try {
     const chats = await db.select().from(whatsappChatsTable).orderBy(whatsappChatsTable.createdAt);
     res.json(chats);
@@ -21,6 +32,7 @@ router.get("/chats", async (req: Request, res: Response) => {
 
 // POST /api/whatsapp/chats
 router.post("/chats", async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
   const { label, chatId } = req.body as Record<string, unknown>;
   if (typeof label !== "string" || !label.trim()) {
     res.status(400).json({ error: "label is required" });
@@ -41,6 +53,7 @@ router.post("/chats", async (req: Request, res: Response) => {
 
 // PATCH /api/whatsapp/chats/:id
 router.patch("/chats/:id", async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
@@ -69,6 +82,7 @@ router.patch("/chats/:id", async (req: Request, res: Response) => {
 
 // DELETE /api/whatsapp/chats/:id
 router.delete("/chats/:id", async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
@@ -82,18 +96,19 @@ router.delete("/chats/:id", async (req: Request, res: Response) => {
 
 // POST /api/whatsapp/test
 router.post("/test", async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
   try {
     const settings = await db.query.settingsTable.findFirst();
     if (!settings?.greenApiInstanceId || !settings?.greenApiToken) {
       res.status(400).json({ error: "Green API credentials not configured" });
       return;
     }
-    await sendToAllChats(
+    const sent = await sendToAllChats(
       settings.greenApiInstanceId,
       settings.greenApiToken,
       `✅ *GymPro* — ${new Date().toISOString()}`
     );
-    res.json({ ok: true });
+    res.json({ ok: sent });
   } catch (err) {
     req.log.error({ err }, "WhatsApp test failed");
     res.status(500).json({ error: "Test failed" });

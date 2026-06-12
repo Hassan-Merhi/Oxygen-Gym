@@ -18,15 +18,28 @@ async function sendMessage(instanceId: string, token: string, chatId: string, me
   }
 }
 
-export async function sendToAllChats(instanceId: string, token: string, message: string): Promise<void> {
+/**
+ * Send message to all enabled chats.
+ * Returns true if at least one chat was sent to successfully.
+ */
+export async function sendToAllChats(instanceId: string, token: string, message: string): Promise<boolean> {
   const chats = await db.select().from(whatsappChatsTable).where(eq(whatsappChatsTable.enabled, true));
-  await Promise.allSettled(
-    chats.map((chat) =>
-      sendMessage(instanceId, token, chat.chatId, message).catch((err) =>
-        logger.error({ err, chatId: chat.chatId }, "WhatsApp send failed")
-      )
-    )
+  if (chats.length === 0) return false;
+
+  const results = await Promise.allSettled(
+    chats.map((chat) => sendMessage(instanceId, token, chat.chatId, message))
   );
+
+  let anySuccess = false;
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    if (r.status === "fulfilled") {
+      anySuccess = true;
+    } else {
+      logger.error({ err: r.reason, chatId: chats[i].chatId }, "WhatsApp send failed");
+    }
+  }
+  return anySuccess;
 }
 
 export function formatNewMemberMessage(member: {

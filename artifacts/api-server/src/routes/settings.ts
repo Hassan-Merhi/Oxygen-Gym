@@ -7,7 +7,7 @@ const router = Router();
 
 router.use(requireAuth());
 
-// GET /api/settings
+// GET /api/settings — returns settings; greenApiToken is redacted for non-admin users
 router.get("/", async (req, res) => {
   try {
     let settings = await db.query.settingsTable.findFirst();
@@ -22,6 +22,15 @@ router.get("/", async (req, res) => {
       settings = created;
     }
 
+    const caller = (req as any).__gymproUser;
+    const isAdmin = caller?.role === "admin";
+
+    // Redact token for non-admin users
+    if (!isAdmin && settings.greenApiToken) {
+      res.json({ ...settings, greenApiToken: "••••••••" });
+      return;
+    }
+
     res.json(settings);
   } catch (err) {
     req.log.error({ err }, "Failed to get settings");
@@ -29,7 +38,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// PATCH /api/settings
+// PATCH /api/settings — credential fields (greenApiInstanceId, greenApiToken) are admin-only
 router.patch("/", async (req, res) => {
   const parsed = UpdateSettingsBody.safeParse(req.body);
   if (!parsed.success) {
@@ -38,6 +47,14 @@ router.patch("/", async (req, res) => {
   }
 
   const data = parsed.data;
+  const caller = (req as any).__gymproUser;
+  const isAdmin = caller?.role === "admin";
+
+  // Credential fields require admin
+  if (!isAdmin && (data.greenApiInstanceId !== undefined || data.greenApiToken !== undefined)) {
+    res.status(403).json({ error: "Admin only" });
+    return;
+  }
 
   try {
     let settings = await db.query.settingsTable.findFirst();
@@ -77,10 +94,16 @@ router.patch("/", async (req, res) => {
         ...(data.membershipCardFooter !== undefined && { membershipCardFooter: data.membershipCardFooter }),
         ...(data.backupEnabled !== undefined && { backupEnabled: data.backupEnabled }),
         ...(data.backupTime !== undefined && { backupTime: data.backupTime }),
-        ...(data.greenApiInstanceId !== undefined && { greenApiInstanceId: data.greenApiInstanceId }),
-        ...(data.greenApiToken !== undefined && { greenApiToken: data.greenApiToken }),
+        ...(isAdmin && data.greenApiInstanceId !== undefined && { greenApiInstanceId: data.greenApiInstanceId }),
+        ...(isAdmin && data.greenApiToken !== undefined && { greenApiToken: data.greenApiToken }),
       })
       .returning();
+
+    // Redact token in response for non-admin
+    if (!isAdmin && updated.greenApiToken) {
+      res.json({ ...updated, greenApiToken: "••••••••" });
+      return;
+    }
 
     res.json(updated);
   } catch (err) {

@@ -213,8 +213,10 @@ router.post("/", async (req: Request, res: Response) => {
   db.query.settingsTable.findFirst().then(async (settings) => {
     if (settings?.greenApiInstanceId && settings?.greenApiToken) {
       const message = formatNewMemberMessage(member);
-      await sendToAllChats(settings.greenApiInstanceId, settings.greenApiToken, message);
-      await db.insert(whatsappReminderLogsTable).values({ memberId: member.id, reminderType: "new_member" });
+      const sent = await sendToAllChats(settings.greenApiInstanceId, settings.greenApiToken, message);
+      if (sent) {
+        await db.insert(whatsappReminderLogsTable).values({ memberId: member.id, reminderType: "new_member" });
+      }
     }
   }).catch((err) => logger.error({ err }, "WhatsApp new-member notification failed"));
 });
