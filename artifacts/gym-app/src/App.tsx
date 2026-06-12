@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useI18nDirection } from "@/lib/i18n";
 import { AuthProvider } from "@/lib/auth";
 import { useAuth } from "@/lib/auth-context";
+import { useGetMe } from "@/hooks/use-me";
 
 // Pages
 import Dashboard from "@/pages/dashboard";
@@ -31,12 +32,24 @@ const queryClient = new QueryClient();
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-// ── Protected wrapper ─────────────────────────────────────────────────────────
-function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { isAuthenticated, isLoading } = useAuth();
+// ── Permission check helper ────────────────────────────────────────────────────
+function useHasPermission(permKey?: string): boolean | null {
+  const me = useGetMe();
+  if (!me) return null;
+  if (!permKey) return true;
+  if (me.role === "admin" || me.role === "manager") return true;
+  const perms = me.permissions as unknown as Record<string, boolean> | undefined;
+  return !!perms?.[permKey];
+}
 
-  if (isLoading) return <LoadingScreen />;
+// ── Protected wrapper ─────────────────────────────────────────────────────────
+function ProtectedRoute({ component: Component, permKey }: { component: React.ComponentType; permKey?: string }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  const hasPermission = useHasPermission(permKey);
+
+  if (isLoading || (isAuthenticated && hasPermission === null)) return <LoadingScreen />;
   if (!isAuthenticated) return <Redirect to="/login" />;
+  if (hasPermission === false) return <Redirect to="/dashboard" />;
 
   return (
     <AppLayout>
@@ -48,8 +61,12 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 // ── Protected member profile (needs params) ───────────────────────────────────
 function ProtectedMemberProfile({ id }: { id: number }) {
   const { isAuthenticated, isLoading } = useAuth();
-  if (isLoading) return <LoadingScreen />;
+  const hasPermission = useHasPermission("members");
+
+  if (isLoading || (isAuthenticated && hasPermission === null)) return <LoadingScreen />;
   if (!isAuthenticated) return <Redirect to="/login" />;
+  if (hasPermission === false) return <Redirect to="/dashboard" />;
+
   return (
     <AppLayout>
       <MemberProfile id={id} />
@@ -105,22 +122,22 @@ function AppShell() {
         <Route path="/login" component={LoginGuard} />
         <Route path="/setup" component={SetupPage} />
 
-        <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
-        <Route path="/staff"><ProtectedRoute component={Staff} /></Route>
-        <Route path="/settings"><ProtectedRoute component={Settings} /></Route>
-        <Route path="/members"><ProtectedRoute component={Members} /></Route>
+        <Route path="/dashboard"><ProtectedRoute component={Dashboard} permKey="dashboard" /></Route>
+        <Route path="/staff"><ProtectedRoute component={Staff} permKey="staff" /></Route>
+        <Route path="/settings"><ProtectedRoute component={Settings} permKey="settings" /></Route>
+        <Route path="/members"><ProtectedRoute component={Members} permKey="members" /></Route>
         <Route path="/members/:id">{(params) => <ProtectedMemberProfile id={Number(params.id)} />}</Route>
-        <Route path="/plans"><ProtectedRoute component={Plans} /></Route>
+        <Route path="/plans"><ProtectedRoute component={Plans} permKey="plans" /></Route>
         <Route path="/payroll"><Redirect to="/staff" /></Route>
         <Route path="/attendance"><ProtectedRoute component={Attendance} /></Route>
         <Route path="/notifications"><ProtectedRoute component={NotificationsPage} /></Route>
         <Route path="/audit"><ProtectedRoute component={AuditPage} /></Route>
-        <Route path="/payments"><ProtectedRoute component={Payments} /></Route>
+        <Route path="/payments"><ProtectedRoute component={Payments} permKey="payments" /></Route>
         <Route path="/vouchers"><Redirect to="/payments" /></Route>
-        <Route path="/accounts"><ProtectedRoute component={Accounts} /></Route>
-        <Route path="/financials"><ProtectedRoute component={Financials} /></Route>
-        <Route path="/stock"><ProtectedRoute component={Stock} /></Route>
-        <Route path="/sales"><ProtectedRoute component={Sales} /></Route>
+        <Route path="/accounts"><ProtectedRoute component={Accounts} permKey="accounts" /></Route>
+        <Route path="/financials"><ProtectedRoute component={Financials} permKey="viewAccounting" /></Route>
+        <Route path="/stock"><ProtectedRoute component={Stock} permKey="stock" /></Route>
+        <Route path="/sales"><ProtectedRoute component={Sales} permKey="sales" /></Route>
 
         <Route path="*"><NotFound /></Route>
       </Switch>
