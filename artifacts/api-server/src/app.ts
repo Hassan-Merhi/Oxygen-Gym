@@ -42,7 +42,7 @@ const staticDir = process.env.STATIC_DIR ?? process.env.ELECTRON_STATIC_DIR;
 if (staticDir) {
   const resolvedStaticDir = path.resolve(staticDir);
   app.use(express.static(resolvedStaticDir));
-  app.get("*", (_req, res) => {
+  app.get("/{*splat}", (_req, res) => {
     res.sendFile(path.join(resolvedStaticDir, "index.html"));
   });
 }
