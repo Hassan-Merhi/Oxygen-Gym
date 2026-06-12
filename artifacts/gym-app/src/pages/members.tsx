@@ -117,9 +117,9 @@ function printMemberInvoice(inv: MemberInvoiceData, settings: Record<string, unk
   <meta charset="utf-8">
   <title>${inv.invoiceNum}</title>
   <style>
-    @page { size: 80mm auto; margin: 0; }
+    @page { margin: 3mm 2mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 80mm; padding: 6mm 4mm 10mm; font-size: 11px; color: #111; background: #fff; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 72mm; padding: 0; font-size: 11px; color: #111; background: #fff; }
     .gym-name { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
     .gym-sub { font-size: 10px; color: #666; margin-top: 2px; }
     .divider { border: none; border-top: 1px solid #e5e7eb; margin: 8px 0; }
@@ -133,7 +133,7 @@ function printMemberInvoice(inv: MemberInvoiceData, settings: Record<string, unk
     .balance-due { color: #dc2626; font-weight: 600; }
     .balance-ok { color: #059669; font-weight: 600; }
     .footer { margin-top: 14px; text-align: center; font-size: 10px; color: #9ca3af; }
-    @media print { html, body { width: 80mm; } }
+    @media print { html, body { width: 72mm; } }
   </style>
 </head>
 <body>
@@ -167,7 +167,7 @@ function printMemberInvoice(inv: MemberInvoiceData, settings: Record<string, unk
 
   const win = window.open("", "_blank", "width=380,height=650");
   if (!win) return;
-  win.document.write(html.replace("</body>", "<script>window.onload=function(){window.focus();window.print();}<\/script></body>"));
+  win.document.write(html.replace("</body>", "<script>setTimeout(function(){window.focus();window.print();},600);<\/script></body>"));
   win.document.close();
 }
 function fmtCurrency(amount: number | null | undefined, currency: string): string {
