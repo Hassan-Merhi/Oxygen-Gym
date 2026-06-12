@@ -47,6 +47,7 @@ This guide deploys GymPro as a single always-free web service on Render, backed 
 | `CLERK_SECRET_KEY` | Your Replit environment secrets |
 | `CLERK_PUBLISHABLE_KEY` | Your Replit environment secrets |
 | `VITE_CLERK_PUBLISHABLE_KEY` | Same value as `CLERK_PUBLISHABLE_KEY` |
+| `SESSION_SECRET` | A long random string — type anything (e.g. 40+ random characters). Used to sign login tokens securely. |
 
 6. Fill in all four values and click **Apply**.
 7. Render will start building — this takes about 3–5 minutes on the first deploy.
