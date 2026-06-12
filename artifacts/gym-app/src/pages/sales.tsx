@@ -126,7 +126,7 @@ function printReceipt(sale: Record<string, unknown>, settings: Record<string, un
       <meta charset="utf-8">
       <title>Receipt — ${saleNum}</title>
       <style>
-        @page { margin: 3mm 2mm; }
+        @page { size: 80mm auto; margin: 3mm 2mm; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 72mm; padding: 0; font-size: 11px; color: #111; background: #fff; }
         .gym-name { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
@@ -193,7 +193,7 @@ function printReceipt(sale: Record<string, unknown>, settings: Record<string, un
   if (existing) existing.remove();
   const iframe = document.createElement("iframe");
   iframe.id = "__gym_print_frame__";
-  iframe.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;border:none;";
+  iframe.style.cssText = "position:fixed;top:0;left:-9999px;width:400px;height:1000px;border:none;";
   document.body.appendChild(iframe);
   const doc = (iframe.contentDocument ?? (iframe.contentWindow as Window).document);
   doc.open(); doc.write(html); doc.close();
