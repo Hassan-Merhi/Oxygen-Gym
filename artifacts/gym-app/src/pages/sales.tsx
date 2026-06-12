@@ -126,9 +126,9 @@ function printReceipt(sale: Record<string, unknown>, settings: Record<string, un
       <meta charset="utf-8">
       <title>Receipt — ${saleNum}</title>
       <style>
-        @page { size: 80mm auto; margin: 3mm 2mm; }
+        @page { size: 80mm auto; margin: 3mm 6mm; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 72mm; padding: 0; font-size: 11px; color: #111; background: #fff; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 68mm; padding: 0; font-size: 11px; color: #111; background: #fff; }
         .gym-name { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
         .gym-sub { font-size: 10px; color: #666; margin-top: 2px; }
         .divider { border: none; border-top: 1px solid #e5e7eb; margin: 8px 0; }
@@ -149,7 +149,7 @@ function printReceipt(sale: Record<string, unknown>, settings: Record<string, un
         .summary-row.total .label { color: #111; }
         .badge { display: inline-block; background: #f3f4f6; border-radius: 3px; padding: 1px 4px; font-size: 9px; font-weight: 600; color: #374151; }
         .footer { margin-top: 14px; text-align: center; font-size: 10px; color: #9ca3af; }
-        @media print { html, body { width: 72mm; } }
+        @media print { html, body { width: 68mm; } }
       </style>
     </head>
     <body>

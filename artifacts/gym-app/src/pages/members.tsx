@@ -117,9 +117,9 @@ function printMemberInvoice(inv: MemberInvoiceData, settings: Record<string, unk
   <meta charset="utf-8">
   <title>${inv.invoiceNum}</title>
   <style>
-    @page { size: 80mm auto; margin: 3mm 2mm; }
+    @page { size: 80mm auto; margin: 3mm 6mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 72mm; padding: 0; font-size: 11px; color: #111; background: #fff; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 68mm; padding: 0; font-size: 11px; color: #111; background: #fff; }
     .gym-name { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
     .gym-sub { font-size: 10px; color: #666; margin-top: 2px; }
     .divider { border: none; border-top: 1px solid #e5e7eb; margin: 8px 0; }
@@ -133,7 +133,7 @@ function printMemberInvoice(inv: MemberInvoiceData, settings: Record<string, unk
     .balance-due { color: #dc2626; font-weight: 600; }
     .balance-ok { color: #059669; font-weight: 600; }
     .footer { margin-top: 14px; text-align: center; font-size: 10px; color: #9ca3af; }
-    @media print { html, body { width: 72mm; } }
+    @media print { html, body { width: 68mm; } }
   </style>
 </head>
 <body>
