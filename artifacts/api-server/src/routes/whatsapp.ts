@@ -91,7 +91,7 @@ router.post("/test", async (req: Request, res: Response) => {
     await sendToAllChats(
       settings.greenApiInstanceId,
       settings.greenApiToken,
-      "✅ *GymPro Test Message*\nWhatsApp notifications are working correctly!"
+      `✅ *GymPro* — ${new Date().toISOString()}`
     );
     res.json({ ok: true });
   } catch (err) {

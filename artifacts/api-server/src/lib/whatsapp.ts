@@ -38,17 +38,16 @@ export function formatNewMemberMessage(member: {
   expiryDate?: Date | string | null;
 }): string {
   const lines = [
-    "🆕 *New Member Joined*",
-    `👤 Name: ${member.name}`,
+    `🆕 *GymPro — ${member.name}*`,
   ];
-  if (member.phone) lines.push(`📞 Phone: ${member.phone}`);
-  if (member.planName) lines.push(`🏷️ Plan: ${member.planName}`);
+  if (member.phone) lines.push(`📞 ${member.phone}`);
+  if (member.planName) lines.push(`🏷️ ${member.planName}`);
   if (member.amountPaid != null) {
-    lines.push(`💰 Amount Paid: ${member.amountPaid} ${member.currency ?? "USD"}`);
+    lines.push(`💰 ${member.amountPaid} ${member.currency ?? "USD"}`);
   }
   if (member.expiryDate) {
     const d = new Date(member.expiryDate);
-    lines.push(`📅 Expires: ${d.toLocaleDateString()}`);
+    lines.push(`📅 ${d.toLocaleDateString("en-CA")}`);
   }
   return lines.join("\n");
 }
@@ -61,14 +60,14 @@ export function formatExpiryReminderMessage(member: {
 }, daysLeft: number): string {
   const emoji = daysLeft <= 2 ? "🚨" : "⚠️";
   const lines = [
-    `${emoji} *Subscription Expiring Soon*`,
-    `👤 Member: ${member.name}`,
+    `${emoji} *GymPro — ${member.name}*`,
+    `⏳ ${daysLeft}d`,
   ];
-  if (member.phone) lines.push(`📞 Phone: ${member.phone}`);
-  if (member.planName) lines.push(`🏷️ Plan: ${member.planName}`);
+  if (member.phone) lines.push(`📞 ${member.phone}`);
+  if (member.planName) lines.push(`🏷️ ${member.planName}`);
   if (member.expiryDate) {
     const d = new Date(member.expiryDate);
-    lines.push(`📅 Expires: ${d.toLocaleDateString()} (in ${daysLeft} day${daysLeft !== 1 ? "s" : ""})`);
+    lines.push(`📅 ${d.toLocaleDateString("en-CA")}`);
   }
   return lines.join("\n");
 }

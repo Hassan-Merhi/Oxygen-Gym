@@ -10,6 +10,7 @@ import {
   commissionsTable,
   staffEmployeesTable,
   settingsTable,
+  whatsappReminderLogsTable,
 } from "@workspace/db/schema";
 import { sendToAllChats, formatNewMemberMessage } from "../lib/whatsapp";
 import { logger } from "../lib/logger";
@@ -209,14 +210,13 @@ router.post("/", async (req: Request, res: Response) => {
   res.status(201).json(member);
 
   // Fire-and-forget WhatsApp notification
-  db.query.settingsTable.findFirst().then((settings) => {
+  db.query.settingsTable.findFirst().then(async (settings) => {
     if (settings?.greenApiInstanceId && settings?.greenApiToken) {
       const message = formatNewMemberMessage(member);
-      sendToAllChats(settings.greenApiInstanceId, settings.greenApiToken, message).catch((err) =>
-        logger.error({ err }, "WhatsApp new-member notification failed")
-      );
+      await sendToAllChats(settings.greenApiInstanceId, settings.greenApiToken, message);
+      await db.insert(whatsappReminderLogsTable).values({ memberId: member.id, reminderType: "new_member" });
     }
-  }).catch(() => {});
+  }).catch((err) => logger.error({ err }, "WhatsApp new-member notification failed"));
 });
 
 // ─── Get by ID ───────────────────────────────────────────────────────────────
