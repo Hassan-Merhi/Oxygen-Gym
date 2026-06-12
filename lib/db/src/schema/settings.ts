@@ -9,7 +9,7 @@ export const settingsTable = pgTable("settings", {
   address: text("address"),
   defaultCurrency: text("default_currency").notNull().default("USD"), // 'USD' | 'CDF'
   usdToCdfRate: doublePrecision("usd_to_cdf_rate").notNull().default(2800),
-  language: text("language").notNull().default("en"), // 'en' | 'fr' | 'ar'
+  language: text("language").notNull().default("fr"), // 'en' | 'fr' | 'ar'
   // Logo & Branding
   logoUrl: text("logo_url"),
   receiptLogoUrl: text("receipt_logo_url"),

@@ -17,7 +17,7 @@ router.get("/", async (req, res) => {
         gymName: "My Gym",
         defaultCurrency: "USD",
         usdToCdfRate: 2800,
-        language: "en",
+        language: "fr",
       }).returning();
       settings = created;
     }
@@ -66,7 +66,7 @@ router.patch("/", async (req, res) => {
         address: data.address,
         defaultCurrency: (data.defaultCurrency as "USD" | "CDF") ?? "USD",
         usdToCdfRate: data.usdToCdfRate ?? 2800,
-        language: (data.language as "en" | "fr" | "ar") ?? "en",
+        language: (data.language as "en" | "fr" | "ar") ?? "fr",
         receiptHeader: data.receiptHeader,
         receiptFooter: data.receiptFooter,
         logoUrl: data.logoUrl,

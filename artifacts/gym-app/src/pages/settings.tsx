@@ -367,7 +367,7 @@ export default function Settings() {
       gymName: "", phone: "", address: "",
       logoUrl: null, receiptLogoUrl: null,
       defaultCurrency: "USD", usdToCdfRate: 2800,
-      language: "en",
+      language: "fr",
       backupEnabled: "false", backupTime: "02:00",
     },
   });

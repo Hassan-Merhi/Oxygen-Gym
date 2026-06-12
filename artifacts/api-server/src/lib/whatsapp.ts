@@ -51,16 +51,16 @@ export function formatNewMemberMessage(member: {
   expiryDate?: Date | string | null;
 }): string {
   const lines = [
-    `🆕 *GymPro — ${member.name}*`,
+    `🆕 *Nouveau membre — ${member.name}*`,
   ];
-  if (member.phone) lines.push(`📞 ${member.phone}`);
-  if (member.planName) lines.push(`🏷️ ${member.planName}`);
+  if (member.phone) lines.push(`📞 Tél : ${member.phone}`);
+  if (member.planName) lines.push(`🏷️ Abonnement : ${member.planName}`);
   if (member.amountPaid != null) {
-    lines.push(`💰 ${member.amountPaid} ${member.currency ?? "USD"}`);
+    lines.push(`💰 Montant payé : ${member.amountPaid} ${member.currency ?? "USD"}`);
   }
   if (member.expiryDate) {
     const d = new Date(member.expiryDate);
-    lines.push(`📅 ${d.toLocaleDateString("en-CA")}`);
+    lines.push(`📅 Expire le : ${d.toLocaleDateString("fr-FR")}`);
   }
   return lines.join("\n");
 }
@@ -72,15 +72,16 @@ export function formatExpiryReminderMessage(member: {
   expiryDate?: Date | string | null;
 }, daysLeft: number): string {
   const emoji = daysLeft <= 2 ? "🚨" : "⚠️";
+  const dayWord = daysLeft <= 1 ? "jour" : "jours";
   const lines = [
-    `${emoji} *GymPro — ${member.name}*`,
-    `⏳ ${daysLeft}d`,
+    `${emoji} *Expiration imminente — ${member.name}*`,
+    `⏳ Dans ${daysLeft} ${dayWord}`,
   ];
-  if (member.phone) lines.push(`📞 ${member.phone}`);
-  if (member.planName) lines.push(`🏷️ ${member.planName}`);
+  if (member.phone) lines.push(`📞 Tél : ${member.phone}`);
+  if (member.planName) lines.push(`🏷️ Abonnement : ${member.planName}`);
   if (member.expiryDate) {
     const d = new Date(member.expiryDate);
-    lines.push(`📅 ${d.toLocaleDateString("en-CA")}`);
+    lines.push(`📅 Expire le : ${d.toLocaleDateString("fr-FR")}`);
   }
   return lines.join("\n");
 }
