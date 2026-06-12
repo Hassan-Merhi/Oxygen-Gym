@@ -35,7 +35,8 @@ export default function SetupPage() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/setup", {
+      const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
+      const res = await fetch(`${apiBase}/api/auth/setup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: username.trim(), password, fullName: fullName.trim() }),

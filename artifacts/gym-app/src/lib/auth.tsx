@@ -3,9 +3,15 @@ import { setAuthTokenGetter } from "@workspace/api-client-react";
 import { AuthContext, TOKEN_KEY } from "./auth-context";
 import type { AuthState } from "./auth-context";
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
+
+function apiUrl(path: string) {
+  return `${API_BASE}${path}`;
+}
+
 async function fetchMe(token: string) {
   try {
-    const res = await fetch("/api/auth/me", {
+    const res = await fetch(apiUrl("/api/auth/me"), {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return null;
@@ -42,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (username: string, password: string) => {
-    const res = await fetch("/api/auth/login", {
+    const res = await fetch(apiUrl("/api/auth/login"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
@@ -57,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (token) {
-      fetch("/api/auth/logout", {
+      fetch(apiUrl("/api/auth/logout"), {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       }).catch(() => {});

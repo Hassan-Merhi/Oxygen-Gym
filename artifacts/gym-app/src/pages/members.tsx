@@ -197,7 +197,8 @@ export default function MembersPage() {
     queryKey: ["/api/accounts/chart"],
     queryFn: async () => {
       const token = localStorage.getItem("gym_token");
-      const res = await fetch("/api/accounts/chart", { headers: { Authorization: `Bearer ${token}` } });
+      const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
+      const res = await fetch(`${apiBase}/api/accounts/chart`, { headers: { Authorization: `Bearer ${token}` } });
       return res.json();
     },
   });

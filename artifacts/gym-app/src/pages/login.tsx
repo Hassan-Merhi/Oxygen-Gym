@@ -19,7 +19,8 @@ export default function LoginPage() {
 
   // Auto-redirect to setup if no admin has a password yet
   useEffect(() => {
-    fetch("/api/auth/setup")
+    const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
+    fetch(`${apiBase}/api/auth/setup`)
       .then(r => r.json())
       .then(d => { if (d.needsSetup) setLocation("/setup"); })
       .catch(() => {});
