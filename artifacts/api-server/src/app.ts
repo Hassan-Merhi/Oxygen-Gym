@@ -37,12 +37,13 @@ app.use("/api/uploads", express.static(UPLOAD_DIR));
 
 app.use("/api", router);
 
-// ── Electron / desktop mode: serve the built frontend ─────────────────────────
-if (process.env.ELECTRON_STATIC_DIR) {
-  const frontendDir = process.env.ELECTRON_STATIC_DIR;
-  app.use(express.static(frontendDir));
+// ── Production / Electron: serve the built frontend ───────────────────────────
+const staticDir = process.env.STATIC_DIR ?? process.env.ELECTRON_STATIC_DIR;
+if (staticDir) {
+  const resolvedStaticDir = path.resolve(staticDir);
+  app.use(express.static(resolvedStaticDir));
   app.get("*", (_req, res) => {
-    res.sendFile(path.join(frontendDir, "index.html"));
+    res.sendFile(path.join(resolvedStaticDir, "index.html"));
   });
 }
 

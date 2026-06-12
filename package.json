@@ -10,7 +10,8 @@
     "dev:desktop": "pnpm --filter @workspace/desktop run dev:desktop",
     "build:web": "pnpm --filter @workspace/desktop run build:web",
     "build:desktop": "pnpm --filter @workspace/desktop run build:desktop",
-    "dist:windows": "pnpm --filter @workspace/desktop run dist:windows"
+    "dist:windows": "pnpm --filter @workspace/desktop run dist:windows",
+    "build:render": "PORT=3000 BASE_PATH=/ pnpm --filter @workspace/gym-app run build && pnpm --filter @workspace/api-server run build"
   },
   "private": true,
   "devDependencies": {
