@@ -165,12 +165,19 @@ function printMemberInvoice(inv: MemberInvoiceData, settings: Record<string, unk
 </body>
 </html>`;
 
-  const printHtml = html.replace("</head>", `<script>window.addEventListener('load',function(){setTimeout(function(){window.focus();window.print();},250);});<\/script></head>`);
-  const blob = new Blob([printHtml], { type: "text/html;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const win = window.open(url, "_blank", "width=400,height=600");
-  if (!win) { alert("Veuillez autoriser les pop-ups pour imprimer."); URL.revokeObjectURL(url); return; }
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  const existing = document.getElementById("__gym_print_frame__");
+  if (existing) existing.remove();
+  const iframe = document.createElement("iframe");
+  iframe.id = "__gym_print_frame__";
+  iframe.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;border:none;";
+  document.body.appendChild(iframe);
+  const doc = (iframe.contentDocument ?? (iframe.contentWindow as Window).document);
+  doc.open(); doc.write(html); doc.close();
+  setTimeout(() => {
+    (iframe.contentWindow as Window).focus();
+    (iframe.contentWindow as Window).print();
+    setTimeout(() => iframe.remove(), 2000);
+  }, 500);
 }
 function fmtCurrency(amount: number | null | undefined, currency: string): string {
   if (amount == null) return "—";
