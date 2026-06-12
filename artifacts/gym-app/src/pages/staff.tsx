@@ -844,8 +844,6 @@ export function LoginUsersTab() {
           <TableHeader>
             <TableRow className="bg-muted/30">
               <TableHead className="font-semibold">{t("staff.table.name")}</TableHead>
-              <TableHead className="font-semibold">{t("staff.table.email")}</TableHead>
-              <TableHead className="font-semibold">{t("staff.table.phone")}</TableHead>
               <TableHead className="font-semibold">{t("staff.table.role")}</TableHead>
               <TableHead className="font-semibold">{t("staff.table.status")}</TableHead>
               <TableHead className="text-right font-semibold">{t("staff.table.actions")}</TableHead>
@@ -853,9 +851,9 @@ export function LoginUsersTab() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-12"><Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={4} className="text-center py-12"><Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
             ) : users.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">{t("common.noData")}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">{t("common.noData")}</TableCell></TableRow>
             ) : users.map(user => (
               <TableRow key={user.id} className="hover:bg-muted/20" data-testid={`row-user-${user.id}`}>
                 <TableCell>
@@ -869,8 +867,6 @@ export function LoginUsersTab() {
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="text-muted-foreground">{user.email || "-"}</TableCell>
-                <TableCell className="text-muted-foreground">{user.phone || "-"}</TableCell>
                 <TableCell>
                   <Badge variant={ROLE_COLORS[user.role] ?? "secondary"}>{t(`staff.role.${user.role}`)}</Badge>
                 </TableCell>
@@ -910,12 +906,6 @@ export function LoginUsersTab() {
               )} />
               <FormField control={form.control} name="password" render={({ field }) => (
                 <FormItem><FormLabel>{t("auth.password")} <span className="text-muted-foreground text-xs">({t("common.optional")})</span></FormLabel><FormControl><Input type="password" {...field} placeholder="••••••••" /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="email" render={({ field }) => (
-                <FormItem><FormLabel>{t("staff.table.email")} <span className="text-muted-foreground text-xs">({t("common.optional")})</span></FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="phone" render={({ field }) => (
-                <FormItem><FormLabel>{t("staff.table.phone")}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="role" render={({ field }) => (
@@ -963,12 +953,6 @@ export function LoginUsersTab() {
               )} />
               <FormField control={form.control} name="username" render={({ field }) => (
                 <FormItem><FormLabel>{t("auth.username")}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="email" render={({ field }) => (
-                <FormItem><FormLabel>{t("staff.table.email")}</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="phone" render={({ field }) => (
-                <FormItem><FormLabel>{t("staff.table.phone")}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="password" render={({ field }) => (
                 <FormItem><FormLabel>{t("auth.password")} <span className="text-muted-foreground text-xs">({t("common.optional")})</span></FormLabel><FormControl><Input type="password" {...field} placeholder="••••••••" /></FormControl><FormMessage /></FormItem>
