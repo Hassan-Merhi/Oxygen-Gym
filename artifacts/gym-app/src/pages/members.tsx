@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,6 +18,7 @@ import {
   useReactivateMember,
   useSetMemberStatus,
   useListPlans,
+  useGetSettings,
 } from "@workspace/api-client-react";
 import type { Member, Plan } from "@workspace/api-client-react";
 import { useListStaffEmployees, getListStaffEmployeesQueryKey } from "@workspace/api-client-react";
@@ -74,6 +75,7 @@ import {
   AlertTriangle,
   Users,
   SlidersHorizontal,
+  Printer,
 } from "lucide-react";
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -85,6 +87,89 @@ function addDays(date: string, days: number): string {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
   return d.toISOString().split("T")[0];
+}
+
+// ─── Invoice data type ────────────────────────────────────────────────────────
+interface MemberInvoiceData {
+  invoiceNum: string;
+  memberName: string;
+  memberPhone?: string;
+  planName: string;
+  planPrice: number;
+  startDate: string;
+  expiryDate: string;
+  amountPaid: number;
+  discount: number;
+  balance: number;
+  currency: string;
+  isRenewal: boolean;
+}
+
+// ─── Invoice Print ────────────────────────────────────────────────────────────
+function printMemberInvoice(inv: MemberInvoiceData, settings: Record<string, unknown>) {
+  const sym = inv.currency === "CDF" ? "FC" : "$";
+  const fmt = (n: number) => inv.currency === "CDF" ? `FC ${n % 1 === 0 ? n : n.toFixed(2)}` : `${sym}${n % 1 === 0 ? n : n.toFixed(2)}`;
+  const fmtD = (d: string) => { try { return new Date(d).toLocaleDateString("fr-FR"); } catch { return d; } };
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${inv.invoiceNum}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 340px; margin: 0 auto; padding: 24px 20px; font-size: 13px; color: #111; background: #fff; }
+    .gym-name { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+    .gym-sub { font-size: 12px; color: #666; margin-top: 2px; }
+    .divider { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
+    .divider-dashed { border: none; border-top: 1px dashed #d1d5db; margin: 14px 0; }
+    .row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; }
+    .label { color: #6b7280; }
+    .val { font-weight: 500; }
+    .badge { display: inline-block; background: #f3f4f6; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 600; color: #374151; }
+    .total-row { display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; padding: 8px 0; border-top: 2px solid #111; margin-top: 4px; }
+    .sum-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; }
+    .balance-due { color: #dc2626; font-weight: 600; }
+    .balance-ok { color: #059669; font-weight: 600; }
+    .footer { margin-top: 24px; text-align: center; font-size: 12px; color: #9ca3af; }
+    @media print { body { padding: 12px; } }
+  </style>
+</head>
+<body>
+  <div style="text-align:center;margin-bottom:16px">
+    <img src="${window.location.origin}/gym-logo.jpg" onerror="this.style.display='none'" style="max-height:60px;margin-bottom:10px;object-fit:contain" alt=""/>
+    <div class="gym-name">${settings.gymName ?? "Oxygen Fitness Gym"}</div>
+    ${settings.address ? `<div class="gym-sub">${settings.address}</div>` : ""}
+    ${settings.phone ? `<div class="gym-sub">${settings.phone}</div>` : ""}
+  </div>
+  <hr class="divider">
+  <div class="row"><span class="label">N° Facture</span><span class="val badge">${inv.invoiceNum}</span></div>
+  <div class="row"><span class="label">Date</span><span class="val">${new Date().toLocaleDateString("fr-FR")}</span></div>
+  <div class="row"><span class="label">Type</span><span class="val">${inv.isRenewal ? "Renouvellement" : "Nouvelle Inscription"}</span></div>
+  <hr class="divider">
+  <div class="row"><span class="label">Membre</span><span class="val">${inv.memberName}</span></div>
+  ${inv.memberPhone ? `<div class="row"><span class="label">Téléphone</span><span class="val">${inv.memberPhone}</span></div>` : ""}
+  <hr class="divider">
+  <div class="row"><span class="label">Abonnement</span><span class="val">${inv.planName}</span></div>
+  <div class="row"><span class="label">Début</span><span class="val">${fmtD(inv.startDate)}</span></div>
+  <div class="row"><span class="label">Expiration</span><span class="val">${fmtD(inv.expiryDate)}</span></div>
+  <hr class="divider">
+  <div class="sum-row"><span class="label">Prix abonnement</span><span>${fmt(inv.planPrice)}</span></div>
+  ${inv.discount > 0 ? `<div class="sum-row"><span class="label">Remise</span><span style="color:#dc2626">-${fmt(inv.discount)}</span></div>` : ""}
+  <div class="total-row"><span>TOTAL</span><span>${fmt(inv.planPrice - inv.discount)}</span></div>
+  <div class="sum-row"><span class="label">Montant payé</span><span>${fmt(inv.amountPaid)}</span></div>
+  <div class="sum-row"><span class="label">Reste à payer</span><span class="${inv.balance > 0 ? "balance-due" : "balance-ok"}">${fmt(inv.balance)}</span></div>
+  <hr class="divider-dashed" style="margin-top:20px">
+  <div class="footer">${settings.receiptFooter ?? "Merci de votre confiance !"}</div>
+</body>
+</html>`;
+
+  const win = window.open("", "_blank", "width=380,height=650");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.print();
 }
 function fmtCurrency(amount: number | null | undefined, currency: string): string {
   if (amount == null) return "—";
@@ -177,6 +262,11 @@ export default function MembersPage() {
     return () => clearTimeout(t);
   }, [search]);
 
+  // ── Invoice
+  const [invoicePrintData, setInvoicePrintData] = useState<MemberInvoiceData | null>(null);
+  const pendingInvoiceRef = useRef<MemberInvoiceData | null>(null);
+  const { data: settingsData } = useGetSettings();
+
   // ── Modals
   const [addOpen, setAddOpen] = useState(false);
   const [editMember, setEditMember] = useState<Member | null>(null);
@@ -224,7 +314,14 @@ export default function MembersPage() {
   const invalidateMembers = () => queryClient.invalidateQueries({ queryKey: ["/api/members"] });
 
   // ── Mutations
-  const createMutation = useCreateMember({ mutation: { onSuccess: () => { invalidateMembers(); setAddOpen(false); toast({ title: t("common.success") }); } } });
+  const createMutation = useCreateMember({ mutation: { onSuccess: (data) => {
+    invalidateMembers(); setAddOpen(false); toast({ title: t("common.success") });
+    if (pendingInvoiceRef.current) {
+      const inv = { ...pendingInvoiceRef.current, invoiceNum: `INV-${(data as any).id ?? Date.now()}` };
+      setInvoicePrintData(inv);
+      pendingInvoiceRef.current = null;
+    }
+  }}});
   const updateMutation = useUpdateMember({ mutation: { onSuccess: () => { invalidateMembers(); setEditMember(null); toast({ title: t("common.success") }); } } });
   const deleteMutation = useDeleteMember({ mutation: { onSuccess: () => { invalidateMembers(); toast({ title: t("common.success") }); } } });
   const checkInMutation = useCheckInMember({ mutation: {
@@ -239,7 +336,10 @@ export default function MembersPage() {
       }
     }
   }});
-  const renewMutation = useRenewMember({ mutation: { onSuccess: () => { invalidateMembers(); setRenewMember(null); toast({ title: t("common.success") }); } } });
+  const renewMutation = useRenewMember({ mutation: { onSuccess: () => {
+    invalidateMembers(); setRenewMember(null); toast({ title: t("common.success") });
+    if (pendingInvoiceRef.current) { setInvoicePrintData(pendingInvoiceRef.current); pendingInvoiceRef.current = null; }
+  }}});
   const freezeMutation = useFreezeMember({ mutation: { onSuccess: () => { invalidateMembers(); setFreezeMember(null); toast({ title: t("common.success") }); } } });
   const reactivateMutation = useReactivateMember({ mutation: { onSuccess: () => { invalidateMembers(); setReactivateMember(null); toast({ title: t("common.success") }); } } });
   const statusMutation = useSetMemberStatus({ mutation: { onSuccess: () => { invalidateMembers(); toast({ title: t("common.success") }); } } });
@@ -296,6 +396,24 @@ export default function MembersPage() {
     if (editMember) {
       updateMutation.mutate({ id: editMember.id, data: payload });
     } else {
+      const selectedPlan = plans.find((p: Plan) => String(p.id) === values.planId);
+      const price = planPrice;
+      const disc = Number(values.discount ?? 0);
+      const paid = Number(values.amountPaid ?? 0);
+      pendingInvoiceRef.current = {
+        invoiceNum: `INV-0`,
+        memberName: values.name,
+        memberPhone: values.phone ?? undefined,
+        planName: selectedPlan?.name ?? "",
+        planPrice: price,
+        startDate: values.startDate ?? "",
+        expiryDate: values.expiryDate ?? "",
+        amountPaid: paid,
+        discount: disc,
+        balance: price - disc - paid,
+        currency: values.currency ?? "USD",
+        isRenewal: false,
+      };
       createMutation.mutate({ data: payload });
     }
   }
@@ -325,6 +443,24 @@ export default function MembersPage() {
 
   async function onRenewSubmit(values: RenewFormValues) {
     if (!renewMember) return;
+    const selectedPlan = plans.find((p: Plan) => String(p.id) === values.planId);
+    const price = renewPlanPrice;
+    const disc = Number(values.discount ?? 0);
+    const paid = Number(values.amountPaid ?? 0);
+    pendingInvoiceRef.current = {
+      invoiceNum: `INV-R-${renewMember.id}-${Date.now()}`,
+      memberName: renewMember.name,
+      memberPhone: renewMember.phone ?? undefined,
+      planName: selectedPlan?.name ?? "",
+      planPrice: price,
+      startDate: values.startDate,
+      expiryDate: values.expiryDate ?? "",
+      amountPaid: paid,
+      discount: disc,
+      balance: price - disc - paid,
+      currency: values.currency ?? "USD",
+      isRenewal: true,
+    };
     renewMutation.mutate({ id: renewMember.id, data: {
       ...values,
       planId: parseInt(values.planId),
@@ -939,6 +1075,80 @@ export default function MembersPage() {
               disabled={reactivateMutation.isPending}
             >
               {reactivateMutation.isPending ? t("common.loading") : t("members.actions.reactivate")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Invoice Print Dialog ────────────────────────────────────────────── */}
+      <Dialog open={!!invoicePrintData} onOpenChange={(o) => { if (!o) setInvoicePrintData(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Printer className="h-4 w-4" />
+              {invoicePrintData?.isRenewal ? t("members.invoice.title_renewal") : t("members.invoice.title_new")}
+            </DialogTitle>
+          </DialogHeader>
+          {invoicePrintData && (
+            <div className="space-y-3 text-sm">
+              <div className="bg-muted/50 rounded-lg p-3 space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t("members.invoice.member")}</span>
+                  <span className="font-medium">{invoicePrintData.memberName}</span>
+                </div>
+                {invoicePrintData.memberPhone && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{t("members.invoice.phone")}</span>
+                    <span>{invoicePrintData.memberPhone}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t("members.invoice.plan")}</span>
+                  <span className="font-medium">{invoicePrintData.planName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t("members.invoice.start")}</span>
+                  <span>{fmtDate(invoicePrintData.startDate)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t("members.invoice.expiry")}</span>
+                  <span>{fmtDate(invoicePrintData.expiryDate)}</span>
+                </div>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-3 space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t("members.invoice.price")}</span>
+                  <span>{invoicePrintData.currency === "CDF" ? `FC ${invoicePrintData.planPrice}` : `$${invoicePrintData.planPrice}`}</span>
+                </div>
+                {invoicePrintData.discount > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{t("members.invoice.discount")}</span>
+                    <span className="text-red-500">-{invoicePrintData.currency === "CDF" ? `FC ${invoicePrintData.discount}` : `$${invoicePrintData.discount}`}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-semibold border-t pt-1.5 mt-1">
+                  <span>{t("members.invoice.paid")}</span>
+                  <span>{invoicePrintData.currency === "CDF" ? `FC ${invoicePrintData.amountPaid}` : `$${invoicePrintData.amountPaid}`}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t("members.invoice.balance")}</span>
+                  <span className={invoicePrintData.balance > 0 ? "text-red-600 font-medium" : "text-green-600 font-medium"}>
+                    {invoicePrintData.currency === "CDF" ? `FC ${invoicePrintData.balance}` : `$${invoicePrintData.balance}`}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setInvoicePrintData(null)}>{t("common.close")}</Button>
+            <Button
+              onClick={() => {
+                if (invoicePrintData) printMemberInvoice(invoicePrintData, (settingsData ?? {}) as Record<string, unknown>);
+              }}
+              className="gap-2"
+            >
+              <Printer className="h-4 w-4" />
+              {t("members.invoice.print")}
             </Button>
           </DialogFooter>
         </DialogContent>
