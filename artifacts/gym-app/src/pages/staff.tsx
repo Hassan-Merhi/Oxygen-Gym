@@ -789,7 +789,11 @@ export function LoginUsersTab() {
   }, [watchedName]);
 
   const onAddSubmit = (data: z.infer<typeof formSchema>) => {
-    createUser.mutate({ data: { username: data.username, name: data.name, email: data.email || undefined, phone: data.phone || undefined, role: data.role, status: data.status, password: data.password || undefined } as any }, {
+    if (!data.password) {
+      form.setError("password", { message: "Required for new users" });
+      return;
+    }
+    createUser.mutate({ data: { username: data.username, name: data.name, email: data.email || undefined, phone: data.phone || undefined, role: data.role, status: data.status, password: data.password } as any }, {
       onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListUsersQueryKey() }); setIsAddOpen(false); form.reset(); prevUsernameRef.current = ""; toast({ title: t("common.success") }); },
       onError: (err: any) => toast({ title: err?.data?.error ?? t("common.error"), variant: "destructive" })
     });
@@ -905,7 +909,7 @@ export function LoginUsersTab() {
                 <FormItem><FormLabel>{t("auth.username")}</FormLabel><FormControl><Input {...field} placeholder="e.g. john_smith" /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="password" render={({ field }) => (
-                <FormItem><FormLabel>{t("auth.password")} <span className="text-muted-foreground text-xs">({t("common.optional")})</span></FormLabel><FormControl><Input type="password" {...field} placeholder="••••••••" /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>{t("auth.password")}</FormLabel><FormControl><Input type="password" {...field} placeholder="••••••••" /></FormControl><FormMessage /></FormItem>
               )} />
               <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="role" render={({ field }) => (

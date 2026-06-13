@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import bcrypt from "bcryptjs";
 import { db, usersTable, defaultAdminPermissions, defaultStaffPermissions, defaultManagerPermissions } from "@workspace/db";
-import { eq, isNull } from "drizzle-orm";
+import { eq, isNull, sql } from "drizzle-orm";
 import { signToken, requireAuth } from "../middlewares/auth";
 import { logActivity } from "../lib/activity";
 
@@ -58,7 +58,7 @@ router.post("/setup", async (req: Request, res: Response) => {
     if (existingAdmin) {
       // Check username isn't taken by someone else
       const taken = await db.query.usersTable.findFirst({
-        where: (u, { and, eq }) => and(eq(u.username, username)),
+        where: (u) => sql`lower(${u.username}) = lower(${username})`,
       });
       if (taken && taken.id !== existingAdmin.id) {
         res.status(400).json({ error: "Username already taken" });
@@ -70,7 +70,7 @@ router.post("/setup", async (req: Request, res: Response) => {
         .returning();
     } else {
       // No users at all — create fresh admin
-      const taken = await db.query.usersTable.findFirst({ where: eq(usersTable.username, username) });
+      const taken = await db.query.usersTable.findFirst({ where: () => sql`lower(${usersTable.username}) = lower(${username})` });
       if (taken) {
         res.status(400).json({ error: "Username already taken" });
         return;
@@ -103,7 +103,10 @@ router.post("/login", async (req: Request, res: Response) => {
 
   try {
     const user = await db.query.usersTable.findFirst({
-      where: (u, { eq, isNull, and }) => and(eq(u.username, username), isNull(u.deletedAt)),
+      where: (u, { isNull, and }) => and(
+        sql`lower(${u.username}) = lower(${username})`,
+        isNull(u.deletedAt)
+      ),
     });
 
     if (!user) {
