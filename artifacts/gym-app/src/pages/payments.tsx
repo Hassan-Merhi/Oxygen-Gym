@@ -370,7 +370,6 @@ export default function CashBook() {
         <td>${item.direction === "in" ? "In" : "Out"} / ${item.category.replace(/_/g, " ")}</td>
         <td style="text-align:right;color:${color};font-weight:600">${sign}${fmtAmt(item.amount)} ${item.currency}</td>
         <td style="text-align:right;font-weight:600;color:${bal < 0 ? "#dc2626" : "#111"}">${bal >= 0 ? "" : "−"}$${fmtAmt(Math.abs(bal))}</td>
-        <td>${item.notes ?? "—"}</td>
       </tr>`;
     }).join("");
 
@@ -423,8 +422,8 @@ export default function CashBook() {
         <tbody>${vchRows || "<tr><td colspan='6' style='text-align:center;padding:16px;color:#9ca3af'>No records</td></tr>"}</tbody>
        </table>`
     : `<table>
-        <thead><tr><th>Date</th><th>Type / Category</th><th>Amount</th><th>Balance (USD)</th><th>Notes</th></tr></thead>
-        <tbody>${payRows || "<tr><td colspan='5' style='text-align:center;padding:16px;color:#9ca3af'>No records</td></tr>"}</tbody>
+        <thead><tr><th>Date</th><th>Type / Category</th><th>Amount</th><th>Balance (USD)</th></tr></thead>
+        <tbody>${payRows || "<tr><td colspan='4' style='text-align:center;padding:16px;color:#9ca3af'>No records</td></tr>"}</tbody>
        </table>`
   }
   <div class="footer">GymPro Cash Book — Generated ${new Date().toISOString().slice(0, 10)}</div>
@@ -545,15 +544,14 @@ export default function CashBook() {
                     <th className="text-left px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Type</th>
                     <th className="text-right px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Amount</th>
                     <th className="text-right px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Balance</th>
-                    <th className="text-left px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground hidden sm:table-cell">Notes</th>
                     {canManage && <th className="px-5 py-3 w-20" />}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
                   {payListQ.isLoading ? (
-                    <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">Loading…</td></tr>
+                    <tr><td colSpan={5} className="text-center py-12 text-muted-foreground">Loading…</td></tr>
                   ) : payItems.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center py-16">
+                    <tr><td colSpan={5} className="text-center py-16">
                       <Banknote className="w-9 h-9 mx-auto text-muted-foreground/30 mb-2" />
                       <p className="text-muted-foreground font-medium">No transactions yet</p>
                       <p className="text-muted-foreground/50 text-xs mt-0.5">Record your first payment to get started</p>
@@ -581,9 +579,6 @@ export default function CashBook() {
                           ${fmtAmt(bal)}
                         </span>
                         <span className="ml-1 text-xs text-muted-foreground">USD</span>
-                      </td>
-                      <td className="px-5 py-3.5 hidden sm:table-cell max-w-[220px]">
-                        <p className="text-sm text-muted-foreground truncate">{item.notes || "—"}</p>
                       </td>
                       {canManage && (
                         <td className="px-5 py-3.5">

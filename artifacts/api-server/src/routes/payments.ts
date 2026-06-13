@@ -24,25 +24,45 @@ function callerName(req: Request): string {
 // ─── Summary ─────────────────────────────────────────────────────────────────
 router.get("/summary", async (req: Request, res: Response) => {
   const [s] = await db.select({ rate: settingsTable.usdToCdfRate, currency: settingsTable.defaultCurrency }).from(settingsTable);
-  const rate = s?.rate ?? 1;
+  const rate = s?.rate ?? 2800;
   const currency = s?.currency ?? "USD";
 
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
 
-  const todayEntries = await db
-    .select({ direction: cashLedgerTable.direction, amountUsd: cashLedgerTable.amountUsd })
-    .from(cashLedgerTable)
-    .where(and(gte(cashLedgerTable.entryDate, todayStart), lte(cashLedgerTable.entryDate, todayEnd)));
+  // Query payments table directly so membership payments (created via members.ts)
+  // are included — the cash ledger only captures payments created via this route.
+  const [todayIn, todayOut, allIn, allOut] = await Promise.all([
+    db.select({ total: sum(paymentsTable.amountUsd) })
+      .from(paymentsTable)
+      .where(and(
+        eq(paymentsTable.direction, "in"),
+        eq(paymentsTable.status, "completed"),
+        gte(paymentsTable.paymentDate, todayStart),
+        lte(paymentsTable.paymentDate, todayEnd),
+      )),
+    db.select({ total: sum(paymentsTable.amountUsd) })
+      .from(paymentsTable)
+      .where(and(
+        eq(paymentsTable.direction, "out"),
+        eq(paymentsTable.status, "completed"),
+        gte(paymentsTable.paymentDate, todayStart),
+        lte(paymentsTable.paymentDate, todayEnd),
+      )),
+    db.select({ total: sum(paymentsTable.amountUsd) })
+      .from(paymentsTable)
+      .where(and(eq(paymentsTable.direction, "in"), eq(paymentsTable.status, "completed"))),
+    db.select({ total: sum(paymentsTable.amountUsd) })
+      .from(paymentsTable)
+      .where(and(eq(paymentsTable.direction, "out"), eq(paymentsTable.status, "completed"))),
+  ]);
 
-  let cashInToday = 0;
-  let cashOutToday = 0;
-  for (const e of todayEntries) {
-    if (e.direction === "in") cashInToday += e.amountUsd;
-    else cashOutToday += e.amountUsd;
-  }
-
-  const { balanceUsd, balanceCdf } = await getCurrentBalance();
+  const cashInToday = Number(todayIn[0]?.total ?? 0);
+  const cashOutToday = Number(todayOut[0]?.total ?? 0);
+  const totalIn = Number(allIn[0]?.total ?? 0);
+  const totalOut = Number(allOut[0]?.total ?? 0);
+  const balanceUsd = totalIn - totalOut;
+  const balanceCdf = balanceUsd * rate;
 
   res.json({
     cashInToday,
