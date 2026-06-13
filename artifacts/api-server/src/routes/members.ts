@@ -235,6 +235,9 @@ router.patch("/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   const body = req.body as Record<string, unknown>;
 
+  // cashAccountId is not a member column — extract it separately
+  const cashAccountId = body.cashAccountId ? Number(body.cashAccountId) : undefined;
+
   let planName: string | undefined;
   let planPrice: number | undefined;
   if (body.planId !== undefined && body.planId) {
@@ -257,12 +260,86 @@ router.patch("/:id", async (req: Request, res: Response) => {
   }
   if (planName) { updateData.planName = planName; updateData.planPrice = planPrice; }
 
-  const ap = (updateData.amountPaid ?? existing.amountPaid ?? 0) as number;
-  const disc = (updateData.discount ?? existing.discount ?? 0) as number;
+  const newAp = (updateData.amountPaid ?? existing.amountPaid ?? 0) as number;
+  const newDisc = (updateData.discount ?? existing.discount ?? 0) as number;
   const pp = (updateData.planPrice ?? existing.planPrice ?? 0) as number;
-  updateData.balance = pp - disc - ap;
+  updateData.balance = pp - newDisc - newAp;
 
   const [member] = await db.update(membersTable).set(updateData).where(eq(membersTable.id, id)).returning();
+
+  // ── Sync payment record when amountPaid or discount changes ───────────────
+  const amountChanged = body.amountPaid !== undefined || body.discount !== undefined;
+  if (amountChanged) {
+    const currency = (updateData.currency ?? existing.currency ?? "USD") as string;
+    const effectivePlanId = (updateData.planId ?? existing.planId) as number | undefined;
+    const effectivePlanName = planName ?? existing.planName ?? "";
+
+    // Find the most recent membership payment for this member
+    const [existingPayment] = await db
+      .select()
+      .from(paymentsTable)
+      .where(and(eq(paymentsTable.memberId, id), eq(paymentsTable.type, "membership")))
+      .orderBy(desc(paymentsTable.createdAt))
+      .limit(1);
+
+    if (existingPayment) {
+      // Update the existing payment record
+      await db.update(paymentsTable)
+        .set({ amount: newAp, discount: newDisc, currency, planName: effectivePlanName })
+        .where(eq(paymentsTable.id, existingPayment.id));
+    } else if (effectivePlanId) {
+      // No prior payment existed — create one now
+      const paymentNumber = await getNextNumber("PAY");
+      await db.insert(paymentsTable).values({
+        paymentNumber,
+        memberId: id,
+        memberName: member.name,
+        planId: effectivePlanId,
+        planName: effectivePlanName,
+        amount: newAp,
+        discount: newDisc,
+        currency,
+        type: "membership",
+        paymentDate: new Date(),
+        status: "completed",
+      });
+    }
+
+    // ── Sync voucher if cashAccountId is provided and amount > 0 ────────────
+    if (cashAccountId && newAp > 0) {
+      let accountName = "cash";
+      const [acct] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, cashAccountId));
+      if (acct) accountName = acct.name.toLowerCase().replace(/ /g, "_");
+
+      // Cancel any existing voucher for this member's membership
+      await db.update(vouchersTable)
+        .set({ status: "cancelled" })
+        .where(and(
+          eq(vouchersTable.linkedEntity, "member"),
+          eq(vouchersTable.linkedEntityId, id),
+          eq(vouchersTable.voucherType, "cash_receipt"),
+          isNull(vouchersTable.deletedAt),
+        ));
+
+      // Create a fresh voucher with the correct amount
+      const voucherNumber = await getNextNumber("VCH");
+      await db.insert(vouchersTable).values({
+        voucherNumber,
+        voucherType: "cash_receipt",
+        direction: "in",
+        receivedFrom: member.name,
+        linkedEntity: "member",
+        linkedEntityId: id,
+        linkedEntityName: member.name,
+        amount: newAp,
+        currency,
+        account: accountName,
+        category: "membership",
+        description: `Membership payment — ${effectivePlanName}`,
+        status: "recorded",
+      });
+    }
+  }
 
   await logActivity(req, "update_member", "member", id, { name: member.name });
   res.json(member);
