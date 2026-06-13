@@ -11,6 +11,10 @@ export const plansTable = pgTable("plans", {
   price: doublePrecision("price").notNull().default(0),
   currency: text("currency").notNull().default("USD"), // 'USD' | 'CDF'
   status: text("status").notNull().default("active"), // 'active' | 'archived' | 'deleted'
+  // Coach commission
+  coachId: integer("coach_id"),
+  coachFee: doublePrecision("coach_fee").default(0),
+  coachName: text("coach_name"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

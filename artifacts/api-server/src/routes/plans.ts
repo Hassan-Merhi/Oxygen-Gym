@@ -17,13 +17,16 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 router.post("/", async (req: Request, res: Response) => {
-  const { name, description, durationDays, price, currency, status } = req.body as {
+  const { name, description, durationDays, price, currency, status, coachId, coachFee, coachName } = req.body as {
     name: string;
     description?: string;
     durationDays: number;
     price: number;
     currency: string;
     status?: string;
+    coachId?: number | null;
+    coachFee?: number;
+    coachName?: string | null;
   };
   if (!name || !durationDays || price === undefined || !currency) {
     res.status(400).json({ error: "name, durationDays, price, currency are required" });
@@ -31,20 +34,28 @@ router.post("/", async (req: Request, res: Response) => {
   }
   const [plan] = await db
     .insert(plansTable)
-    .values({ name, description, durationDays, price, currency, status: status ?? "active" })
+    .values({
+      name, description, durationDays, price, currency, status: status ?? "active",
+      coachId: coachId ?? null,
+      coachFee: coachFee ?? 0,
+      coachName: coachName ?? null,
+    })
     .returning();
   res.status(201).json(plan);
 });
 
 router.patch("/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const { name, description, durationDays, price, currency, status } = req.body as {
+  const { name, description, durationDays, price, currency, status, coachId, coachFee, coachName } = req.body as {
     name?: string;
     description?: string;
     durationDays?: number;
     price?: number;
     currency?: string;
     status?: string;
+    coachId?: number | null;
+    coachFee?: number;
+    coachName?: string | null;
   };
   const [plan] = await db
     .update(plansTable)
@@ -55,6 +66,9 @@ router.patch("/:id", async (req: Request, res: Response) => {
       ...(price !== undefined && { price }),
       ...(currency !== undefined && { currency }),
       ...(status !== undefined && { status }),
+      ...(coachId !== undefined && { coachId }),
+      ...(coachFee !== undefined && { coachFee }),
+      ...(coachName !== undefined && { coachName }),
     })
     .where(eq(plansTable.id, id))
     .returning();

@@ -2368,6 +2368,9 @@ components:
         price: { type: number }
         currency: { type: string }
         status: { type: string }
+        coachId: { type: integer, nullable: true }
+        coachFee: { type: number, nullable: true }
+        coachName: { type: string, nullable: true }
         createdAt: { type: string }
         updatedAt: { type: string }
       required: [id, name, durationDays, price, currency, status]
@@ -2381,6 +2384,9 @@ components:
         price: { type: number }
         currency: { type: string, enum: [USD, CDF] }
         status: { type: string, enum: [active, archived] }
+        coachId: { type: integer, nullable: true }
+        coachFee: { type: number, nullable: true }
+        coachName: { type: string, nullable: true }
       required: [name, durationDays, price, currency]
 
     Member:

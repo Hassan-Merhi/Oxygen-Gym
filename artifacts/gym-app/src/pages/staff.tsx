@@ -5,6 +5,7 @@ import {
   useListStaffEmployees, useCreateStaffEmployee, useUpdateStaffEmployee, useArchiveStaffEmployee,
   getListStaffEmployeesQueryKey,
   useListPayroll, useCreatePayroll, useMarkPayrollPaid, useCancelPayroll, getListPayrollQueryKey,
+  useGetCommissionSummary, getGetCommissionSummaryQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGetMe } from "@/hooks/use-me";
@@ -355,6 +356,13 @@ function PayrollTab() {
   });
   const employees = empData?.items ?? [];
 
+  const { data: commissionSummary = [] } = useGetCommissionSummary({
+    query: { queryKey: getGetCommissionSummaryQueryKey() }
+  });
+  const commissionByEmpId = Object.fromEntries(
+    commissionSummary.map(c => [c.staffEmployeeId, c])
+  );
+
   const historyParams = { search: search || undefined, status: statusFilter !== "all" ? statusFilter : undefined, limit: "50" } as any;
   const { data: histData, isLoading: histLoading } = useListPayroll(historyParams, {
     query: { queryKey: getListPayrollQueryKey(historyParams) }
@@ -506,6 +514,10 @@ function PayrollTab() {
                         <TableHead className="font-semibold">Employee</TableHead>
                         <TableHead className="font-semibold text-right">Base Salary</TableHead>
                         <TableHead className="font-semibold text-right">Bonus</TableHead>
+                        <TableHead className="font-semibold text-right text-violet-600">
+                          Commissions
+                          <span className="block text-[10px] font-normal text-muted-foreground">(pending)</span>
+                        </TableHead>
                         <TableHead className="font-semibold text-right">
                           <span className="text-amber-600">Advance</span>
                           <span className="block text-[10px] font-normal text-muted-foreground">(already taken)</span>
@@ -521,6 +533,7 @@ function PayrollTab() {
                     <TableBody>
                       {runRows.map(row => {
                         const net = netPay(row);
+                        const empCommission = commissionByEmpId[row.empId];
                         return (
                           <TableRow key={row.empId} className={`hover:bg-muted/20 ${!row.checked ? "opacity-40" : ""}`}>
                             <TableCell>
@@ -552,6 +565,18 @@ function PayrollTab() {
                                 onChange={e => updateRow(row.empId, "bonus", parseFloat(e.target.value) || 0)}
                                 className="w-24 text-right tabular-nums ml-auto h-8 text-sm text-emerald-700"
                               />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {empCommission && empCommission.pendingCount > 0 ? (
+                                <div className="text-right">
+                                  <p className="font-semibold text-sm text-violet-700 tabular-nums">
+                                    +{empCommission.pendingAmount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground">{empCommission.pendingCount} pending</p>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground/50">—</span>
+                              )}
                             </TableCell>
                             <TableCell className="text-right">
                               <Input

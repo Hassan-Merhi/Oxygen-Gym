@@ -15,6 +15,9 @@ export interface Plan {
   price: number;
   currency: string;
   status: string;
+  coachId?: number | null;
+  coachFee?: number | null;
+  coachName?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

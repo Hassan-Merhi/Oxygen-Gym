@@ -11,6 +11,8 @@ import {
   useDeletePlan,
   getListPlansQueryKey,
   useGetSettings,
+  useListStaffEmployees,
+  getListStaffEmployeesQueryKey,
 } from "@workspace/api-client-react";
 import type { Plan } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -53,6 +55,7 @@ import {
   RotateCcw,
   Search,
   Layers,
+  UserCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -63,6 +66,9 @@ const planSchema = z.object({
   durationDays: z.coerce.number().int().min(1, "Duration must be at least 1 day"),
   price: z.coerce.number().min(0, "Price must be ≥ 0"),
   currency: z.enum(["USD", "CDF"]).default("USD"),
+  coachId: z.coerce.number().nullable().optional(),
+  coachFee: z.coerce.number().min(0).default(0),
+  coachName: z.string().nullable().optional(),
 });
 type PlanFormValues = z.infer<typeof planSchema>;
 
@@ -114,6 +120,11 @@ function PlanModal({
   const createPlan = useCreatePlan({ mutation: { onSuccess: invalidate } });
   const updatePlan = useUpdatePlan({ mutation: { onSuccess: invalidate } });
 
+  const { data: empData } = useListStaffEmployees({ limit: "200", status: "active" } as any, {
+    query: { queryKey: getListStaffEmployeesQueryKey({ limit: "200", status: "active" } as any) },
+  });
+  const employees = empData?.items ?? [];
+
   const {
     register,
     handleSubmit,
@@ -130,11 +141,14 @@ function PlanModal({
           durationDays: plan.durationDays,
           price: plan.price,
           currency: (plan.currency as "USD" | "CDF") ?? "USD",
+          coachId: plan.coachId ?? null,
+          coachFee: plan.coachFee ?? 0,
         }
-      : { currency: "USD", durationDays: 30, price: 0 },
+      : { currency: "USD", durationDays: 30, price: 0, coachId: null, coachFee: 0 },
   });
 
   const currency = watch("currency");
+  const coachId = watch("coachId");
 
   // Re-populate form whenever the plan being edited changes
   useEffect(() => {
@@ -147,19 +161,29 @@ function PlanModal({
               durationDays: plan.durationDays,
               price: plan.price,
               currency: (plan.currency as "USD" | "CDF") ?? "USD",
+              coachId: plan.coachId ?? null,
+              coachFee: plan.coachFee ?? 0,
             }
-          : { currency: "USD", durationDays: 30, price: 0 },
+          : { currency: "USD", durationDays: 30, price: 0, coachId: null, coachFee: 0 },
       );
     }
   }, [open, plan, reset]);
 
   const onSubmit = handleSubmit(async (data) => {
     try {
+      // Resolve coachName from selected employee
+      const selectedCoach = employees.find(e => e.id === Number(data.coachId));
+      const payload = {
+        ...data,
+        coachId: data.coachId ? Number(data.coachId) : null,
+        coachName: selectedCoach?.name ?? null,
+        coachFee: data.coachId ? (data.coachFee ?? 0) : 0,
+      };
       if (plan) {
-        await updatePlan.mutateAsync({ id: plan.id, data });
+        await updatePlan.mutateAsync({ id: plan.id, data: payload });
         toast({ title: t("plans.updated") });
       } else {
-        await createPlan.mutateAsync({ data });
+        await createPlan.mutateAsync({ data: payload });
         toast({ title: t("plans.created") });
       }
       reset();
@@ -215,6 +239,49 @@ function PlanModal({
               <Input id="price" type="number" step="0.01" min="0" className="pl-9" {...register("price")} placeholder="0" />
             </div>
             {errors.price && <p className="text-xs text-red-500">{errors.price.message}</p>}
+          </div>
+
+          {/* Coach commission section */}
+          <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3 space-y-3">
+            <p className="text-xs font-semibold text-violet-700 flex items-center gap-1.5">
+              <UserCheck className="w-3.5 h-3.5" />
+              Coach Commission <span className="font-normal text-muted-foreground">(optional)</span>
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Default Coach</Label>
+                <Select
+                  value={coachId ? String(coachId) : "none"}
+                  onValueChange={(v) => {
+                    setValue("coachId", v === "none" ? null : Number(v));
+                    if (v === "none") setValue("coachFee", 0);
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="No coach" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No coach</SelectItem>
+                    {employees.map(e => (
+                      <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Commission Fee ({currency === "CDF" ? "FC" : "$"})</Label>
+                <Input
+                  type="number" step="0.01" min="0"
+                  className="h-8 text-xs"
+                  {...register("coachFee")}
+                  placeholder="0"
+                  disabled={!coachId}
+                />
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              When a payment is recorded for a member on this plan, a commission is auto-created for the assigned coach.
+            </p>
           </div>
 
           <DialogFooter>
@@ -348,6 +415,18 @@ function PlanCard({
               )}
             </div>
           </div>
+          {/* Coach commission badge */}
+          {plan.coachId && plan.coachName && (
+            <div className="flex items-center gap-1.5 pt-1">
+              <UserCheck className="w-3 h-3 text-violet-500 shrink-0" />
+              <span className="text-xs text-violet-700 font-medium truncate">{plan.coachName}</span>
+              {(plan.coachFee ?? 0) > 0 && (
+                <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
+                  +{fmtPrice(plan.coachFee!, plan.currency)}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

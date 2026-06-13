@@ -363,6 +363,9 @@ export interface Plan {
   price: number;
   currency: string;
   status: string;
+  coachId?: number | null;
+  coachFee?: number | null;
+  coachName?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -390,6 +393,9 @@ export interface PlanInput {
   price: number;
   currency: PlanInputCurrency;
   status?: PlanInputStatus;
+  coachId?: number | null;
+  coachFee?: number | null;
+  coachName?: string | null;
 }
 
 export interface Member {

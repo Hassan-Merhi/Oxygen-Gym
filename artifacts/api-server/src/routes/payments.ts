@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
-import { paymentsTable, settingsTable, cashLedgerTable } from "@workspace/db/schema";
+import { paymentsTable, settingsTable, cashLedgerTable, membersTable, commissionsTable } from "@workspace/db/schema";
 import { eq, and, ilike, or, gte, lte, count, sum, desc, asc } from "drizzle-orm";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
@@ -164,6 +164,38 @@ router.post("/", async (req: Request, res: Response) => {
     description: `${body.category} — ${body.linkedEntityName ?? body.memberName ?? ""}`,
     createdBy,
   });
+
+  // ── Auto-create commission if member has a coach assigned ────────────────
+  if (body.memberId && body.direction === "in") {
+    try {
+      const [member] = await db.select().from(membersTable).where(eq(membersTable.id, body.memberId));
+      if (member) {
+        let coachId = member.coachId;
+        let commissionAmount = member.commissionAmount ?? 0;
+        // If member has no coach but plan does, propagate plan's coach to member
+        if (!coachId && body.planId) {
+          const { plansTable } = await import("@workspace/db/schema");
+          const [plan] = await db.select().from(plansTable).where(eq(plansTable.id, body.planId));
+          if (plan?.coachId) {
+            coachId = plan.coachId;
+            commissionAmount = plan.coachFee ?? 0;
+            await db.update(membersTable).set({ coachId: plan.coachId, commissionAmount: plan.coachFee ?? 0 }).where(eq(membersTable.id, body.memberId));
+          }
+        }
+        if (coachId && commissionAmount > 0) {
+          await db.insert(commissionsTable).values({
+            staffEmployeeId: coachId,
+            memberId: body.memberId,
+            memberName: member.name,
+            amount: commissionAmount,
+            currency: body.currency,
+            status: "pending",
+            note: `Payment ${paymentNumber}`,
+          });
+        }
+      }
+    } catch { /* never let commission creation break payment */ }
+  }
 
   await logActivity(req, "payment_recorded", "payment", payment.id, {
     number: paymentNumber,

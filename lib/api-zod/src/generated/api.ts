@@ -653,6 +653,9 @@ export const ListPlansResponseItem = zod.object({
   "price": zod.number(),
   "currency": zod.string(),
   "status": zod.string(),
+  "coachId": zod.number().nullish(),
+  "coachFee": zod.number().nullish(),
+  "coachName": zod.string().nullish(),
   "createdAt": zod.string().optional(),
   "updatedAt": zod.string().optional()
 })
@@ -668,7 +671,10 @@ export const CreatePlanBody = zod.object({
   "durationDays": zod.number(),
   "price": zod.number(),
   "currency": zod.enum(['USD', 'CDF']),
-  "status": zod.enum(['active', 'archived']).optional()
+  "status": zod.enum(['active', 'archived']).optional(),
+  "coachId": zod.number().nullish(),
+  "coachFee": zod.number().nullish(),
+  "coachName": zod.string().nullish()
 })
 
 
@@ -685,7 +691,10 @@ export const UpdatePlanBody = zod.object({
   "durationDays": zod.number(),
   "price": zod.number(),
   "currency": zod.enum(['USD', 'CDF']),
-  "status": zod.enum(['active', 'archived']).optional()
+  "status": zod.enum(['active', 'archived']).optional(),
+  "coachId": zod.number().nullish(),
+  "coachFee": zod.number().nullish(),
+  "coachName": zod.string().nullish()
 })
 
 export const UpdatePlanResponse = zod.object({
@@ -697,6 +706,9 @@ export const UpdatePlanResponse = zod.object({
   "price": zod.number(),
   "currency": zod.string(),
   "status": zod.string(),
+  "coachId": zod.number().nullish(),
+  "coachFee": zod.number().nullish(),
+  "coachName": zod.string().nullish(),
   "createdAt": zod.string().optional(),
   "updatedAt": zod.string().optional()
 })
