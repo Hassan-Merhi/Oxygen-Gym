@@ -12,7 +12,6 @@ import {
   getListPlansQueryKey,
   useGetSettings,
   useListStaffEmployees,
-  getListStaffEmployeesQueryKey,
 } from "@workspace/api-client-react";
 import type { Plan } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -106,12 +105,13 @@ const CARD_ACCENTS = [
 
 // ── Plan Form Modal ────────────────────────────────────────────────────────────
 function PlanModal({
-  open, onClose, plan, onSaved,
+  open, onClose, plan, onSaved, employees,
 }: {
   open: boolean;
   onClose: () => void;
   plan?: Plan | null;
   onSaved: () => void;
+  employees: { id: number; name: string }[];
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -119,11 +119,6 @@ function PlanModal({
   const invalidate = () => qc.invalidateQueries({ queryKey: getListPlansQueryKey() });
   const createPlan = useCreatePlan({ mutation: { onSuccess: invalidate } });
   const updatePlan = useUpdatePlan({ mutation: { onSuccess: invalidate } });
-
-  const { data: empData } = useListStaffEmployees({ limit: "200", status: "active" } as any, {
-    query: { queryKey: getListStaffEmployeesQueryKey({ limit: "200", status: "active" } as any) },
-  });
-  const employees = empData?.items ?? [];
 
   const {
     register,
@@ -447,6 +442,8 @@ export default function PlansPage() {
   const [search, setSearch] = useState("");
 
   const { data: plans = [], isLoading } = useListPlans();
+  const { data: empData } = useListStaffEmployees({ limit: "200" });
+  const employees = empData?.items ?? [];
   const { data: settings } = useGetSettings();
   const exchangeRate = (settings?.usdToCdfRate as number) ?? 2800;
   const updatePlan = useUpdatePlan();
@@ -628,6 +625,7 @@ export default function PlansPage() {
         onClose={() => { setShowModal(false); setEditPlan(null); }}
         plan={editPlan}
         onSaved={invalidate}
+        employees={employees}
       />
     </div>
   );
