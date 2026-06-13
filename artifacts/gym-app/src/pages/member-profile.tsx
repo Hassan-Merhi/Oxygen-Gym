@@ -6,6 +6,7 @@ import {
   useGetMemberPayments,
   useGetMemberCheckins,
   useGetMemberAttendanceStats,
+  useGetSettings,
 } from "@workspace/api-client-react";
 import type { MemberPayment, CheckInRecord } from "@workspace/api-client-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -20,14 +21,110 @@ import {
 } from "recharts";
 import {
   ArrowLeft, User, Phone, Mail, MapPin, AlertCircle, Calendar,
-  CreditCard, Clock, Hash, CalendarCheck, TrendingUp, Activity, Lock,
+  CreditCard, Clock, Hash, CalendarCheck, TrendingUp, Activity, Lock, Printer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { fmtDate, fmtDateTime } from "@/lib/date";
+
 function fmtCurrency(amount: number | null | undefined, currency: string): string {
   if (amount == null) return "—";
   return `${currency} ${amount.toFixed(2)}`;
+}
+
+// ─── Receipt print ────────────────────────────────────────────────────────────
+interface ReceiptData {
+  invoiceNum: string;
+  memberName: string;
+  memberPhone?: string;
+  planName: string;
+  startDate?: string;
+  expiryDate?: string;
+  amountPaid: number;
+  discount: number;
+  planPrice: number;
+  balance: number;
+  currency: string;
+  isRenewal: boolean;
+}
+function printReceipt(inv: ReceiptData, settings: Record<string, unknown>) {
+  const sym = inv.currency === "CDF" ? "FC" : "$";
+  const fmt = (n: number) =>
+    inv.currency === "CDF"
+      ? `FC ${n % 1 === 0 ? n : n.toFixed(2)}`
+      : `${sym}${n % 1 === 0 ? n : n.toFixed(2)}`;
+  const fmtD = (d?: string) => {
+    if (!d) return "—";
+    try { return new Date(d).toLocaleDateString("fr-FR"); } catch { return d; }
+  };
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${inv.invoiceNum}</title>
+  <style>
+    @page { size: 80mm auto; margin: 3mm 6mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 68mm; padding: 0; font-size: 11px; color: #111; background: #fff; }
+    .gym-name { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
+    .gym-sub { font-size: 10px; color: #666; margin-top: 2px; }
+    .divider { border: none; border-top: 1px solid #e5e7eb; margin: 8px 0; }
+    .divider-dashed { border: none; border-top: 1px dashed #d1d5db; margin: 8px 0; }
+    .row { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 4px; }
+    .label { color: #6b7280; }
+    .val { font-weight: 500; }
+    .badge { display: inline-block; background: #f3f4f6; border-radius: 3px; padding: 1px 4px; font-size: 9px; font-weight: 600; color: #374151; }
+    .total-row { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; padding: 6px 0; border-top: 2px solid #111; margin-top: 3px; }
+    .sum-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 11px; }
+    .balance-due { color: #dc2626; font-weight: 600; }
+    .balance-ok { color: #059669; font-weight: 600; }
+    .footer { margin-top: 14px; text-align: center; font-size: 10px; color: #9ca3af; }
+    @media print { html, body { width: 68mm; } }
+  </style>
+</head>
+<body>
+  <div style="text-align:center;margin-bottom:16px">
+    <img src="${window.location.origin}/gym-logo.jpg" onerror="this.style.display='none'" style="max-height:60px;margin-bottom:10px;object-fit:contain" alt=""/>
+    <div class="gym-name">${settings.gymName ?? "Oxygen Fitness Gym"}</div>
+    ${settings.address ? `<div class="gym-sub">${settings.address}</div>` : ""}
+    ${settings.phone ? `<div class="gym-sub">${settings.phone}</div>` : ""}
+  </div>
+  <hr class="divider">
+  <div class="row"><span class="label">N° Reçu</span><span class="val badge">${inv.invoiceNum}</span></div>
+  <div class="row"><span class="label">Date</span><span class="val">${new Date().toLocaleDateString("fr-FR")}</span></div>
+  <div class="row"><span class="label">Type</span><span class="val">${inv.isRenewal ? "Renouvellement" : "Nouvelle Inscription"}</span></div>
+  <hr class="divider">
+  <div class="row"><span class="label">Membre</span><span class="val">${inv.memberName}</span></div>
+  ${inv.memberPhone ? `<div class="row"><span class="label">Téléphone</span><span class="val">${inv.memberPhone}</span></div>` : ""}
+  <hr class="divider">
+  <div class="row"><span class="label">Abonnement</span><span class="val">${inv.planName}</span></div>
+  ${inv.startDate ? `<div class="row"><span class="label">Début</span><span class="val">${fmtD(inv.startDate)}</span></div>` : ""}
+  ${inv.expiryDate ? `<div class="row"><span class="label">Expiration</span><span class="val">${fmtD(inv.expiryDate)}</span></div>` : ""}
+  <hr class="divider">
+  <div class="sum-row"><span class="label">Prix abonnement</span><span>${fmt(inv.planPrice)}</span></div>
+  ${inv.discount > 0 ? `<div class="sum-row"><span class="label">Remise</span><span style="color:#dc2626">-${fmt(inv.discount)}</span></div>` : ""}
+  <div class="total-row"><span>TOTAL</span><span>${fmt(inv.planPrice - inv.discount)}</span></div>
+  <div class="sum-row"><span class="label">Montant payé</span><span>${fmt(inv.amountPaid)}</span></div>
+  <div class="sum-row"><span class="label">Reste à payer</span><span class="${inv.balance > 0 ? "balance-due" : "balance-ok"}">${fmt(inv.balance)}</span></div>
+  <hr class="divider-dashed" style="margin-top:20px">
+  <div class="footer">${settings.receiptFooter ?? "Merci de votre confiance !"}</div>
+</body>
+</html>`;
+
+  const existing = document.getElementById("__gym_print_frame__");
+  if (existing) existing.remove();
+  const iframe = document.createElement("iframe");
+  iframe.id = "__gym_print_frame__";
+  iframe.style.cssText = "position:fixed;top:0;left:-9999px;width:400px;height:1000px;border:none;";
+  document.body.appendChild(iframe);
+  const doc = (iframe.contentDocument ?? (iframe.contentWindow as Window).document);
+  doc.open(); doc.write(html); doc.close();
+  setTimeout(() => {
+    (iframe.contentWindow as Window).focus();
+    (iframe.contentWindow as Window).print();
+    setTimeout(() => iframe.remove(), 2000);
+  }, 500);
 }
 
 function StatusBadge({ status, t }: { status: string; t: (k: string) => string }) {
@@ -71,6 +168,7 @@ export default function MemberProfile({ id }: { id: number }) {
   const { data: payments = [] } = useGetMemberPayments(id);
   const { data: checkins = [] } = useGetMemberCheckins(id);
   const { data: attStats } = useGetMemberAttendanceStats(id);
+  const { data: settingsData } = useGetSettings();
 
   // Build 30-day calendar data
   const last30Days = Array.from({ length: 30 }, (_, i) => {
@@ -410,18 +508,48 @@ export default function MemberProfile({ id }: { id: number }) {
                       <TableHead className="text-xs uppercase text-slate-500">{t("members.form.amountPaid")}</TableHead>
                       <TableHead className="text-xs uppercase text-slate-500">{t("members.form.discount")}</TableHead>
                       <TableHead className="text-xs uppercase text-slate-500">Date</TableHead>
+                      <TableHead className="text-xs uppercase text-slate-500 w-10" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(payments as MemberPayment[]).map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell className="font-mono text-xs text-slate-500">{p.paymentNumber ?? `#${p.id}`}</TableCell>
-                        <TableCell className="text-sm">{p.planName ?? "—"}</TableCell>
-                        <TableCell className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{fmtCurrency(p.amount, p.currency)}</TableCell>
-                        <TableCell className="text-sm text-slate-500">{p.discount ? fmtCurrency(p.discount, p.currency) : "—"}</TableCell>
-                        <TableCell className="text-sm text-slate-500">{fmtDate(p.createdAt)}</TableCell>
-                      </TableRow>
-                    ))}
+                    {(payments as MemberPayment[]).map((p) => {
+                      const planPrice = p.amount + (p.discount ?? 0);
+                      const balance = planPrice - (p.discount ?? 0) - p.amount;
+                      const isFirst = p.id === Math.max(...(payments as MemberPayment[]).map((x) => x.id));
+                      return (
+                        <TableRow key={p.id}>
+                          <TableCell className="font-mono text-xs text-slate-500">{p.paymentNumber ?? `#${p.id}`}</TableCell>
+                          <TableCell className="text-sm">{p.planName ?? "—"}</TableCell>
+                          <TableCell className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{fmtCurrency(p.amount, p.currency)}</TableCell>
+                          <TableCell className="text-sm text-slate-500">{p.discount ? fmtCurrency(p.discount, p.currency) : "—"}</TableCell>
+                          <TableCell className="text-sm text-slate-500">{fmtDate(p.createdAt)}</TableCell>
+                          <TableCell className="py-1.5">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                              title="Print receipt"
+                              onClick={() => printReceipt({
+                                invoiceNum: p.paymentNumber ?? `#${p.id}`,
+                                memberName: member!.name,
+                                memberPhone: member!.phone ?? undefined,
+                                planName: p.planName ?? "Abonnement",
+                                startDate: isFirst ? (member!.startDate ?? undefined) : undefined,
+                                expiryDate: isFirst ? (member!.expiryDate ?? undefined) : undefined,
+                                amountPaid: p.amount,
+                                discount: p.discount ?? 0,
+                                planPrice,
+                                balance,
+                                currency: p.currency,
+                                isRenewal: p.type === "renewal",
+                              }, (settingsData ?? {}) as Record<string, unknown>)}
+                            >
+                              <Printer className="h-3.5 w-3.5" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
