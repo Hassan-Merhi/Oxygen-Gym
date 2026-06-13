@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useI18n } from "@/lib/i18n";
 import { useGetMe } from "@/hooks/use-me";
 import {
@@ -200,6 +200,31 @@ export default function CashBook() {
   const vchItems = vchListQ.data?.items ?? [];
   const vchTotal = vchListQ.data?.total ?? 0;
   const vchPages = Math.ceil(vchTotal / LIMIT);
+
+  // Running balance maps: computed oldest→newest within the visible page
+  const payRunning = useMemo(() => {
+    const reversed = [...payItems].reverse();
+    let sum = 0;
+    const map = new Map<number, number>();
+    reversed.forEach((item) => {
+      const usd = (item.amountUsd as number | null) ?? item.amount ?? 0;
+      sum += item.direction === "in" ? usd : -usd;
+      map.set(item.id, sum);
+    });
+    return map;
+  }, [payItems]);
+
+  const vchRunning = useMemo(() => {
+    const reversed = [...vchItems].reverse();
+    let sum = 0;
+    const map = new Map<number, number>();
+    reversed.forEach((item) => {
+      const usd = (item.amountUsd as number | null) ?? item.amount ?? 0;
+      sum += item.direction === "in" ? usd : -usd;
+      map.set(item.id, sum);
+    });
+    return map;
+  }, [vchItems]);
 
   // ── Mutations ──
   const createPayM = useCreatePayment();
@@ -428,20 +453,23 @@ export default function CashBook() {
                     <th className="text-left px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Date</th>
                     <th className="text-left px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Type</th>
                     <th className="text-right px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Amount</th>
+                    <th className="text-right px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Balance</th>
                     <th className="text-left px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground hidden sm:table-cell">Notes</th>
                     {canManage && <th className="px-5 py-3 w-20" />}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
                   {payListQ.isLoading ? (
-                    <tr><td colSpan={5} className="text-center py-12 text-muted-foreground">Loading…</td></tr>
+                    <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">Loading…</td></tr>
                   ) : payItems.length === 0 ? (
-                    <tr><td colSpan={5} className="text-center py-16">
+                    <tr><td colSpan={6} className="text-center py-16">
                       <Banknote className="w-9 h-9 mx-auto text-muted-foreground/30 mb-2" />
                       <p className="text-muted-foreground font-medium">No transactions yet</p>
                       <p className="text-muted-foreground/50 text-xs mt-0.5">Record your first payment to get started</p>
                     </td></tr>
-                  ) : payItems.map((item) => (
+                  ) : payItems.map((item) => {
+                    const bal = payRunning.get(item.id) ?? 0;
+                    return (
                     <tr key={item.id} className="hover:bg-muted/20 transition-colors group">
                       <td className="px-5 py-3.5 whitespace-nowrap text-sm font-medium">{fmtDate(item.paymentDate)}</td>
                       <td className="px-5 py-3.5">
@@ -457,6 +485,12 @@ export default function CashBook() {
                         </span>
                         <span className="ml-1.5 text-xs font-medium text-muted-foreground">{item.currency}</span>
                       </td>
+                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                        <span className={`font-bold tabular-nums text-sm ${bal >= 0 ? "text-foreground" : "text-rose-600"}`}>
+                          ${fmtAmt(bal)}
+                        </span>
+                        <span className="ml-1 text-xs text-muted-foreground">USD</span>
+                      </td>
                       <td className="px-5 py-3.5 hidden sm:table-cell max-w-[220px]">
                         <p className="text-sm text-muted-foreground truncate">{item.notes || "—"}</p>
                       </td>
@@ -471,7 +505,8 @@ export default function CashBook() {
                         </td>
                       )}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -527,21 +562,23 @@ export default function CashBook() {
                     <th className="text-left px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Type</th>
                     <th className="text-left px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground hidden md:table-cell">From / To</th>
                     <th className="text-right px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Amount</th>
+                    <th className="text-right px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Balance</th>
                     <th className="text-left px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground hidden md:table-cell">Description</th>
                     {canManage && <th className="px-5 py-3 w-20" />}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
                   {vchListQ.isLoading ? (
-                    <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">Loading…</td></tr>
+                    <tr><td colSpan={7} className="text-center py-12 text-muted-foreground">Loading…</td></tr>
                   ) : vchItems.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center py-16">
+                    <tr><td colSpan={7} className="text-center py-16">
                       <Receipt className="w-9 h-9 mx-auto text-muted-foreground/30 mb-2" />
                       <p className="text-muted-foreground font-medium">No vouchers yet</p>
                       <p className="text-muted-foreground/50 text-xs mt-0.5">Create your first voucher to get started</p>
                     </td></tr>
                   ) : vchItems.map((item) => {
                     const isIn = item.direction === "in";
+                    const vbal = vchRunning.get(item.id) ?? 0;
                     return (
                       <tr key={item.id} className="hover:bg-muted/20 transition-colors group">
                         <td className="px-5 py-3.5 whitespace-nowrap text-sm font-medium">{fmtDate(item.voucherDate)}</td>
@@ -559,6 +596,12 @@ export default function CashBook() {
                             {isIn ? "+" : "−"}{fmtAmt(item.amount)}
                           </span>
                           <span className="ml-1.5 text-xs font-medium text-muted-foreground">{item.currency}</span>
+                        </td>
+                        <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                          <span className={`font-bold tabular-nums text-sm ${vbal >= 0 ? "text-foreground" : "text-rose-600"}`}>
+                            ${fmtAmt(vbal)}
+                          </span>
+                          <span className="ml-1 text-xs text-muted-foreground">USD</span>
                         </td>
                         <td className="px-5 py-3.5 hidden md:table-cell max-w-[200px]">
                           <p className="text-sm text-muted-foreground truncate">{item.description}</p>
