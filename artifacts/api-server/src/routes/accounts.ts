@@ -220,10 +220,16 @@ router.get("/expenses", async (req: Request, res: Response) => {
     );
   }
 
-  const [payments, vouchers] = await Promise.all([
-    db.select().from(paymentsTable).where(and(...payConditions)).orderBy(desc(paymentsTable.paymentDate)).limit(limitNum),
-    db.select().from(vouchersTable).where(and(...vchConditions)).orderBy(desc(vouchersTable.voucherDate)).limit(limitNum),
+  // Fetch items and accurate counts separately (#11 fix — old total was capped at 2×limit)
+  const fetchLimit = limitNum + offset; // enough items to paginate correctly in memory
+  const [payments, vouchers, [payCountRow], [vchCountRow]] = await Promise.all([
+    db.select().from(paymentsTable).where(and(...payConditions)).orderBy(desc(paymentsTable.paymentDate)).limit(fetchLimit),
+    db.select().from(vouchersTable).where(and(...vchConditions)).orderBy(desc(vouchersTable.voucherDate)).limit(fetchLimit),
+    db.select({ total: count() }).from(paymentsTable).where(and(...payConditions)),
+    db.select({ total: count() }).from(vouchersTable).where(and(...vchConditions)),
   ]);
+
+  const total = Number(payCountRow.total) + Number(vchCountRow.total);
 
   // Normalize into unified shape
   const unified = [
@@ -258,7 +264,6 @@ router.get("/expenses", async (req: Request, res: Response) => {
   ];
 
   unified.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const total = unified.length;
   const paged = unified.slice(offset, offset + limitNum);
 
   res.json({ items: paged, total, page: pageNum, limit: limitNum });

@@ -31,6 +31,7 @@ import {
 import { requireAuth } from "../middlewares/auth";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
+import { appendLedgerEntry } from "../lib/ledger";
 
 async function getExchangeRate(): Promise<number> {
   const [s] = await db.select({ rate: settingsTable.usdToCdfRate }).from(settingsTable);
@@ -135,7 +136,18 @@ router.post("/", async (req: Request, res: Response) => {
   let planPrice: number | undefined;
   if (body.planId) {
     const [plan] = await db.select().from(plansTable).where(eq(plansTable.id, body.planId));
-    if (plan) { planName = plan.name; planPrice = plan.price; }
+    if (plan) {
+      planName = plan.name;
+      // Convert plan price to the member's chosen currency if they differ
+      const memberCurrency = body.currency ?? "USD";
+      const planCurrency = (plan as unknown as Record<string, unknown>).currency as string ?? "USD";
+      if (planCurrency !== memberCurrency) {
+        const rate = await getExchangeRate();
+        planPrice = planCurrency === "CDF" ? plan.price / rate : plan.price * rate;
+      } else {
+        planPrice = plan.price;
+      }
+    }
   }
 
   const amountPaid = body.amountPaid ?? 0;
@@ -169,7 +181,7 @@ router.post("/", async (req: Request, res: Response) => {
     const paymentNumber = await getNextNumber("PAY");
     const rate = await getExchangeRate();
     const { amountUsd, amountCdf } = toUsdCdf(amountPaid, member.currency, rate);
-    await db.insert(paymentsTable).values({
+    const [newPayment] = await db.insert(paymentsTable).values({
       paymentNumber,
       memberId: member.id,
       memberName: member.name,
@@ -187,7 +199,11 @@ router.post("/", async (req: Request, res: Response) => {
       notes: body.notes,
       paymentDate: new Date(),
       status: "completed",
-    });
+    }).returning();
+    // Write to cash ledger so balance and KPIs reflect membership payments
+    if (amountPaid > 0) {
+      await appendLedgerEntry({ sourceType: "payment", sourceNumber: paymentNumber, sourceId: newPayment.id, direction: "in", amount: amountPaid, currency: member.currency, exchangeRate: rate, description: `Membership — ${planName ?? ""} (${member.name})` });
+    }
   }
 
   if (amountPaid > 0 && body.cashAccountId) {
@@ -309,14 +325,24 @@ router.patch("/:id", async (req: Request, res: Response) => {
     const rate = await getExchangeRate();
     const { amountUsd: pUsd, amountCdf: pCdf } = toUsdCdf(newAp, currency, rate);
     if (existingPayment) {
+      const oldAmount = existingPayment.amount ?? 0;
       // Update the existing payment record
       await db.update(paymentsTable)
         .set({ amount: newAp, discount: newDisc, currency, planName: effectivePlanName, exchangeRate: rate, amountUsd: pUsd, amountCdf: pCdf })
         .where(eq(paymentsTable.id, existingPayment.id));
+      // Ledger correction: reverse old, write new
+      if (oldAmount !== newAp) {
+        if (oldAmount > 0) {
+          await appendLedgerEntry({ sourceType: "payment_correction", sourceId: existingPayment.id, direction: "out", amount: oldAmount, currency: existingPayment.currency, exchangeRate: existingPayment.exchangeRate ?? rate, description: `Correction: membership payment reversed — ${member.name}` });
+        }
+        if (newAp > 0) {
+          await appendLedgerEntry({ sourceType: "payment_correction", sourceId: existingPayment.id, direction: "in", amount: newAp, currency, exchangeRate: rate, description: `Correction: membership payment updated — ${member.name}` });
+        }
+      }
     } else if (effectivePlanId) {
       // No prior payment existed — create one now
       const paymentNumber = await getNextNumber("PAY");
-      await db.insert(paymentsTable).values({
+      const [newPayment] = await db.insert(paymentsTable).values({
         paymentNumber,
         memberId: id,
         memberName: member.name,
@@ -333,13 +359,15 @@ router.patch("/:id", async (req: Request, res: Response) => {
         direction: "in",
         paymentDate: new Date(),
         status: "completed",
-      });
+      }).returning();
+      if (newAp > 0) {
+        await appendLedgerEntry({ sourceType: "payment", sourceNumber: paymentNumber, sourceId: newPayment.id, direction: "in", amount: newAp, currency, exchangeRate: rate, description: `Membership payment — ${effectivePlanName} (${member.name})` });
+      }
     }
   }
 
-  // ── Sync voucher whenever a cash account is selected and amount > 0 ───────
-  // Runs independently of amountChanged so selecting/switching accounts always works
-  if (cashAccountId && newAp > 0) {
+  // ── Sync voucher only when amount actually changed (not on every edit) ────
+  if (cashAccountId && newAp > 0 && amountChanged) {
     let accountName = "cash";
     const [acct] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, cashAccountId));
     if (acct) accountName = acct.name.toLowerCase().replace(/ /g, "_");
@@ -455,15 +483,20 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
   const { amountUsd: renewUsd, amountCdf: renewCdf } = toUsdCdf(body.amountPaid, body.currency, renewRate);
 
   const paymentNumber = await getNextNumber("PAY");
-  await db.insert(paymentsTable).values({
+  const [renewPayment] = await db.insert(paymentsTable).values({
     paymentNumber, memberId: id, memberName: existing.name,
     planId: body.planId, planName: plan.name,
     amount: body.amountPaid, discount: body.discount ?? 0,
     currency: body.currency, exchangeRate: renewRate,
     amountUsd: renewUsd, amountCdf: renewCdf,
     type: "membership", category: "membership", direction: "in",
-    notes: body.notes, paymentDate: new Date(), status: "completed",
-  });
+    notes: body.notes ? body.notes : `Renewal: ${body.startDate} → ${body.expiryDate}`,
+    paymentDate: new Date(), status: "completed",
+  }).returning();
+  // Write to cash ledger
+  if (body.amountPaid > 0) {
+    await appendLedgerEntry({ sourceType: "payment", sourceNumber: paymentNumber, sourceId: renewPayment.id, direction: "in", amount: body.amountPaid, currency: body.currency, exchangeRate: renewRate, description: `Renewal — ${plan.name} (${existing.name})` });
+  }
 
   if ((body.amountPaid ?? 0) > 0 && body.cashAccountId) {
     let accountName = "cash";

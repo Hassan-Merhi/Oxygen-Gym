@@ -314,7 +314,12 @@ router.patch("/:id/void", async (req: Request, res: Response) => {
     .where(eq(salesTable.id, id))
     .returning();
 
-  // 3. Reverse cash ledger entry
+  // 3. Cancel the linked payment record so it no longer appears in revenue
+  if (sale.paymentId) {
+    await db.update(paymentsTable).set({ status: "cancelled" }).where(eq(paymentsTable.id, sale.paymentId));
+  }
+
+  // 4. Reverse cash ledger entry
   const totalAmountUsd = sale.totalAmountUsd ?? sale.totalAmount;
   const amountCdf = sale.currency === "CDF" ? sale.totalAmount : totalAmountUsd * rate;
 

@@ -4,6 +4,9 @@ import { db, usersTable } from "@workspace/db";
 import { eq, isNull } from "drizzle-orm";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "gympro-dev-secret-change-in-prod";
+if (!process.env.SESSION_SECRET) {
+  console.warn("[SECURITY] SESSION_SECRET env var is not set — using insecure hardcoded default. Set it in production.");
+}
 
 export interface JwtPayload {
   userId: number;

@@ -45,8 +45,8 @@ router.get("/", async (req: Request, res: Response) => {
   }
   if (status) conditions.push(eq(payrollTable.status, status));
   if (staffEmployeeId) conditions.push(eq(payrollTable.staffEmployeeId, parseInt(staffEmployeeId)));
-  if (dateFrom) conditions.push(gte(payrollTable.createdAt, new Date(dateFrom)));
-  if (dateTo) conditions.push(lte(payrollTable.createdAt, new Date(dateTo + "T23:59:59")));
+  if (dateFrom) conditions.push(gte(payrollTable.periodStart, new Date(dateFrom)));
+  if (dateTo) conditions.push(lte(payrollTable.periodStart, new Date(dateTo + "T23:59:59")));
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const [items, [totRow]] = await Promise.all([
@@ -94,7 +94,15 @@ router.post("/", async (req: Request, res: Response) => {
     .select()
     .from(commissionsTable)
     .where(and(eq(commissionsTable.staffEmployeeId, staffEmployeeId), eq(commissionsTable.status, "pending")));
-  const commissionBonus = pendingCommissions.reduce((sum, c) => sum + (c.amount ?? 0), 0);
+  // Convert each commission to salary currency before summing (#6 fix)
+  const commissionBonus = pendingCommissions.reduce((total, c) => {
+    const amt = c.amount ?? 0;
+    const commCur = c.currency ?? salCurrency;
+    if (commCur === salCurrency) return total + amt;
+    if (salCurrency === "USD" && commCur === "CDF") return total + amt / rate;
+    if (salCurrency === "CDF" && commCur === "USD") return total + amt * rate;
+    return total + amt;
+  }, 0);
 
   const netPay = baseSalary + bonusAmt + commissionBonus - deductionAmt;
   const netPayUsd = salCurrency === "USD" ? netPay : netPay / rate;
@@ -122,11 +130,11 @@ router.post("/", async (req: Request, res: Response) => {
     createdBy: creator,
   }).returning();
 
-  // Link pending commissions to this payroll run
+  // Lock pending commissions to this payroll draft so they can't be double-counted (#14 fix)
   if (pendingCommissions.length > 0) {
     await db
       .update(commissionsTable)
-      .set({ payrollId: record.id, status: "pending" })
+      .set({ payrollId: record.id, status: "draft" })
       .where(and(eq(commissionsTable.staffEmployeeId, staffEmployeeId), eq(commissionsTable.status, "pending")));
   }
 
@@ -153,7 +161,7 @@ router.patch("/:id/pay", async (req: Request, res: Response) => {
   const netPayUsd = record.currency === "USD" ? record.netPay : record.netPay / rate;
 
   // 1. Create payment record
-  const paymentNumber = await getNextNumber("payment");
+  const paymentNumber = await getNextNumber("PAY");
   const [payment] = await db.insert(paymentsTable).values({
     paymentNumber,
     direction: "out",
@@ -221,7 +229,7 @@ router.patch("/:id/cancel", async (req: Request, res: Response) => {
   const rate = await getExchangeRate();
   const creator = callerName(req);
 
-  // If already paid, reverse the ledger
+  // If already paid, reverse the ledger and cancel the linked payment record (#5 fix)
   if (record.status === "paid") {
     const netPayUsd = record.netPayUsd ?? (record.currency === "USD" ? record.netPay : record.netPay / rate);
     await appendLedgerEntry({
@@ -235,6 +243,10 @@ router.patch("/:id/cancel", async (req: Request, res: Response) => {
       description: `Reversal of payroll ${record.payrollNumber} — ${reason}`,
       createdBy: creator,
     });
+    // Cancel the payment record so it no longer shows in expense totals
+    if (record.paymentId) {
+      await db.update(paymentsTable).set({ status: "cancelled" }).where(eq(paymentsTable.id, record.paymentId));
+    }
   }
 
   const [updated] = await db.update(payrollTable).set({

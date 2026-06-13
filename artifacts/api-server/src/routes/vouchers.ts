@@ -16,7 +16,7 @@ function callerName(req: Request): string {
 
 async function getExchangeRate(): Promise<number> {
   const [s] = await db.select({ rate: settingsTable.usdToCdfRate }).from(settingsTable);
-  return s?.rate ?? 1;
+  return s?.rate ?? 2800;
 }
 
 // direction by voucher type
@@ -155,19 +155,31 @@ router.patch("/:id", async (req: Request, res: Response) => {
   for (const k of allowed) { if (body[k] !== undefined) update[k] = body[k]; }
   if (update.voucherDate) update.voucherDate = new Date(update.voucherDate as string);
 
+  // Recompute derived USD/CDF columns whenever amount, currency, or rate changes
+  if (update.amount !== undefined || update.currency !== undefined || update.exchangeRate !== undefined) {
+    const amt = (update.amount as number) ?? existing.amount ?? 0;
+    const cur = (update.currency as string) ?? existing.currency;
+    const rate = (update.exchangeRate as number) ?? existing.exchangeRate ?? await getExchangeRate();
+    update.amountUsd = cur === "USD" ? amt : amt / rate;
+    update.amountCdf = cur === "CDF" ? amt : amt * rate;
+  }
+
   const [voucher] = await db.update(vouchersTable).set(update).where(eq(vouchersTable.id, id)).returning();
   if (!voucher) { res.status(404).json({ error: "Not found" }); return; }
 
   const oldAmount = existing.amount ?? 0;
   const newAmount = (update.amount as number) ?? oldAmount;
-  if (oldAmount !== newAmount && existing.status === "recorded") {
+  const newVoucherType = (update.voucherType as string) ?? existing.voucherType;
+  const oldDir = voucherDirection(existing.voucherType);
+  const newDir = voucherDirection(newVoucherType);
+  // Trigger ledger correction when amount OR direction (voucherType) changes
+  if ((oldAmount !== newAmount || oldDir !== newDir) && existing.status === "recorded") {
     const rate = await getExchangeRate();
-    const dir = existing.direction as "in" | "out";
     if (oldAmount > 0) {
-      await appendLedgerEntry({ sourceType: "voucher_correction", sourceNumber: existing.voucherNumber ?? undefined, sourceId: id, direction: dir === "in" ? "out" : "in", amount: oldAmount, currency: existing.currency, exchangeRate: existing.exchangeRate ?? rate, description: `Correction: reversed voucher ${existing.voucherNumber ?? id}` });
+      await appendLedgerEntry({ sourceType: "voucher_correction", sourceNumber: existing.voucherNumber ?? undefined, sourceId: id, direction: oldDir === "in" ? "out" : "in", amount: oldAmount, currency: existing.currency, exchangeRate: existing.exchangeRate ?? rate, description: `Correction: reversed voucher ${existing.voucherNumber ?? id}` });
     }
     if (newAmount > 0) {
-      await appendLedgerEntry({ sourceType: "voucher_correction", sourceNumber: existing.voucherNumber ?? undefined, sourceId: id, direction: dir, amount: newAmount, currency: (update.currency as string) ?? existing.currency, exchangeRate: (update.exchangeRate as number) ?? existing.exchangeRate ?? rate, description: `Correction: updated voucher ${existing.voucherNumber ?? id}` });
+      await appendLedgerEntry({ sourceType: "voucher_correction", sourceNumber: existing.voucherNumber ?? undefined, sourceId: id, direction: newDir, amount: newAmount, currency: (update.currency as string) ?? existing.currency, exchangeRate: (update.exchangeRate as number) ?? existing.exchangeRate ?? rate, description: `Correction: updated voucher ${existing.voucherNumber ?? id}` });
     }
   }
 

@@ -13,7 +13,7 @@ router.use(requireAuth());
 // ─── Helper: get exchange rate from settings ─────────────────────────────────
 async function getExchangeRate(): Promise<number> {
   const [s] = await db.select({ rate: settingsTable.usdToCdfRate }).from(settingsTable);
-  return s?.rate ?? 1;
+  return s?.rate ?? 2800;
 }
 
 // ─── Helper: get caller name ─────────────────────────────────────────────────
@@ -240,6 +240,15 @@ router.patch("/:id", async (req: Request, res: Response) => {
   const update: Record<string, unknown> = {};
   for (const k of allowed) { if (body[k] !== undefined) update[k] = body[k]; }
   if (update.paymentDate) update.paymentDate = new Date(update.paymentDate as string);
+
+  // Recompute derived USD/CDF columns whenever amount, currency, or rate changes
+  if (update.amount !== undefined || update.currency !== undefined || update.exchangeRate !== undefined) {
+    const amt = (update.amount as number) ?? existing.amount ?? 0;
+    const cur = (update.currency as string) ?? existing.currency;
+    const rate = (update.exchangeRate as number) ?? existing.exchangeRate ?? await getExchangeRate();
+    update.amountUsd = cur === "USD" ? amt : amt / rate;
+    update.amountCdf = cur === "CDF" ? amt : amt * rate;
+  }
 
   const [payment] = await db.update(paymentsTable).set(update).where(eq(paymentsTable.id, id)).returning();
   if (!payment) { res.status(404).json({ error: "Not found" }); return; }

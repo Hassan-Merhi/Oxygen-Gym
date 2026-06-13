@@ -24,17 +24,19 @@ function callerName(req: Request): string {
 
 async function getExchangeRate(): Promise<number> {
   const [s] = await db.select({ rate: settingsTable.usdToCdfRate }).from(settingsTable);
-  return s?.rate ?? 1;
+  return s?.rate ?? 2800;
 }
 
 function enrichProduct(p: typeof productsTable.$inferSelect, rate: number) {
   const sellingUsd = p.currency === "USD" ? p.sellingPrice : p.sellingPrice / rate;
   const costUsd = p.currency === "USD" ? p.costPrice : p.costPrice / rate;
-  const stockValueUsd = sellingUsd * p.quantity;
+  const stockValueUsd = sellingUsd * p.quantity;   // retail value
+  const costValueUsd = costUsd * p.quantity;        // cost / COGS value (#17 fix)
   const stockValueCdf = stockValueUsd * rate;
+  const costValueCdf = costValueUsd * rate;
   const profitPerUnit = sellingUsd - costUsd;
   const isLowStock = p.quantity <= p.alertQuantity;
-  return { ...p, stockValueUsd, stockValueCdf, profitPerUnit, isLowStock };
+  return { ...p, stockValueUsd, stockValueCdf, costValueUsd, costValueCdf, profitPerUnit, isLowStock };
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────
