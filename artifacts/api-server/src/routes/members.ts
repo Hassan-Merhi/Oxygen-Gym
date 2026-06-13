@@ -267,13 +267,13 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
   const [member] = await db.update(membersTable).set(updateData).where(eq(membersTable.id, id)).returning();
 
+  const currency = (updateData.currency ?? existing.currency ?? "USD") as string;
+  const effectivePlanId = (updateData.planId ?? existing.planId) as number | undefined;
+  const effectivePlanName = planName ?? existing.planName ?? "";
+
   // ── Sync payment record when amountPaid or discount changes ───────────────
   const amountChanged = body.amountPaid !== undefined || body.discount !== undefined;
   if (amountChanged) {
-    const currency = (updateData.currency ?? existing.currency ?? "USD") as string;
-    const effectivePlanId = (updateData.planId ?? existing.planId) as number | undefined;
-    const effectivePlanName = planName ?? existing.planName ?? "";
-
     // Find the most recent membership payment for this member
     const [existingPayment] = await db
       .select()
@@ -304,41 +304,42 @@ router.patch("/:id", async (req: Request, res: Response) => {
         status: "completed",
       });
     }
+  }
 
-    // ── Sync voucher if cashAccountId is provided and amount > 0 ────────────
-    if (cashAccountId && newAp > 0) {
-      let accountName = "cash";
-      const [acct] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, cashAccountId));
-      if (acct) accountName = acct.name.toLowerCase().replace(/ /g, "_");
+  // ── Sync voucher whenever a cash account is selected and amount > 0 ───────
+  // Runs independently of amountChanged so selecting/switching accounts always works
+  if (cashAccountId && newAp > 0) {
+    let accountName = "cash";
+    const [acct] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, cashAccountId));
+    if (acct) accountName = acct.name.toLowerCase().replace(/ /g, "_");
 
-      // Cancel any existing voucher for this member's membership
-      await db.update(vouchersTable)
-        .set({ status: "cancelled" })
-        .where(and(
-          eq(vouchersTable.linkedEntity, "member"),
-          eq(vouchersTable.linkedEntityId, id),
-          eq(vouchersTable.voucherType, "cash_receipt"),
-          isNull(vouchersTable.deletedAt),
-        ));
+    // Cancel any existing voucher for this member's membership
+    await db.update(vouchersTable)
+      .set({ status: "cancelled" })
+      .where(and(
+        eq(vouchersTable.linkedEntity, "member"),
+        eq(vouchersTable.linkedEntityId, id),
+        eq(vouchersTable.voucherType, "cash_receipt"),
+        isNull(vouchersTable.deletedAt),
+      ));
 
-      // Create a fresh voucher with the correct amount
-      const voucherNumber = await getNextNumber("VCH");
-      await db.insert(vouchersTable).values({
-        voucherNumber,
-        voucherType: "cash_receipt",
-        direction: "in",
-        receivedFrom: member.name,
-        linkedEntity: "member",
-        linkedEntityId: id,
-        linkedEntityName: member.name,
-        amount: newAp,
-        currency,
-        account: accountName,
-        category: "membership",
-        description: `Membership payment — ${effectivePlanName}`,
-        status: "recorded",
-      });
-    }
+    // Create a fresh voucher with the correct amount and account
+    const voucherNumber = await getNextNumber("VCH");
+    await db.insert(vouchersTable).values({
+      voucherNumber,
+      voucherType: "cash_receipt",
+      direction: "in",
+      receivedFrom: member.name,
+      linkedEntity: "member",
+      linkedEntityId: id,
+      linkedEntityName: member.name,
+      amount: newAp,
+      currency,
+      account: accountName,
+      category: "membership",
+      description: `Membership payment — ${effectivePlanName}`,
+      status: "recorded",
+    });
   }
 
   await logActivity(req, "update_member", "member", id, { name: member.name });
