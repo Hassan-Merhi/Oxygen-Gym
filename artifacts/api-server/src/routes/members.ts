@@ -12,6 +12,7 @@ import {
   settingsTable,
   whatsappReminderLogsTable,
 } from "@workspace/db/schema";
+
 import { sendToAllChats, formatNewMemberMessage } from "../lib/whatsapp";
 import { logger } from "../lib/logger";
 import {
@@ -30,6 +31,17 @@ import {
 import { requireAuth } from "../middlewares/auth";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
+
+async function getExchangeRate(): Promise<number> {
+  const [s] = await db.select({ rate: settingsTable.usdToCdfRate }).from(settingsTable);
+  return s?.rate ?? 2800;
+}
+
+function toUsdCdf(amount: number, currency: string, rate: number): { amountUsd: number; amountCdf: number } {
+  const amountUsd = currency === "USD" ? amount : amount / rate;
+  const amountCdf = currency === "CDF" ? amount : amount * rate;
+  return { amountUsd, amountCdf };
+}
 
 const router = Router();
 router.use(requireAuth());
@@ -155,6 +167,8 @@ router.post("/", async (req: Request, res: Response) => {
 
   if (body.planId && (amountPaid > 0 || planPrice)) {
     const paymentNumber = await getNextNumber("PAY");
+    const rate = await getExchangeRate();
+    const { amountUsd, amountCdf } = toUsdCdf(amountPaid, member.currency, rate);
     await db.insert(paymentsTable).values({
       paymentNumber,
       memberId: member.id,
@@ -164,7 +178,12 @@ router.post("/", async (req: Request, res: Response) => {
       amount: amountPaid,
       discount,
       currency: member.currency,
+      exchangeRate: rate,
+      amountUsd,
+      amountCdf,
       type: "membership",
+      category: "membership",
+      direction: "in",
       notes: body.notes,
       paymentDate: new Date(),
       status: "completed",
@@ -176,6 +195,8 @@ router.post("/", async (req: Request, res: Response) => {
     const [acct] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, body.cashAccountId));
     if (acct) accountName = acct.name.toLowerCase().replace(/ /g, "_");
     const voucherNumber = await getNextNumber("VCH");
+    const rate = await getExchangeRate();
+    const { amountUsd, amountCdf } = toUsdCdf(amountPaid, member.currency, rate);
     await db.insert(vouchersTable).values({
       voucherNumber,
       voucherType: "cash_receipt",
@@ -186,6 +207,9 @@ router.post("/", async (req: Request, res: Response) => {
       linkedEntityName: member.name,
       amount: amountPaid,
       currency: member.currency,
+      exchangeRate: rate,
+      amountUsd,
+      amountCdf,
       account: accountName,
       category: "membership",
       description: `Membership payment — ${planName ?? ""}`,
@@ -282,10 +306,12 @@ router.patch("/:id", async (req: Request, res: Response) => {
       .orderBy(desc(paymentsTable.createdAt))
       .limit(1);
 
+    const rate = await getExchangeRate();
+    const { amountUsd: pUsd, amountCdf: pCdf } = toUsdCdf(newAp, currency, rate);
     if (existingPayment) {
       // Update the existing payment record
       await db.update(paymentsTable)
-        .set({ amount: newAp, discount: newDisc, currency, planName: effectivePlanName })
+        .set({ amount: newAp, discount: newDisc, currency, planName: effectivePlanName, exchangeRate: rate, amountUsd: pUsd, amountCdf: pCdf })
         .where(eq(paymentsTable.id, existingPayment.id));
     } else if (effectivePlanId) {
       // No prior payment existed — create one now
@@ -299,7 +325,12 @@ router.patch("/:id", async (req: Request, res: Response) => {
         amount: newAp,
         discount: newDisc,
         currency,
+        exchangeRate: rate,
+        amountUsd: pUsd,
+        amountCdf: pCdf,
         type: "membership",
+        category: "membership",
+        direction: "in",
         paymentDate: new Date(),
         status: "completed",
       });
@@ -325,6 +356,8 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
     // Create a fresh voucher with the correct amount and account
     const voucherNumber = await getNextNumber("VCH");
+    const rate2 = await getExchangeRate();
+    const { amountUsd: vUsd, amountCdf: vCdf } = toUsdCdf(newAp, currency, rate2);
     await db.insert(vouchersTable).values({
       voucherNumber,
       voucherType: "cash_receipt",
@@ -335,6 +368,9 @@ router.patch("/:id", async (req: Request, res: Response) => {
       linkedEntityName: member.name,
       amount: newAp,
       currency,
+      exchangeRate: rate2,
+      amountUsd: vUsd,
+      amountCdf: vCdf,
       account: accountName,
       category: "membership",
       description: `Membership payment — ${effectivePlanName}`,
@@ -415,13 +451,18 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
     currency: body.currency, status: "active",
   }).where(eq(membersTable.id, id)).returning();
 
+  const renewRate = await getExchangeRate();
+  const { amountUsd: renewUsd, amountCdf: renewCdf } = toUsdCdf(body.amountPaid, body.currency, renewRate);
+
   const paymentNumber = await getNextNumber("PAY");
   await db.insert(paymentsTable).values({
     paymentNumber, memberId: id, memberName: existing.name,
     planId: body.planId, planName: plan.name,
     amount: body.amountPaid, discount: body.discount ?? 0,
-    currency: body.currency, type: "membership", notes: body.notes,
-    paymentDate: new Date(), status: "completed",
+    currency: body.currency, exchangeRate: renewRate,
+    amountUsd: renewUsd, amountCdf: renewCdf,
+    type: "membership", category: "membership", direction: "in",
+    notes: body.notes, paymentDate: new Date(), status: "completed",
   });
 
   if ((body.amountPaid ?? 0) > 0 && body.cashAccountId) {
@@ -439,6 +480,9 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
       linkedEntityName: existing.name,
       amount: body.amountPaid,
       currency: body.currency,
+      exchangeRate: renewRate,
+      amountUsd: renewUsd,
+      amountCdf: renewCdf,
       account: accountName,
       category: "membership",
       description: `Membership renewal — ${plan.name}`,
