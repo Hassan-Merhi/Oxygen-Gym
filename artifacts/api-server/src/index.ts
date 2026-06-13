@@ -3,7 +3,7 @@ import { logger } from "./lib/logger";
 import cron from "node-cron";
 import { db } from "@workspace/db";
 import { membersTable, settingsTable, whatsappReminderLogsTable } from "@workspace/db/schema";
-import { and, eq, gte, lte, isNull } from "drizzle-orm";
+import { and, eq, gte, lte, isNull, sql } from "drizzle-orm";
 import { sendToAllChats, formatExpiryReminderMessage } from "./lib/whatsapp";
 
 const rawPort = process.env["PORT"];
@@ -20,13 +20,30 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
+// ── Safe startup migrations (add missing columns; idempotent) ─────────────────
+async function runStartupMigrations() {
+  try {
+    await db.execute(sql`
+      ALTER TABLE plans
+        ADD COLUMN IF NOT EXISTS coach_id integer,
+        ADD COLUMN IF NOT EXISTS coach_fee double precision DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS coach_name text
+    `);
+    logger.info("Startup migrations complete");
+  } catch (err) {
+    logger.error({ err }, "Startup migration failed");
   }
+}
 
-  logger.info({ port }, "Server listening");
+runStartupMigrations().then(() => {
+  app.listen(port, (err) => {
+    if (err) {
+      logger.error({ err }, "Error listening on port");
+      process.exit(1);
+    }
+
+    logger.info({ port }, "Server listening");
+  });
 });
 
 // ── Daily WhatsApp expiry reminders — runs every day at 09:00 ─────────────────
