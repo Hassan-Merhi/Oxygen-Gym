@@ -1084,17 +1084,6 @@ export default function StaffPage() {
         </TabsList>
 
         <TabsContent value="staff" className="mt-6 space-y-8">
-          {/* Login users section */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-violet-500" />
-              <h2 className="text-base font-semibold">{t("staff.tabUsers")}</h2>
-            </div>
-            <LoginUsersTab />
-          </div>
-
-          <div className="border-t dark:border-slate-700" />
-
           {/* Employee records section */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
