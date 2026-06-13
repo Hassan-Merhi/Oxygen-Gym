@@ -352,6 +352,91 @@ export default function CashBook() {
   const vchIsIn = ["cash_receipt", "customer_payment"].includes(vchForm.voucherType);
   const printVoucher = printVoucherQ.data;
 
+  // ── PDF export ──────────────────────────────────────────────────────────────
+  function exportPdf() {
+    const gymName = (settings as Record<string, unknown> | undefined)?.gymName as string ?? "GymPro";
+    const isVch = tab === "vouchers";
+    const title = isVch ? "Cash Book — Vouchers" : "Cash Book — Transactions";
+    const dateLabel = isVch
+      ? `${vchDateFrom || "all"} → ${vchDateTo || "all"}`
+      : `${payDateFrom || "all"} → ${payDateTo || "all"}`;
+
+    const payRows = payItems.map((item, idx) => {
+      const bal = payRunning.get(item.id) ?? 0;
+      const sign = item.direction === "in" ? "+" : "−";
+      const color = item.direction === "in" ? "#059669" : "#dc2626";
+      return `<tr style="background:${idx % 2 === 0 ? "#fff" : "#f9fafb"}">
+        <td>${fmtDate(item.paymentDate)}</td>
+        <td>${item.direction === "in" ? "In" : "Out"} / ${item.category.replace(/_/g, " ")}</td>
+        <td style="text-align:right;color:${color};font-weight:600">${sign}${fmtAmt(item.amount)} ${item.currency}</td>
+        <td style="text-align:right;font-weight:600;color:${bal < 0 ? "#dc2626" : "#111"}">${bal >= 0 ? "" : "−"}$${fmtAmt(Math.abs(bal))}</td>
+        <td>${item.notes ?? "—"}</td>
+      </tr>`;
+    }).join("");
+
+    const vchRows = vchItems.map((item, idx) => {
+      const bal = vchRunning.get(item.id) ?? 0;
+      const isIn = ["cash_receipt", "customer_payment"].includes(item.voucherType);
+      const sign = isIn ? "+" : "−";
+      const color = isIn ? "#059669" : "#dc2626";
+      return `<tr style="background:${idx % 2 === 0 ? "#fff" : "#f9fafb"}">
+        <td>${fmtDate(item.voucherDate)}</td>
+        <td>${item.voucherType.replace(/_/g, " ")}</td>
+        <td style="text-align:right;color:${color};font-weight:600">${sign}${fmtAmt(item.amount)} ${item.currency}</td>
+        <td style="text-align:right;font-weight:600;color:${bal < 0 ? "#dc2626" : "#111"}">${bal >= 0 ? "" : "−"}$${fmtAmt(Math.abs(bal))}</td>
+        <td>${item.description ?? "—"}</td>
+        <td>${item.receivedFrom ?? item.paidTo ?? "—"}</td>
+      </tr>`;
+    }).join("");
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${title}</title>
+<style>
+  @page { size: A4; margin: 15mm 12mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #111; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 2px solid #6366f1; }
+  .gym { font-size: 18px; font-weight: 700; color: #6366f1; }
+  .meta { font-size: 10px; color: #6b7280; margin-top: 2px; }
+  .report-title { font-size: 14px; font-weight: 700; text-align: right; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10px; }
+  th { background: #6366f1; color: #fff; padding: 7px 8px; text-align: left; font-weight: 600; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 6px 8px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+  .footer { margin-top: 12px; text-align: right; font-size: 9px; color: #9ca3af; }
+  @media print { button { display: none; } }
+</style></head>
+<body>
+  <div class="header">
+    <div>
+      <div class="gym">${gymName}</div>
+      <div class="meta">${title}</div>
+      <div class="meta">Period: ${dateLabel}</div>
+    </div>
+    <div>
+      <div class="report-title">${title}</div>
+      <div class="meta" style="text-align:right">Printed: ${new Date().toLocaleDateString("en-GB")} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</div>
+    </div>
+  </div>
+  ${isVch
+    ? `<table>
+        <thead><tr><th>Date</th><th>Type</th><th>Amount</th><th>Balance (USD)</th><th>Description</th><th>Party</th></tr></thead>
+        <tbody>${vchRows || "<tr><td colspan='6' style='text-align:center;padding:16px;color:#9ca3af'>No records</td></tr>"}</tbody>
+       </table>`
+    : `<table>
+        <thead><tr><th>Date</th><th>Type / Category</th><th>Amount</th><th>Balance (USD)</th><th>Notes</th></tr></thead>
+        <tbody>${payRows || "<tr><td colspan='5' style='text-align:center;padding:16px;color:#9ca3af'>No records</td></tr>"}</tbody>
+       </table>`
+  }
+  <div class="footer">GymPro Cash Book — Generated ${new Date().toISOString().slice(0, 10)}</div>
+</body></html>`;
+
+    const w = window.open("", "_blank", "width=900,height=700");
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => { w.focus(); w.print(); }, 400);
+  }
+
   return (
     <div className="space-y-6">
 
@@ -361,15 +446,21 @@ export default function CashBook() {
           <h1 className="text-2xl font-bold text-foreground">{t("nav.cashbook")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{t("cashbook.subtitle")}</p>
         </div>
-        {canManage && (
-          <Button
-            onClick={() => tab === "transactions" ? openPayCreate() : openVchCreate()}
-            className="gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            {tab === "transactions" ? t("pay.recordPayment") : t("vch.newVoucher")}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportPdf} className="gap-2">
+            <Printer className="w-4 h-4" />
+            Export PDF
           </Button>
-        )}
+          {canManage && (
+            <Button
+              onClick={() => tab === "transactions" ? openPayCreate() : openVchCreate()}
+              className="gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              {tab === "transactions" ? t("pay.recordPayment") : t("vch.newVoucher")}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* ── Summary cards ── */}

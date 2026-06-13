@@ -135,26 +135,45 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
       if (catDetails[cat]) return; // already loaded
       setCatLoading((prev) => ({ ...prev, [cat]: true }));
       try {
-        const token = localStorage.getItem("gym_token");
-        const headers: Record<string, string> = token
-          ? { Authorization: `Bearer ${token}` }
-          : {};
         const params = new URLSearchParams({ dateFrom: from.slice(0, 10), dateTo: to.slice(0, 10), limit: "200" });
         const [salesRes, expRes] = await Promise.all([
-          fetch(`/api/accounts/sales?${params}`, { headers }),
-          fetch(`/api/accounts/expenses?${params}`, { headers }),
+          fetch(`/api/accounts/sales?${params}`),
+          fetch(`/api/accounts/expenses?${params}`),
         ]);
-        const salesJson = salesRes.ok ? await salesRes.json() : { items: [], data: [] };
-        const expJson = expRes.ok ? await expRes.json() : { items: [], data: [] };
-        const allRows: DetailRow[] = [
-          ...(salesJson.items ?? salesJson.data ?? []),
-          ...(expJson.items ?? expJson.data ?? []),
-        ].filter((r) => {
-          const rowCat = (r.category ?? "").toLowerCase().replace(/[_ ]/g, "");
-          const matchCat = cat.toLowerCase().replace(/[_ ]/g, "");
-          return rowCat === matchCat;
-        }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        setCatDetails((prev) => ({ ...prev, [cat]: allRows }));
+        const salesJson = salesRes.ok ? await salesRes.json() : { items: [] };
+        const expJson = expRes.ok ? await expRes.json() : { items: [] };
+
+        // Normalize both API shapes into one DetailRow shape.
+        // Sales endpoint: raw DB rows → paymentDate, notes, memberName, linkedEntityName.
+        // Expenses endpoint: normalized rows → date, description, party.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const normalize = (r: any): DetailRow => ({
+          id: r.id,
+          date: r.date ?? r.paymentDate ?? r.voucherDate ?? "",
+          description: r.description ?? r.notes ?? r.category ?? "",
+          party: r.party ?? r.memberName ?? r.linkedEntityName ?? "",
+          amount: Number(r.amount ?? 0),
+          currency: r.currency ?? "USD",
+          amountUsd: Number(r.amountUsd ?? 0),
+          sourceType: r.sourceType ?? "payment",
+        });
+
+        const matchCat = cat.toLowerCase().replace(/[_ ]/g, "");
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const filterByCat = (raw: any[]) =>
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          raw.filter((r: any) => {
+            const rowCat = (r.category ?? r.voucherType ?? "").toLowerCase().replace(/[_ ]/g, "");
+            return rowCat === matchCat;
+          }).map(normalize);
+
+        const catRows: DetailRow[] = [
+          ...filterByCat(salesJson.items ?? []),
+          ...filterByCat(expJson.items ?? []),
+        ].sort((a, b) => new Date(a.date as string).getTime() - new Date(b.date as string).getTime());
+
+        setCatDetails((prev) => ({ ...prev, [cat]: catRows }));
       } finally {
         setCatLoading((prev) => ({ ...prev, [cat]: false }));
       }
