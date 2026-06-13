@@ -749,8 +749,8 @@ export default function MembersPage() {
             <div>
               <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 pb-2 border-b dark:border-slate-700">{t("members.form.personalInfo")}</h3>
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <Label>{t("members.form.name")} *</Label>
+                <div className="col-span-2 border-l-4 border-primary pl-3 py-0.5 rounded-r-md">
+                  <Label className="text-primary font-semibold">{t("members.form.name")} *</Label>
                   <Input {...form.register("name")} className="mt-1" />
                   {form.formState.errors.name && <p className="text-xs text-red-500 mt-1">{form.formState.errors.name.message}</p>}
                 </div>
@@ -765,8 +765,8 @@ export default function MembersPage() {
             <div>
               <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 pb-2 border-b dark:border-slate-700">{t("members.form.membershipInfo")}</h3>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>{t("members.form.plan")}</Label>
+                <div className="border-l-4 border-primary pl-3 py-0.5 rounded-r-md">
+                  <Label className="text-primary font-semibold">{t("members.form.plan")}</Label>
                   <Select value={form.watch("planId") || "none"} onValueChange={(v) => { const val = v === "none" ? "" : v; form.setValue("planId", val); watchedPlanId(val); }}>
                     <SelectTrigger className="mt-1"><SelectValue placeholder={t("members.form.selectPlan")} /></SelectTrigger>
                     <SelectContent>
@@ -786,8 +786,8 @@ export default function MembersPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label>{t("members.form.startDate")}</Label>
+                <div className="border-l-4 border-primary pl-3 py-0.5 rounded-r-md">
+                  <Label className="text-primary font-semibold">{t("members.form.startDate")}</Label>
                   <Input type="date" {...form.register("startDate")} className="mt-1"
                     onChange={(e) => {
                       form.setValue("startDate", e.target.value);
@@ -799,8 +799,8 @@ export default function MembersPage() {
                     }}
                   />
                 </div>
-                <div>
-                  <Label>{t("members.form.expiryDate")}</Label>
+                <div className="border-l-4 border-primary pl-3 py-0.5 rounded-r-md">
+                  <Label className="text-primary font-semibold">{t("members.form.expiryDate")}</Label>
                   <Input type="date" {...form.register("expiryDate")} className="mt-1" />
                 </div>
               </div>
@@ -816,8 +816,8 @@ export default function MembersPage() {
                     <Input value={planPrice} readOnly className="mt-1 bg-slate-50 dark:bg-slate-800" />
                   </div>
                 )}
-                <div>
-                  <Label>{t("members.form.amountPaid")}</Label>
+                <div className="border-l-4 border-primary pl-3 py-0.5 rounded-r-md">
+                  <Label className="text-primary font-semibold">{t("members.form.amountPaid")}</Label>
                   <Input type="number" step="0.01" min="0" {...form.register("amountPaid")} className="mt-1" />
                 </div>
                 <div>
@@ -834,20 +834,18 @@ export default function MembersPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                {(amountPaid > 0) && (
-                  <div className="col-span-2">
-                    <Label>{t("members.form.cashAccount")}</Label>
-                    <Select value={form.watch("cashAccountId") ?? ""} onValueChange={(v) => form.setValue("cashAccountId", v)}>
-                      <SelectTrigger className="mt-1"><SelectValue placeholder={t("members.form.selectCashAccount")} /></SelectTrigger>
-                      <SelectContent>
-                        {cashAccounts.map((a) => (
-                          <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground mt-1">{t("members.form.cashAccountHint")}</p>
-                  </div>
-                )}
+                <div className="col-span-2 border-l-4 border-primary pl-3 py-0.5 rounded-r-md">
+                  <Label className="text-primary font-semibold">{t("members.form.cashAccount")}</Label>
+                  <Select value={form.watch("cashAccountId") ?? ""} onValueChange={(v) => form.setValue("cashAccountId", v)}>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder={t("members.form.selectCashAccount")} /></SelectTrigger>
+                    <SelectContent>
+                      {cashAccounts.map((a) => (
+                        <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">{t("members.form.cashAccountHint")}</p>
+                </div>
                 {planPrice > 0 && (
                   <div>
                     <Label>{t("members.form.balance")}</Label>
@@ -884,12 +882,6 @@ export default function MembersPage() {
                 </div>
               </div>
             )}
-
-            {/* Notes */}
-            <div>
-              <Label>{t("members.form.notes")}</Label>
-              <Textarea {...form.register("notes")} className="mt-1" rows={2} />
-            </div>
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => { setAddOpen(false); setEditMember(null); }}>{t("common.cancel")}</Button>
