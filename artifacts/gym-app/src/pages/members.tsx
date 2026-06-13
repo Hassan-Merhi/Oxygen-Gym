@@ -300,7 +300,7 @@ export default function MembersPage() {
       return res.json();
     },
   });
-  const cashAccounts = chartAccounts.filter((a) => a.type === "asset" && a.isActive);
+  const cashAccounts = chartAccounts.filter((a) => a.isActive);
 
   // ── Queries
   const { data: membersData, isLoading } = useListMembers({
