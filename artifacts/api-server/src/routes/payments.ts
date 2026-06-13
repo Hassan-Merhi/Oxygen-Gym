@@ -180,6 +180,10 @@ router.post("/", async (req: Request, res: Response) => {
 router.patch("/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   const body = req.body as Record<string, unknown>;
+
+  const [existing] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+
   const allowed = ["direction","category","linkedEntity","linkedEntityId","linkedEntityName","memberId","memberName","planId","planName","amount","discount","currency","exchangeRate","account","notes","paymentDate"];
   const update: Record<string, unknown> = {};
   for (const k of allowed) { if (body[k] !== undefined) update[k] = body[k]; }
@@ -187,6 +191,21 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
   const [payment] = await db.update(paymentsTable).set(update).where(eq(paymentsTable.id, id)).returning();
   if (!payment) { res.status(404).json({ error: "Not found" }); return; }
+
+  const oldAmount = existing.amount ?? 0;
+  const newAmount = (update.amount as number) ?? oldAmount;
+  const oldDir = existing.direction as "in" | "out";
+  const newDir = (update.direction as "in" | "out") ?? oldDir;
+  if (oldAmount !== newAmount || oldDir !== newDir) {
+    const rate = await getExchangeRate();
+    if (oldAmount > 0) {
+      await appendLedgerEntry({ sourceType: "payment_correction", sourceId: id, direction: oldDir === "in" ? "out" : "in", amount: oldAmount, currency: existing.currency, exchangeRate: existing.exchangeRate ?? rate, description: `Correction: reversed payment ${existing.paymentNumber ?? id}` });
+    }
+    if (newAmount > 0) {
+      await appendLedgerEntry({ sourceType: "payment_correction", sourceId: id, direction: newDir, amount: newAmount, currency: (update.currency as string) ?? existing.currency, exchangeRate: (update.exchangeRate as number) ?? existing.exchangeRate ?? rate, description: `Correction: updated payment ${existing.paymentNumber ?? id}` });
+    }
+  }
+
   await logActivity(req, "payment_edited", "payment", id, { number: payment.paymentNumber });
   res.json(payment);
 });
@@ -194,11 +213,18 @@ router.patch("/:id", async (req: Request, res: Response) => {
 // ─── Delete / cancel ─────────────────────────────────────────────────────────
 router.delete("/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
+  const [existing] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   const [payment] = await db.update(paymentsTable)
     .set({ status: "cancelled" })
     .where(eq(paymentsTable.id, id))
     .returning();
   if (!payment) { res.status(404).json({ error: "Not found" }); return; }
+  if (existing.status === "completed" && (existing.amount ?? 0) > 0) {
+    const rate = await getExchangeRate();
+    const dir = existing.direction as "in" | "out";
+    await appendLedgerEntry({ sourceType: "payment_reversal", sourceId: id, direction: dir === "in" ? "out" : "in", amount: existing.amount!, currency: existing.currency, exchangeRate: existing.exchangeRate ?? rate, description: `Cancelled payment ${existing.paymentNumber ?? id}` });
+  }
   await logActivity(req, "payment_archived", "payment", id, { number: payment.paymentNumber });
   res.json({ ok: true });
 });

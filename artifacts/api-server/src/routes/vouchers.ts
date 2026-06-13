@@ -146,6 +146,10 @@ router.get("/:id", async (req: Request, res: Response) => {
 router.patch("/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   const body = req.body as Record<string, unknown>;
+
+  const [existing] = await db.select().from(vouchersTable).where(and(eq(vouchersTable.id, id), isNull(vouchersTable.deletedAt)));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+
   const allowed = ["voucherType","voucherDate","paidTo","receivedFrom","linkedEntity","linkedEntityId","linkedEntityName","amount","currency","exchangeRate","account","category","description"];
   const update: Record<string, unknown> = {};
   for (const k of allowed) { if (body[k] !== undefined) update[k] = body[k]; }
@@ -153,6 +157,20 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
   const [voucher] = await db.update(vouchersTable).set(update).where(eq(vouchersTable.id, id)).returning();
   if (!voucher) { res.status(404).json({ error: "Not found" }); return; }
+
+  const oldAmount = existing.amount ?? 0;
+  const newAmount = (update.amount as number) ?? oldAmount;
+  if (oldAmount !== newAmount && existing.status === "recorded") {
+    const rate = await getExchangeRate();
+    const dir = existing.direction as "in" | "out";
+    if (oldAmount > 0) {
+      await appendLedgerEntry({ sourceType: "voucher_correction", sourceNumber: existing.voucherNumber ?? undefined, sourceId: id, direction: dir === "in" ? "out" : "in", amount: oldAmount, currency: existing.currency, exchangeRate: existing.exchangeRate ?? rate, description: `Correction: reversed voucher ${existing.voucherNumber ?? id}` });
+    }
+    if (newAmount > 0) {
+      await appendLedgerEntry({ sourceType: "voucher_correction", sourceNumber: existing.voucherNumber ?? undefined, sourceId: id, direction: dir, amount: newAmount, currency: (update.currency as string) ?? existing.currency, exchangeRate: (update.exchangeRate as number) ?? existing.exchangeRate ?? rate, description: `Correction: updated voucher ${existing.voucherNumber ?? id}` });
+    }
+  }
+
   await logActivity(req, "voucher_edited", "voucher", id, { number: voucher.voucherNumber });
   res.json(voucher);
 });
@@ -160,11 +178,18 @@ router.patch("/:id", async (req: Request, res: Response) => {
 // ─── Delete / cancel ─────────────────────────────────────────────────────────
 router.delete("/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
+  const [existing] = await db.select().from(vouchersTable).where(and(eq(vouchersTable.id, id), isNull(vouchersTable.deletedAt)));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   const [voucher] = await db.update(vouchersTable)
     .set({ status: "cancelled", deletedAt: new Date() })
     .where(and(eq(vouchersTable.id, id), isNull(vouchersTable.deletedAt)))
     .returning();
   if (!voucher) { res.status(404).json({ error: "Not found" }); return; }
+  if (existing.status === "recorded" && (existing.amount ?? 0) > 0) {
+    const rate = await getExchangeRate();
+    const dir = existing.direction as "in" | "out";
+    await appendLedgerEntry({ sourceType: "voucher_reversal", sourceNumber: existing.voucherNumber ?? undefined, sourceId: id, direction: dir === "in" ? "out" : "in", amount: existing.amount!, currency: existing.currency, exchangeRate: existing.exchangeRate ?? rate, description: `Cancelled voucher ${existing.voucherNumber ?? id}` });
+  }
   await logActivity(req, "voucher_archived", "voucher", id, { number: voucher.voucherNumber });
   res.json({ ok: true });
 });

@@ -264,43 +264,6 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
   const [member] = await db.update(membersTable).set(updateData).where(eq(membersTable.id, id)).returning();
 
-  const cashAccountId = body.cashAccountId as number | undefined;
-  const newAmountPaid = updateData.amountPaid as number | undefined;
-  if (newAmountPaid !== undefined && newAmountPaid > 0 && cashAccountId) {
-    let accountName = "cash";
-    const [acct] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, cashAccountId));
-    if (acct) accountName = acct.name.toLowerCase().replace(/ /g, "_");
-    const voucherNumber = await getNextNumber("VCH");
-    await db.insert(vouchersTable).values({
-      voucherNumber,
-      voucherType: "cash_receipt",
-      direction: "in",
-      receivedFrom: member.name,
-      linkedEntity: "member",
-      linkedEntityId: member.id,
-      linkedEntityName: member.name,
-      amount: newAmountPaid,
-      currency: member.currency,
-      account: accountName,
-      category: "membership",
-      description: `Membership payment — ${member.planName ?? ""}`,
-      status: "recorded",
-    });
-
-    // Auto-commission on payment edit
-    if (member.coachId && (member.commissionAmount ?? 0) > 0) {
-      await db.insert(commissionsTable).values({
-        staffEmployeeId: member.coachId,
-        memberId: member.id,
-        memberName: member.name,
-        amount: member.commissionAmount!,
-        currency: member.currency,
-        status: "pending",
-        note: `Commission — ${member.name} (payment update)`,
-      });
-    }
-  }
-
   await logActivity(req, "update_member", "member", id, { name: member.name });
   res.json(member);
 });
@@ -312,6 +275,9 @@ router.delete("/:id", async (req: Request, res: Response) => {
     .set({ status: "archived", deletedAt: new Date() })
     .where(eq(membersTable.id, id)).returning();
   if (!member) { res.status(404).json({ error: "Not found" }); return; }
+  await db.update(vouchersTable)
+    .set({ status: "cancelled", deletedAt: new Date() })
+    .where(and(eq(vouchersTable.linkedEntity, "member"), eq(vouchersTable.linkedEntityId, id), eq(vouchersTable.status, "recorded"), isNull(vouchersTable.deletedAt)));
   await logActivity(req, "archive_member", "member", id, { name: member.name });
   res.json({ ok: true });
 });
