@@ -42,14 +42,55 @@ function useHasPermission(permKey?: string): boolean | null {
   return !!perms?.[permKey];
 }
 
+// ── First accessible route for the current user ───────────────────────────────
+const ORDERED_ROUTES = [
+  { permKey: "dashboard",     href: "/dashboard"  },
+  { permKey: "members",       href: "/members"    },
+  { permKey: "plans",         href: "/plans"      },
+  { permKey: "staff",         href: "/staff"      },
+  { permKey: "payments",      href: "/payments"   },
+  { permKey: "accounts",      href: "/accounts"   },
+  { permKey: "viewAccounting",href: "/financials" },
+  { permKey: "stock",         href: "/stock"      },
+  { permKey: "sales",         href: "/sales"      },
+  { permKey: "settings",      href: "/settings"   },
+] as const;
+
+function useFirstAccessibleRoute(): string | null {
+  const me = useGetMe();
+  if (!me) return null;
+  if (me.role === "admin" || me.role === "manager") return "/dashboard";
+  const perms = me.permissions as unknown as Record<string, boolean> | undefined;
+  return ORDERED_ROUTES.find(r => !!perms?.[r.permKey])?.href ?? null;
+}
+
+// ── No-access screen (staff with all pages disabled) ─────────────────────────
+function NoAccessScreen() {
+  const { logout } = useAuth();
+  return (
+    <div className="min-h-[100dvh] flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+      <div className="flex flex-col items-center gap-4 text-center px-6">
+        <div className="h-12 w-12 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-500 text-2xl">🔒</div>
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">No pages accessible</h2>
+        <p className="text-sm text-slate-500 max-w-xs">Your account doesn't have access to any pages. Contact your administrator to enable permissions.</p>
+        <button onClick={logout} className="mt-2 text-sm text-indigo-600 hover:underline">Sign out</button>
+      </div>
+    </div>
+  );
+}
+
 // ── Protected wrapper ─────────────────────────────────────────────────────────
 function ProtectedRoute({ component: Component, permKey }: { component: React.ComponentType; permKey?: string }) {
   const { isAuthenticated, isLoading } = useAuth();
   const hasPermission = useHasPermission(permKey);
+  const firstRoute = useFirstAccessibleRoute();
 
   if (isLoading || (isAuthenticated && hasPermission === null)) return <LoadingScreen />;
   if (!isAuthenticated) return <Redirect to="/login" />;
-  if (hasPermission === false) return <Redirect to="/dashboard" />;
+  if (hasPermission === false) {
+    if (!firstRoute) return <NoAccessScreen />;
+    return <Redirect to={firstRoute} />;
+  }
 
   return (
     <AppLayout>
@@ -62,10 +103,14 @@ function ProtectedRoute({ component: Component, permKey }: { component: React.Co
 function ProtectedMemberProfile({ id }: { id: number }) {
   const { isAuthenticated, isLoading } = useAuth();
   const hasPermission = useHasPermission("members");
+  const firstRoute = useFirstAccessibleRoute();
 
   if (isLoading || (isAuthenticated && hasPermission === null)) return <LoadingScreen />;
   if (!isAuthenticated) return <Redirect to="/login" />;
-  if (hasPermission === false) return <Redirect to="/dashboard" />;
+  if (hasPermission === false) {
+    if (!firstRoute) return <NoAccessScreen />;
+    return <Redirect to={firstRoute} />;
+  }
 
   return (
     <AppLayout>
@@ -89,16 +134,18 @@ function LoadingScreen() {
 // ── Root redirect: checks setup, then auth ────────────────────────────────────
 function RootRedirect() {
   const { isAuthenticated, isLoading } = useAuth();
-  if (isLoading) return <LoadingScreen />;
-  if (isAuthenticated) return <Redirect to="/dashboard" />;
+  const firstRoute = useFirstAccessibleRoute();
+  if (isLoading || (isAuthenticated && firstRoute === null)) return <LoadingScreen />;
+  if (isAuthenticated) return <Redirect to={firstRoute ?? "/login"} />;
   return <Redirect to="/login" />;
 }
 
 // ── Guards for login/setup pages ──────────────────────────────────────────────
 function LoginGuard() {
   const { isAuthenticated, isLoading } = useAuth();
-  if (isLoading) return <LoadingScreen />;
-  if (isAuthenticated) return <Redirect to="/dashboard" />;
+  const firstRoute = useFirstAccessibleRoute();
+  if (isLoading || (isAuthenticated && firstRoute === null)) return <LoadingScreen />;
+  if (isAuthenticated) return <Redirect to={firstRoute ?? "/login"} />;
   return <LoginPage />;
 }
 
