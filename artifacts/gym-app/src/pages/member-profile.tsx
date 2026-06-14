@@ -55,7 +55,7 @@ function printReceipt(inv: ReceiptData, settings: Record<string, unknown>) {
       : `${sym}${n % 1 === 0 ? n : n.toFixed(2)}`;
   const fmtD = (d?: string) => {
     if (!d) return "—";
-    try { return new Date(d).toLocaleDateString("fr-FR"); } catch { return d; }
+    try { return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }); } catch { return d; }
   };
 
   const html = `<!DOCTYPE html>
@@ -92,7 +92,7 @@ function printReceipt(inv: ReceiptData, settings: Record<string, unknown>) {
   </div>
   <hr class="divider">
   <div class="row"><span class="label">N° Reçu</span><span class="val badge">${inv.invoiceNum}</span></div>
-  <div class="row"><span class="label">Date</span><span class="val">${new Date().toLocaleDateString("fr-FR")}</span></div>
+  <div class="row"><span class="label">Date</span><span class="val">${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span></div>
   <div class="row"><span class="label">Type</span><span class="val">${inv.isRenewal ? "Renouvellement" : "Nouvelle Inscription"}</span></div>
   <hr class="divider">
   <div class="row"><span class="label">Membre</span><span class="val">${inv.memberName}</span></div>

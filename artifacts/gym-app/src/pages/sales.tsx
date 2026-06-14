@@ -162,7 +162,7 @@ function printReceipt(sale: Record<string, unknown>, settings: Record<string, un
       </div>
       <hr class="divider">
       <div class="meta-row"><span class="meta-label">${t("sales.history.number")}</span><span class="meta-val badge">${saleNum}</span></div>
-      <div class="meta-row"><span class="meta-label">Date</span><span class="meta-val">${new Date(sale.saleDate as string).toLocaleString("en-GB")}</span></div>
+      <div class="meta-row"><span class="meta-label">Date</span><span class="meta-val">${new Date(sale.saleDate as string).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span></div>
       <div class="meta-row"><span class="meta-label">${t("sales.receipt.cashier")}</span><span class="meta-val">${sale.createdBy ?? "—"}</span></div>
       <hr class="divider">
       <table>
@@ -333,7 +333,7 @@ function SaleDetailDialog({
         <div className="space-y-4">
           {/* Meta */}
           <div className="grid grid-cols-2 gap-2 text-sm">
-            <div><span className="text-muted-foreground">{t("sales.history.date")}:</span> {new Date(saleData.saleDate as string).toLocaleString("en-GB")}</div>
+            <div><span className="text-muted-foreground">{t("sales.history.date")}:</span> {new Date(saleData.saleDate as string).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</div>
             <div><span className="text-muted-foreground">{t("sales.receipt.cashier")}:</span> {saleData.createdBy as string ?? "—"}</div>
             <div><span className="text-muted-foreground">{t("sales.currency")}:</span> {currency}</div>
             <div>
@@ -951,7 +951,7 @@ export default function Sales() {
                   const fmtS = (n: number) => `${curSym} ${(n as number).toFixed(2)}`;
                   return (
                     <TableRow key={sale.id as number} className={sale.status === "voided" ? "opacity-60" : ""}>
-                      <TableCell className="text-sm">{new Date(sale.saleDate as string).toLocaleString("en-GB")}</TableCell>
+                      <TableCell className="text-sm">{new Date(sale.saleDate as string).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</TableCell>
                       <TableCell className="text-right font-semibold">{fmtS(sale.totalAmount as number)}</TableCell>
                       <TableCell><Badge variant="outline">{cur}</Badge></TableCell>
                       <TableCell className="text-right">{fmtS(sale.paymentAmount as number)}</TableCell>

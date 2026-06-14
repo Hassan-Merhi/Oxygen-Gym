@@ -109,7 +109,7 @@ interface MemberInvoiceData {
 function printMemberInvoice(inv: MemberInvoiceData, settings: Record<string, unknown>) {
   const sym = inv.currency === "CDF" ? "FC" : "$";
   const fmt = (n: number) => inv.currency === "CDF" ? `FC ${n % 1 === 0 ? n : n.toFixed(2)}` : `${sym}${n % 1 === 0 ? n : n.toFixed(2)}`;
-  const fmtD = (d: string) => { try { return new Date(d).toLocaleDateString("fr-FR"); } catch { return d; } };
+  const fmtD = (d: string) => { try { return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }); } catch { return d; } };
 
   const html = `<!DOCTYPE html>
 <html>
@@ -145,7 +145,7 @@ function printMemberInvoice(inv: MemberInvoiceData, settings: Record<string, unk
   </div>
   <hr class="divider">
   <div class="row"><span class="label">N° Facture</span><span class="val badge">${inv.invoiceNum}</span></div>
-  <div class="row"><span class="label">Date</span><span class="val">${new Date().toLocaleDateString("fr-FR")}</span></div>
+  <div class="row"><span class="label">Date</span><span class="val">${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span></div>
   <div class="row"><span class="label">Type</span><span class="val">${inv.isRenewal ? "Renouvellement" : "Nouvelle Inscription"}</span></div>
   <hr class="divider">
   <div class="row"><span class="label">Membre</span><span class="val">${inv.memberName}</span></div>

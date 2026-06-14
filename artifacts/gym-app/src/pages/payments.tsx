@@ -413,7 +413,7 @@ export default function CashBook() {
     </div>
     <div>
       <div class="report-title">${title}</div>
-      <div class="meta" style="text-align:right">Printed: ${new Date().toLocaleDateString("en-GB")} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</div>
+      <div class="meta" style="text-align:right">Printed: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</div>
     </div>
   </div>
   ${isVch
