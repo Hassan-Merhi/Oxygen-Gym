@@ -272,6 +272,7 @@ export default function MembersPage() {
 
   // ── Invoice
   const [invoicePrintData, setInvoicePrintData] = useState<MemberInvoiceData | null>(null);
+  const [lastInvoiceData, setLastInvoiceData] = useState<MemberInvoiceData | null>(null);
   const pendingInvoiceRef = useRef<MemberInvoiceData | null>(null);
   const { data: settingsData } = useGetSettings();
 
@@ -327,6 +328,7 @@ export default function MembersPage() {
     if (pendingInvoiceRef.current) {
       const inv = { ...pendingInvoiceRef.current, invoiceNum: `INV-${(data as any).id ?? Date.now()}` };
       setInvoicePrintData(inv);
+      setLastInvoiceData(inv);
       pendingInvoiceRef.current = null;
     }
   }}});
@@ -346,7 +348,11 @@ export default function MembersPage() {
   }});
   const renewMutation = useRenewMember({ mutation: { onSuccess: () => {
     invalidateMembers(); setRenewMember(null); toast({ title: t("common.success") });
-    if (pendingInvoiceRef.current) { setInvoicePrintData(pendingInvoiceRef.current); pendingInvoiceRef.current = null; }
+    if (pendingInvoiceRef.current) {
+      setInvoicePrintData(pendingInvoiceRef.current);
+      setLastInvoiceData(pendingInvoiceRef.current);
+      pendingInvoiceRef.current = null;
+    }
   }}});
   const freezeMutation = useFreezeMember({ mutation: { onSuccess: () => { invalidateMembers(); setFreezeMember(null); toast({ title: t("common.success") }); } } });
   const reactivateMutation = useReactivateMember({ mutation: { onSuccess: () => { invalidateMembers(); setReactivateMember(null); toast({ title: t("common.success") }); } } });
@@ -391,6 +397,14 @@ export default function MembersPage() {
   const discount = form.watch("discount") ?? 0;
   const balance = planPrice - discount - amountPaid;
 
+  // Auto-select first cash account when amount paid is entered
+  useEffect(() => {
+    const paid = Number(amountPaid);
+    if (paid > 0 && cashAccounts.length > 0 && !form.getValues("cashAccountId")) {
+      form.setValue("cashAccountId", String(cashAccounts[0].id));
+    }
+  }, [amountPaid]);
+
   async function onSubmit(values: MemberFormValues) {
     const payload = {
       ...values,
@@ -432,6 +446,14 @@ export default function MembersPage() {
   const renewAmountPaid = renewForm.watch("amountPaid") ?? 0;
   const renewDiscount = renewForm.watch("discount") ?? 0;
   const renewBalance = renewPlanPrice - renewDiscount - renewAmountPaid;
+
+  // Auto-select first cash account on renew form when amount paid is entered
+  useEffect(() => {
+    const paid = Number(renewAmountPaid);
+    if (paid > 0 && cashAccounts.length > 0 && !renewForm.getValues("cashAccountId")) {
+      renewForm.setValue("cashAccountId", String(cashAccounts[0].id));
+    }
+  }, [renewAmountPaid]);
 
   function openRenew(m: Member) {
     const today = new Date().toISOString().split("T")[0];
@@ -514,12 +536,20 @@ export default function MembersPage() {
           <h1 className="text-2xl font-bold tracking-tight">{t("members.title")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{total} {t("members.total")}</p>
         </div>
-        {canManage && (
-          <Button onClick={openAdd}>
-            <Plus className="h-4 w-4 mr-1.5" />
-            {t("members.addMember")}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {lastInvoiceData && (
+            <Button variant="outline" size="sm" onClick={() => setInvoicePrintData(lastInvoiceData)} className="gap-1.5">
+              <Printer className="h-4 w-4" />
+              {t("members.invoice.reprint")}
+            </Button>
+          )}
+          {canManage && (
+            <Button onClick={openAdd}>
+              <Plus className="h-4 w-4 mr-1.5" />
+              {t("members.addMember")}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -744,7 +774,22 @@ export default function MembersPage() {
           <DialogHeader>
             <DialogTitle>{editMember ? t("members.editMember") : t("members.addMember")}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="space-y-6"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
+                e.preventDefault();
+                const focusable = Array.from(
+                  e.currentTarget.querySelectorAll<HTMLElement>(
+                    'input:not([disabled]), textarea:not([disabled]), button[type="submit"]'
+                  )
+                );
+                const idx = focusable.indexOf(e.target as HTMLElement);
+                if (idx > -1 && idx < focusable.length - 1) focusable[idx + 1].focus();
+              }
+            }}
+          >
             {/* Personal Info */}
             <div>
               <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 pb-2 border-b dark:border-slate-700">{t("members.form.personalInfo")}</h3>
@@ -899,7 +944,22 @@ export default function MembersPage() {
           <DialogHeader>
             <DialogTitle>{t("members.renew.title")} — {renewMember?.name}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={renewForm.handleSubmit(onRenewSubmit)} className="space-y-4">
+          <form
+            onSubmit={renewForm.handleSubmit(onRenewSubmit)}
+            className="space-y-4"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
+                e.preventDefault();
+                const focusable = Array.from(
+                  e.currentTarget.querySelectorAll<HTMLElement>(
+                    'input:not([disabled]), textarea:not([disabled]), button[type="submit"]'
+                  )
+                );
+                const idx = focusable.indexOf(e.target as HTMLElement);
+                if (idx > -1 && idx < focusable.length - 1) focusable[idx + 1].focus();
+              }
+            }}
+          >
             <div>
               <Label>{t("members.renew.plan")} *</Label>
               <Select value={renewForm.watch("planId") ?? ""} onValueChange={(v) => { renewForm.setValue("planId", v); watchRenewPlan(v); }}>
