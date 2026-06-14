@@ -84,6 +84,8 @@ export * from './listSalesEntriesParams';
 export * from './listSalesParams';
 export * from './listStaffEmployeesParams';
 export * from './listVouchersParams';
+export * from './listWhatsappContacts200Item';
+export * from './listWhatsappContacts400';
 export * from './loginBody';
 export * from './lookupBarcodeParams';
 export * from './lowStockProduct';

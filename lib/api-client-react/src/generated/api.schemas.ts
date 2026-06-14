@@ -1283,6 +1283,16 @@ export type ChangePasswordBody = {
   confirmPassword: string;
 };
 
+export type ListWhatsappContacts200Item = {
+  id: string;
+  name: string;
+  type: string;
+};
+
+export type ListWhatsappContacts400 = {
+  error: string;
+};
+
 export type TestWhatsappConnection200 = {
   ok: boolean;
 };

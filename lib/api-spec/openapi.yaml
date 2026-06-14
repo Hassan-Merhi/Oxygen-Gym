@@ -339,6 +339,35 @@ paths:
         "204":
           description: Deleted
 
+  /whatsapp/contacts:
+    get:
+      operationId: listWhatsappContacts
+      tags: [settings]
+      summary: Fetch chats/contacts from Green API for selection
+      responses:
+        "200":
+          description: List of Green API chats
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    name: { type: string }
+                    type: { type: string }
+                  required: [id, name, type]
+        "400":
+          description: Green API not configured
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+
   /whatsapp/test:
     post:
       operationId: testWhatsappConnection

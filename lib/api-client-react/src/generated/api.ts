@@ -70,6 +70,8 @@ import type {
   ListSalesParams,
   ListStaffEmployeesParams,
   ListVouchersParams,
+  ListWhatsappContacts200Item,
+  ListWhatsappContacts400,
   LoginBody,
   LookupBarcodeParams,
   MarkAllNotificationsRead200,
@@ -1376,6 +1378,83 @@ export const useDeleteWhatsappChat = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getDeleteWhatsappChatMutationOptions(options));
     }
+
+export const getListWhatsappContactsUrl = () => {
+
+
+
+
+  return `/api/whatsapp/contacts`
+}
+
+/**
+ * @summary Fetch chats/contacts from Green API for selection
+ */
+export const listWhatsappContacts = async ( options?: RequestInit): Promise<ListWhatsappContacts200Item[]> => {
+
+  return customFetch<ListWhatsappContacts200Item[]>(getListWhatsappContactsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWhatsappContactsQueryKey = () => {
+    return [
+    `/api/whatsapp/contacts`
+    ] as const;
+    }
+
+
+export const getListWhatsappContactsQueryOptions = <TData = Awaited<ReturnType<typeof listWhatsappContacts>>, TError = ErrorType<ListWhatsappContacts400>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWhatsappContacts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWhatsappContactsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWhatsappContacts>>> = ({ signal }) => listWhatsappContacts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWhatsappContacts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWhatsappContactsQueryResult = NonNullable<Awaited<ReturnType<typeof listWhatsappContacts>>>
+export type ListWhatsappContactsQueryError = ErrorType<ListWhatsappContacts400>
+
+
+/**
+ * @summary Fetch chats/contacts from Green API for selection
+ */
+
+export function useListWhatsappContacts<TData = Awaited<ReturnType<typeof listWhatsappContacts>>, TError = ErrorType<ListWhatsappContacts400>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWhatsappContacts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWhatsappContactsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getTestWhatsappConnectionUrl = () => {
 

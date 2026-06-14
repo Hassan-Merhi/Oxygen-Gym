@@ -165,6 +165,10 @@ const en: Translations = {
   "settings.sendTest": "Send Test Message",
   "settings.testSent": "Test message sent!",
   "settings.noChats": "No chats added yet",
+  "settings.browseChats": "Browse",
+  "settings.selectChat": "Select a Chat",
+  "settings.searchChats": "Search chats or contacts...",
+  "settings.noContactsFound": "No contacts found",
   "settings.whatsappTab": "WhatsApp",
 
   "members.title": "Members",
@@ -899,6 +903,10 @@ const fr: Translations = {
   "settings.sendTest": "Envoyer un Message Test",
   "settings.testSent": "Message test envoyé !",
   "settings.noChats": "Aucun chat ajouté",
+  "settings.browseChats": "Parcourir",
+  "settings.selectChat": "Choisir un Chat",
+  "settings.searchChats": "Rechercher des chats ou contacts...",
+  "settings.noContactsFound": "Aucun contact trouvé",
   "settings.whatsappTab": "WhatsApp",
 
   "members.title": "Membres",
@@ -1633,6 +1641,10 @@ const ar: Translations = {
   "settings.sendTest": "إرسال رسالة تجريبية",
   "settings.testSent": "تم إرسال الرسالة التجريبية!",
   "settings.noChats": "لا توجد محادثات مضافة بعد",
+  "settings.browseChats": "استعراض",
+  "settings.selectChat": "اختر محادثة",
+  "settings.searchChats": "ابحث في المحادثات أو جهات الاتصال...",
+  "settings.noContactsFound": "لا توجد جهات اتصال",
   "settings.whatsappTab": "واتساب",
 
   "members.title": "الأعضاء",

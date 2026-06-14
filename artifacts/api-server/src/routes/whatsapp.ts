@@ -94,6 +94,36 @@ router.delete("/chats/:id", async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/whatsapp/contacts — fetch chats from Green API so user can pick
+router.get("/contacts", async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const settings = await db.query.settingsTable.findFirst();
+    if (!settings?.greenApiInstanceId || !settings?.greenApiToken) {
+      res.status(400).json({ error: "Green API credentials not configured" });
+      return;
+    }
+    const url = `https://api.green-api.com/waInstance${settings.greenApiInstanceId}/getChats/${settings.greenApiToken}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      req.log.error({ status: response.status, text }, "Green API getChats failed");
+      res.status(502).json({ error: `Green API error ${response.status}` });
+      return;
+    }
+    const raw = await response.json() as Array<{ id: string; name?: string; type?: string }>;
+    const contacts = raw.map((c) => ({
+      id: c.id,
+      name: c.name ?? c.id,
+      type: c.type ?? "contact",
+    }));
+    res.json(contacts);
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch Green API contacts");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // POST /api/whatsapp/test
 router.post("/test", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;

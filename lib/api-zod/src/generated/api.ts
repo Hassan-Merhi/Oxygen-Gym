@@ -459,6 +459,17 @@ export const DeleteWhatsappChatParams = zod.object({
 
 
 /**
+ * @summary Fetch chats/contacts from Green API for selection
+ */
+export const ListWhatsappContactsResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.string()
+})
+export const ListWhatsappContactsResponse = zod.array(ListWhatsappContactsResponseItem)
+
+
+/**
  * @summary Send a test WhatsApp message to all enabled chats
  */
 export const TestWhatsappConnectionResponse = zod.object({
