@@ -13,6 +13,8 @@ import {
 } from "@workspace/api-client-react";
 import type { ProductRecord, StockPurchaseRecord } from "@workspace/api-client-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { ProductStatusBadge } from "@/lib/status-badge";
+import { EmptyTableState } from "@/components/ui/empty-table-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -866,16 +868,7 @@ function SummaryCard({ icon, label, value, color, danger }: {
 }
 
 function StatusBadge({ status, t }: { status: string; t: (k: string) => string }) {
-  const map: Record<string, string> = {
-    active:   "bg-emerald-100 text-emerald-700 border border-emerald-200/60",
-    archived: "bg-amber-100 text-amber-700 border border-amber-200/60",
-    deleted:  "bg-rose-100 text-rose-700 border border-rose-200/60",
-  };
-  return (
-    <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${map[status] ?? "bg-slate-100 text-slate-700"}`}>
-      {t(`stock.status.${status}`)}
-    </span>
-  );
+  return <ProductStatusBadge status={status} label={t(`stock.status.${status}`)} />;
 }
 
 // ── Hook helper (avoids rules-of-hooks violation in callback) ──────────────────

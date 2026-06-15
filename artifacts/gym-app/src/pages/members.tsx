@@ -24,6 +24,7 @@ import type { Member, Plan } from "@workspace/api-client-react";
 import { useListStaffEmployees, getListStaffEmployeesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/ui/page-header";
+import { EmptyTableState } from "@/components/ui/empty-table-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

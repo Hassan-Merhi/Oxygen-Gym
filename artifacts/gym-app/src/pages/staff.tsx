@@ -10,6 +10,8 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useGetMe } from "@/hooks/use-me";
 import { PageHeader } from "@/components/ui/page-header";
+import { StaffStatusBadge, PayrollStatusBadge } from "@/lib/status-badge";
+import { EmptyTableState } from "@/components/ui/empty-table-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -51,11 +53,6 @@ const ROLE_COLORS: Record<string, "default" | "secondary" | "outline"> = {
   staff: "secondary",
 };
 
-const PAYROLL_STATUS_COLORS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
-  draft: "secondary",
-  paid: "default",
-  cancelled: "destructive",
-};
 
 function fmtPDate(d: string | null | undefined) {
   if (!d) return "-";
@@ -250,9 +247,7 @@ export function EmployeeRecordsTab() {
                 {emp.jobTitle ?? "—"} · {emp.salary.toLocaleString()} {emp.salaryCurrency}
               </p>
             </div>
-            <Badge variant={emp.status === "active" ? "default" : "secondary"} className={emp.status === "active" ? "bg-emerald-500/10 text-emerald-600 border-emerald-200 text-xs" : "text-xs"}>
-              {t(`emp.status.${emp.status}`)}
-            </Badge>
+            <StaffStatusBadge status={emp.status} label={t(`emp.status.${emp.status}`)} />
             <div className="flex gap-1 shrink-0">
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(emp)}>
                 <Edit2 className="w-4 h-4 text-blue-500" />
@@ -302,9 +297,7 @@ export function EmployeeRecordsTab() {
                 <TableCell className="font-medium tabular-nums">{emp.salary.toLocaleString()} {emp.salaryCurrency}</TableCell>
                 <TableCell><Badge variant="outline" className="text-xs">{t(`emp.frequency.${emp.paymentFrequency}`)}</Badge></TableCell>
                 <TableCell>
-                  <Badge variant={emp.status === "active" ? "default" : "secondary"} className={emp.status === "active" ? "bg-emerald-500/10 text-emerald-600 border-emerald-200" : ""}>
-                    {t(`emp.status.${emp.status}`)}
-                  </Badge>
+                  <StaffStatusBadge status={emp.status} label={t(`emp.status.${emp.status}`)} />
                 </TableCell>
                 <TableCell className="text-right space-x-1 rtl:space-x-reverse">
                   <Button variant="ghost" size="icon" onClick={() => openEdit(emp)} title={t("common.edit")}>
@@ -740,12 +733,7 @@ function PayrollTab() {
                   <TableCell className="text-right tabular-nums text-sm text-red-500">-{fmtMoney(r.deduction, r.currency)}</TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">{fmtMoney(r.netPay, r.currency)}</TableCell>
                   <TableCell>
-                    <Badge variant={PAYROLL_STATUS_COLORS[r.status] ?? "secondary"} className={
-                      r.status === "paid" ? "bg-emerald-500/10 text-emerald-600 border-emerald-200" :
-                      r.status === "cancelled" ? "" : "bg-amber-500/10 text-amber-600 border-amber-200"
-                    }>
-                      {t(`payroll.status.${r.status}`)}
-                    </Badge>
+                    <PayrollStatusBadge status={r.status} label={t(`payroll.status.${r.status}`)} />
                   </TableCell>
                   {canManage && (
                     <TableCell className="text-right space-x-1 rtl:space-x-reverse">
@@ -941,9 +929,7 @@ export function LoginUsersTab() {
                   <Badge variant={ROLE_COLORS[user.role] ?? "secondary"}>{t(`staff.role.${user.role}`)}</Badge>
                 </TableCell>
                 <TableCell>
-                  <Badge variant={user.status === "active" ? "outline" : "destructive"} className={user.status === "active" ? "bg-emerald-500/10 text-emerald-600 border-emerald-200" : ""}>
-                    {user.status}
-                  </Badge>
+                  <StaffStatusBadge status={user.status} label={user.status} />
                 </TableCell>
                 <TableCell className="text-right space-x-1 rtl:space-x-reverse">
                   <Button variant="ghost" size="icon" onClick={() => { setSelectedUser({ ...user }); setIsPermsOpen(true); }} title={t("staff.permissions")} data-testid={`btn-perms-${user.id}`}>

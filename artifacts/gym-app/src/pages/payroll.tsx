@@ -7,6 +7,8 @@ import {
 import { useGetMe } from "@/hooks/use-me";
 import { useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/ui/page-header";
+import { PayrollStatusBadge } from "@/lib/status-badge";
+import { EmptyTableState } from "@/components/ui/empty-table-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -22,11 +24,6 @@ import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
 
-const STATUS_COLORS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
-  draft: "secondary",
-  paid: "default",
-  cancelled: "destructive",
-};
 
 function fmtDate(d: string | null | undefined) {
   if (!d) return "-";
@@ -203,9 +200,7 @@ export default function Payroll() {
                 <TableCell className="text-red-600">-{fmtMoney(r.deduction, r.currency)}</TableCell>
                 <TableCell className="font-semibold">{fmtMoney(r.netPay, r.currency)}</TableCell>
                 <TableCell>
-                  <Badge variant={STATUS_COLORS[r.status] ?? "secondary"}>
-                    {t(`payroll.status.${r.status}`)}
-                  </Badge>
+                  <PayrollStatusBadge status={r.status} label={t(`payroll.status.${r.status}`)} />
                 </TableCell>
                 {canManage && (
                   <TableCell className="text-right space-x-1 rtl:space-x-reverse">
