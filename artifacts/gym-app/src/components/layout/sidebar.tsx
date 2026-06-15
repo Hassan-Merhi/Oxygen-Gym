@@ -11,9 +11,12 @@ import {
   Settings,
   BookOpen,
   BarChart3,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGetMe } from "@/hooks/use-me";
+import { useSidebarStore } from "@/lib/sidebar-store";
 
 const NAV_ITEMS = [
   { id: "dashboard",  href: "/dashboard",  icon: LayoutDashboard, labelKey: "nav.dashboard",  permKey: "dashboard"      },
@@ -32,6 +35,7 @@ export function Sidebar() {
   const { t } = useI18n();
   const [location] = useLocation();
   const me = useGetMe();
+  const { collapsed, toggle } = useSidebarStore();
 
   const isAdmin = me?.role === "admin" || me?.role === "manager";
   const perms = me?.permissions as Record<string, boolean> | undefined;
@@ -43,34 +47,72 @@ export function Sidebar() {
   });
 
   return (
-    <aside className="w-64 bg-sidebar border-r border-sidebar-border h-full flex flex-col fixed left-0 top-0 z-10">
-      <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
-        <img src="/gym-logo.jpg" alt="Oxygen Fitness Gym" className="h-8 w-8 mr-3 rounded object-cover" />
-        <span className="font-bold text-lg text-sidebar-foreground tracking-tight">OXYGEN GYM</span>
+    <aside
+      className={cn(
+        "bg-sidebar border-r border-sidebar-border h-full flex flex-col fixed left-0 top-0 z-10 transition-all duration-300",
+        collapsed ? "w-16" : "w-64"
+      )}
+    >
+      {/* Logo header */}
+      <div className="h-16 flex items-center border-b border-sidebar-border overflow-hidden px-3 gap-3">
+        <img
+          src="/gym-logo.jpg"
+          alt="Oxygen Fitness Gym"
+          className="h-8 w-8 shrink-0 rounded object-cover"
+        />
+        {!collapsed && (
+          <span className="font-bold text-lg text-sidebar-foreground tracking-tight truncate">
+            OXYGEN GYM
+          </span>
+        )}
       </div>
 
+      {/* Nav */}
       <div className="flex-1 overflow-y-auto py-4">
-        <nav className="space-y-1 px-3">
+        <nav className="space-y-1 px-2">
           {visibleItems.map((item) => {
             const isActive = location.startsWith(item.href);
             return (
               <Link
                 key={item.id}
                 href={item.href}
+                title={collapsed ? t(item.labelKey) : undefined}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                  collapsed && "justify-center px-2",
                   isActive
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
                     : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                 )}
                 data-testid={`nav-${item.id}`}
               >
-                <item.icon className="w-4 h-4" />
-                {t(item.labelKey)}
+                <item.icon className="w-4 h-4 shrink-0" />
+                {!collapsed && t(item.labelKey)}
               </Link>
             );
           })}
         </nav>
+      </div>
+
+      {/* Collapse toggle */}
+      <div className="border-t border-sidebar-border p-2">
+        <button
+          onClick={toggle}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className={cn(
+            "flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors",
+            collapsed && "justify-center px-2"
+          )}
+        >
+          {collapsed ? (
+            <PanelLeftOpen className="w-4 h-4 shrink-0" />
+          ) : (
+            <>
+              <PanelLeftClose className="w-4 h-4 shrink-0" />
+              <span>Collapse</span>
+            </>
+          )}
+        </button>
       </div>
     </aside>
   );
