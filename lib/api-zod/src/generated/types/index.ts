@@ -104,6 +104,8 @@ export * from './monthlyMetric';
 export * from './notificationCountResponse';
 export * from './notificationsResponse';
 export * from './pagePermissions';
+export * from './patchSaleBody';
+export * from './patchSaleBodyCurrency';
 export * from './paymentInput';
 export * from './paymentInputCategory';
 export * from './paymentInputCurrency';

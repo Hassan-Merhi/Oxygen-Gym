@@ -8,6 +8,7 @@ import {
   useCompleteSale,
   useVoidSale,
   useGetSale,
+  usePatchSale,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,7 @@ import {
   ReceiptText,
   Ban,
   History,
+  Pencil,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -443,6 +445,8 @@ export default function Sales() {
   const [voidSaleId, setVoidSaleId] = useState<number | null>(null);
   const [voidReason, setVoidReason] = useState("");
   const [voidingSale, setVoidingSale] = useState<Record<string, unknown> | null>(null);
+  const [editSaleId, setEditSaleId] = useState<number | null>(null);
+  const [editCurrency, setEditCurrency] = useState<"USD" | "CDF">("USD");
 
   const exchangeRate = (settings?.usdToCdfRate as number) ?? 2800;
 
@@ -457,6 +461,7 @@ export default function Sales() {
   // Mutations
   const completeSaleMut = useCompleteSale();
   const voidSaleMut = useVoidSale();
+  const patchSaleMut = usePatchSale();
 
   // Computed cart totals
   const toSaleCurrency = useCallback((price: number, fromCurrency: string) => {
@@ -664,6 +669,19 @@ export default function Sales() {
       toast({ title: msg, variant: "destructive" });
     } finally {
       setCompleting(false);
+    }
+  };
+
+  // ── Patch sale currency (admin only) ──────────────────────────────────────
+  const handlePatchCurrency = async () => {
+    if (!editSaleId) return;
+    try {
+      await patchSaleMut.mutateAsync({ id: editSaleId, data: { currency: editCurrency } });
+      toast({ title: t("sales.toast.currencyUpdated") });
+      queryClient.invalidateQueries();
+      setEditSaleId(null);
+    } catch {
+      toast({ title: t("sales.toast.updateFailed"), variant: "destructive" });
     }
   };
 
@@ -948,6 +966,11 @@ export default function Sales() {
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { if (settings) printReceipt(sale, settings, t); }}>
                       <Printer className="h-4 w-4" />
                     </Button>
+                    {isAdmin && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditSaleId(sale.id as number); setEditCurrency((sale.currency as "USD" | "CDF") ?? "USD"); }}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
                     {sale.status !== "voided" && canManage && (
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => { setVoidSaleId(sale.id as number); setVoidingSale(sale); }}>
                         <Ban className="h-4 w-4" />
@@ -1019,6 +1042,15 @@ export default function Sales() {
                           >
                             <Printer className="h-4 w-4" />
                           </Button>
+                          {isAdmin && (
+                            <Button
+                              variant="ghost" size="icon" className="h-7 w-7"
+                              title={t("sales.editCurrency")}
+                              onClick={() => { setEditSaleId(sale.id as number); setEditCurrency((sale.currency as "USD" | "CDF") ?? "USD"); }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
                           {sale.status !== "voided" && canManage && (
                             <Button
                               variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
@@ -1065,6 +1097,36 @@ export default function Sales() {
         canViewProfit={canViewProfit}
         t={t}
       />
+
+      {/* ── Edit Sale Currency Dialog (admin only) ─────────────────────────── */}
+      <Dialog open={!!editSaleId} onOpenChange={(o) => { if (!o) setEditSaleId(null); }}>
+        <DialogContent className="w-[95vw] max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-4 w-4" />
+              {t("sales.editCurrency")}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label className="text-sm font-medium">{t("sales.currency")}</Label>
+            <Select value={editCurrency} onValueChange={(v) => setEditCurrency(v as "USD" | "CDF")}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="USD">USD ($)</SelectItem>
+                <SelectItem value="CDF">CDF (FC)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditSaleId(null)}>{t("common.cancel")}</Button>
+            <Button onClick={handlePatchCurrency} disabled={patchSaleMut.isPending}>
+              {patchSaleMut.isPending ? t("common.loading") : t("common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Void Confirm Dialog ────────────────────────────────────────────── */}
       <AlertDialog open={!!voidSaleId} onOpenChange={(o) => { if (!o) { setVoidSaleId(null); setVoidReason(""); setVoidingSale(null); } }}>

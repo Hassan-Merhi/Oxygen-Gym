@@ -989,6 +989,18 @@ export interface CompleteSaleBody {
   notes?: string | null;
 }
 
+export type PatchSaleBodyCurrency = typeof PatchSaleBodyCurrency[keyof typeof PatchSaleBodyCurrency];
+
+
+export const PatchSaleBodyCurrency = {
+  USD: 'USD',
+  CDF: 'CDF',
+} as const;
+
+export interface PatchSaleBody {
+  currency: PatchSaleBodyCurrency;
+}
+
 export interface VoidSaleBody {
   reason: string;
 }

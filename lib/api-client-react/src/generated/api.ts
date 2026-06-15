@@ -85,6 +85,7 @@ import type {
   MembersPage,
   NotificationCountResponse,
   NotificationsResponse,
+  PatchSaleBody,
   PaymentInput,
   PaymentRecord,
   PaymentSummary,
@@ -6446,6 +6447,78 @@ export function useGetSale<TData = Awaited<ReturnType<typeof getSale>>, TError =
 
 
 
+
+export const getPatchSaleUrl = (id: number,) => {
+
+
+
+
+  return `/api/sales/${id}`
+}
+
+/**
+ * @summary Update a sale (admin only — e.g. correct currency)
+ */
+export const patchSale = async (id: number,
+    patchSaleBody: PatchSaleBody, options?: RequestInit): Promise<SaleRecord> => {
+
+  return customFetch<SaleRecord>(getPatchSaleUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      patchSaleBody,)
+  }
+);}
+
+
+
+
+export const getPatchSaleMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchSale>>, TError,{id: number;data: BodyType<PatchSaleBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchSale>>, TError,{id: number;data: BodyType<PatchSaleBody>}, TContext> => {
+
+const mutationKey = ['patchSale'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchSale>>, {id: number;data: BodyType<PatchSaleBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  patchSale(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchSaleMutationResult = NonNullable<Awaited<ReturnType<typeof patchSale>>>
+    export type PatchSaleMutationBody = BodyType<PatchSaleBody>
+    export type PatchSaleMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a sale (admin only — e.g. correct currency)
+ */
+export const usePatchSale = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchSale>>, TError,{id: number;data: BodyType<PatchSaleBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof patchSale>>,
+        TError,
+        {id: number;data: BodyType<PatchSaleBody>},
+        TContext
+      > => {
+      return useMutation(getPatchSaleMutationOptions(options));
+    }
 
 export const getVoidSaleUrl = (id: number,) => {
 

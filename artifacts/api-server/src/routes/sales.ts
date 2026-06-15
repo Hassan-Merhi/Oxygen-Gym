@@ -269,6 +269,44 @@ router.post("/", async (req: Request, res: Response) => {
   res.status(201).json({ ...sale, paymentId: payment.id });
 });
 
+// ── Patch sale (admin: correct currency) ───────────────────────────────────────
+router.patch("/:id", async (req: Request, res: Response) => {
+  const user = (req as any).__gymproUser as { role?: string } | undefined;
+  if (user?.role !== "admin") {
+    res.status(403).json({ error: "Admin only" });
+    return;
+  }
+
+  const id = parseInt(req.params.id as string);
+  const { currency } = req.body as { currency?: string };
+
+  if (!currency || !["USD", "CDF"].includes(currency)) {
+    res.status(400).json({ error: "currency must be USD or CDF" });
+    return;
+  }
+
+  const [existing] = await db.select().from(salesTable).where(eq(salesTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Sale not found" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(salesTable)
+    .set({ currency })
+    .where(eq(salesTable.id, id))
+    .returning();
+
+  await logActivity(req, "sale_updated", "sale", id, {
+    field: "currency",
+    from: existing.currency,
+    to: currency,
+    updatedBy: callerName(req),
+  });
+
+  res.json(updated);
+});
+
 // ── Void sale ──────────────────────────────────────────────────────────────────
 router.patch("/:id/void", async (req: Request, res: Response) => {
   const id = parseInt(req.params.id as string);

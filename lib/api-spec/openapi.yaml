@@ -1670,6 +1670,34 @@ paths:
         "404":
           description: Not found
 
+    patch:
+      operationId: patchSale
+      summary: Update a sale (admin only — e.g. correct currency)
+      tags: [sales]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchSaleBody"
+      responses:
+        "200":
+          description: Updated sale record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaleRecord"
+        "403":
+          description: Admin only
+        "404":
+          description: Not found
+
   /sales/{id}/void:
     patch:
       operationId: voidSale
@@ -3029,6 +3057,14 @@ components:
         paymentAmount: { type: number }
         notes: { type: string, nullable: true }
       required: [items, currency, paymentAmount]
+
+    PatchSaleBody:
+      type: object
+      properties:
+        currency:
+          type: string
+          enum: [USD, CDF]
+      required: [currency]
 
     VoidSaleBody:
       type: object

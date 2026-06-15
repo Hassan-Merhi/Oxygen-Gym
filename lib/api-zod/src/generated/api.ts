@@ -2236,6 +2236,41 @@ export const GetSaleResponse = zod.object({
 
 
 /**
+ * @summary Update a sale (admin only — e.g. correct currency)
+ */
+export const PatchSaleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const PatchSaleBody = zod.object({
+  "currency": zod.enum(['USD', 'CDF'])
+})
+
+export const PatchSaleResponse = zod.object({
+  "id": zod.number(),
+  "saleNumber": zod.string().nullish(),
+  "items": zod.unknown().optional(),
+  "totalAmount": zod.number(),
+  "totalDiscount": zod.number(),
+  "totalCost": zod.number(),
+  "totalProfit": zod.number(),
+  "totalAmountUsd": zod.number().nullish(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "paymentAmount": zod.number(),
+  "changeDue": zod.number(),
+  "notes": zod.string().nullish(),
+  "createdBy": zod.string().nullish(),
+  "saleDate": zod.string(),
+  "status": zod.string(),
+  "voidedAt": zod.string().nullish(),
+  "voidedBy": zod.string().nullish(),
+  "voidReason": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
  * @summary Void a sale and restore stock
  */
 export const VoidSaleParams = zod.object({
