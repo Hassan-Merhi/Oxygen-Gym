@@ -13,11 +13,11 @@ export function AppLayout({ children }: AppLayoutProps) {
       <Sidebar />
       <div
         className={`flex-1 flex flex-col transition-all duration-300 ${
-          collapsed ? "ltr:ml-16 rtl:mr-16" : "ltr:ml-64 rtl:mr-64"
+          collapsed ? "md:ltr:ml-16 md:rtl:mr-16" : "md:ltr:ml-64 md:rtl:mr-64"
         }`}
       >
         <Topbar />
-        <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full">
+        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
           {children}
         </main>
       </div>

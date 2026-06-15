@@ -246,7 +246,7 @@ export default function AccountsPage() {
         </div>
 
         {/* KPI cards */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="rounded-xl border border-border bg-card shadow-sm p-4">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
@@ -295,9 +295,9 @@ export default function AccountsPage() {
           )}
         </div>
 
-        {/* Statement table */}
+        {/* Statement table — scrollable on mobile */}
         <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto min-w-0">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30">

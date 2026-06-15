@@ -623,8 +623,87 @@ export default function MembersPage() {
         </Select>
       </div>
 
-      {/* Table */}
-      <div className="rounded-xl border border-border overflow-hidden bg-card">
+      {/* Mobile card list — shown below md */}
+      <div className="md:hidden rounded-xl border border-border overflow-hidden bg-card">
+        {isLoading ? (
+          <div className="p-6 text-center text-muted-foreground text-sm">Loading…</div>
+        ) : items.length === 0 ? (
+          <div className="p-8 text-center">
+            <Users className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">{t("members.empty")}</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/50">
+            {items.map((m) => {
+              const initials = m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+              const days = daysUntil(m.expiryDate);
+              return (
+                <div key={m.id} className="flex items-center gap-2 px-3 py-3">
+                  <button onClick={() => navigate(`/members/${m.id}`)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0 ${avatarColor(m.name)}`}>
+                      {initials}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-sm truncate">{m.name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                        {m.planName ?? "—"} · {fmtDate(m.expiryDate)}
+                        {days !== null && days >= 0 && days <= 7 && <span className="text-orange-500"> · {days}d</span>}
+                      </p>
+                    </div>
+                  </button>
+                  <StatusBadge status={m.status} t={t} />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => navigate(`/members/${m.id}`)}>
+                        <Eye className="h-4 w-4 mr-2" />{t("members.actions.view")}
+                      </DropdownMenuItem>
+                      {canManage && (
+                        <>
+                          <DropdownMenuItem onClick={() => openEdit(m)}>
+                            <Edit className="h-4 w-4 mr-2" />{t("members.actions.edit")}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => { setCheckInMember(m); setCheckInForce(false); }}>
+                            <LogIn className="h-4 w-4 mr-2" />{t("members.actions.checkin")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openRenew(m)}>
+                            <RefreshCw className="h-4 w-4 mr-2" />{t("members.actions.renew")}
+                          </DropdownMenuItem>
+                          {m.status !== "frozen" ? (
+                            <DropdownMenuItem onClick={() => openFreeze(m)}>
+                              <Snowflake className="h-4 w-4 mr-2" />{t("members.actions.freeze")}
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem onClick={() => setReactivateMember(m)}>
+                              <Play className="h-4 w-4 mr-2" />{t("members.actions.reactivate")}
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-red-600 focus:text-red-600"
+                            onClick={() => deleteMutation.mutate({ id: m.id })}
+                          >
+                            <Archive className="h-4 w-4 mr-2" />{t("members.actions.archive")}
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Desktop table — hidden on mobile */}
+      <div className="hidden md:block rounded-xl border border-border overflow-hidden bg-card">
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -763,6 +842,7 @@ export default function MembersPage() {
             })}
           </TableBody>
         </Table>
+        </div>
       </div>
 
       {/* Pagination */}
@@ -784,7 +864,7 @@ export default function MembersPage() {
 
       {/* ── Add/Edit Modal ─────────────────────────────────────────────────── */}
       <Dialog open={addOpen || !!editMember} onOpenChange={(o) => { if (!o) { setAddOpen(false); setEditMember(null); } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editMember ? t("members.editMember") : t("members.addMember")}</DialogTitle>
           </DialogHeader>

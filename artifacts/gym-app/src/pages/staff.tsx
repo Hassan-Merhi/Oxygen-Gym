@@ -232,7 +232,41 @@ export function EmployeeRecordsTab() {
         </Button>
       </div>
 
-      <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+      {/* Mobile cards */}
+      <div className="md:hidden rounded-xl border bg-card shadow-sm overflow-hidden divide-y divide-border/50">
+        {isLoading ? (
+          <div className="p-6 text-center text-muted-foreground text-sm"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
+        ) : employees.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">{t("emp.empty")}</div>
+        ) : employees.map(emp => (
+          <div key={emp.id} className="flex items-center gap-3 px-3 py-3">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${avatarColor(emp.name)}`}>
+              {avatarInitials(emp.name)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-sm truncate">{emp.name}</p>
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                {emp.jobTitle ?? "—"} · {emp.salary.toLocaleString()} {emp.salaryCurrency}
+              </p>
+            </div>
+            <Badge variant={emp.status === "active" ? "default" : "secondary"} className={emp.status === "active" ? "bg-emerald-500/10 text-emerald-600 border-emerald-200 text-xs" : "text-xs"}>
+              {t(`emp.status.${emp.status}`)}
+            </Badge>
+            <div className="flex gap-1 shrink-0">
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(emp)}>
+                <Edit2 className="w-4 h-4 text-blue-500" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setArchiveId(emp.id)}>
+                <Archive className="w-4 h-4 text-amber-500" />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block rounded-xl border bg-card shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/30">
@@ -283,6 +317,7 @@ export function EmployeeRecordsTab() {
             ))}
           </TableBody>
         </Table>
+        </div>
       </div>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
@@ -501,6 +536,7 @@ function PayrollTab() {
             ) : (
               <>
                 <div className="rounded-lg border overflow-hidden">
+                  <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/30">
@@ -611,6 +647,7 @@ function PayrollTab() {
                       })}
                     </TableBody>
                   </Table>
+                  </div>
                 </div>
 
                 {/* Summary bar */}
@@ -659,6 +696,7 @@ function PayrollTab() {
         </div>
 
         <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30">
@@ -731,6 +769,7 @@ function PayrollTab() {
               ))}
             </TableBody>
           </Table>
+          </div>
         </div>
       </div>
 
@@ -869,6 +908,7 @@ export function LoginUsersTab() {
       </div>
 
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/30">
@@ -919,6 +959,7 @@ export function LoginUsersTab() {
             ))}
           </TableBody>
         </Table>
+        </div>
       </div>
 
       {/* Add Dialog */}

@@ -921,7 +921,47 @@ export default function Sales() {
             </Select>
           </div>
 
-          <div className="rounded-lg border overflow-hidden flex-1">
+          {/* Mobile sale cards */}
+          <div className="md:hidden rounded-lg border overflow-hidden bg-card divide-y divide-border/50">
+            {!historyItems || historyItems.items.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground">
+                <ReceiptText className="h-10 w-10 opacity-30" />
+                <p className="text-sm">{t("sales.empty")}</p>
+              </div>
+            ) : historyItems.items.map((sale) => {
+              const cur = sale.currency as string;
+              const curSym = cur === "USD" ? "$" : cur;
+              const fmtS = (n: number) => `${curSym} ${(n as number).toFixed(2)}`;
+              return (
+                <div key={sale.id as number} className={`flex items-center gap-3 px-3 py-3 ${sale.status === "voided" ? "opacity-60" : ""}`}>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground">{new Date(sale.saleDate as string).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
+                    <p className="font-bold text-sm tabular-nums">{fmtS(sale.totalAmount as number)}</p>
+                    <p className="text-xs text-muted-foreground">Paid: {fmtS(sale.paymentAmount as number)}</p>
+                  </div>
+                  <Badge variant={sale.status === "voided" ? "destructive" : "default"} className="text-xs shrink-0">
+                    {t(`sales.status.${sale.status as string}`)}
+                  </Badge>
+                  <div className="flex gap-1 shrink-0">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setViewSaleId(sale.id as number)}>
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { if (settings) printReceipt(sale, settings, t); }}>
+                      <Printer className="h-4 w-4" />
+                    </Button>
+                    {sale.status !== "voided" && canManage && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => { setVoidSaleId(sale.id as number); setVoidingSale(sale); }}>
+                        <Ban className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block rounded-lg border overflow-x-auto flex-1">
             <Table>
               <TableHeader>
                 <TableRow>

@@ -3,7 +3,7 @@ import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { LogOut, Bell, Check, CheckCheck, AlertCircle, Package, DollarSign, UserX, Snowflake, Sun, Moon } from "lucide-react";
+import { LogOut, Bell, Check, CheckCheck, AlertCircle, Package, DollarSign, UserX, Snowflake, Sun, Moon, Menu } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -19,6 +19,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
+import { useSidebarStore } from "@/lib/sidebar-store";
 
 const TYPE_ICONS: Record<string, React.ElementType> = {
   member_expiring: AlertCircle,
@@ -102,7 +103,7 @@ function NotificationBell() {
       </Button>
 
       {open && (
-        <div className="absolute end-0 mt-2 w-80 rounded-xl border border-border bg-popover shadow-lg z-50 overflow-hidden">
+        <div className="absolute end-0 mt-2 w-72 sm:w-80 rounded-xl border border-border bg-popover shadow-lg z-50 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm">{t("notif.title")}</span>
@@ -170,6 +171,7 @@ export function Topbar() {
   const { user, logout } = useAuth();
   const [, setLocation] = useLocation();
   const { theme, toggle } = useTheme();
+  const { openMobile } = useSidebarStore();
 
   const handleLogout = () => {
     logout();
@@ -181,22 +183,34 @@ export function Topbar() {
     : user?.username?.charAt(0).toUpperCase() ?? "U";
 
   return (
-    <header className="h-16 bg-background border-b border-border flex items-center justify-between px-6 sticky top-0 z-10 w-full">
-      <div className="flex-1">
-        {/* Breadcrumb placeholder */}
+    <header className="h-14 md:h-16 bg-background border-b border-border flex items-center justify-between px-3 md:px-6 sticky top-0 z-20 w-full">
+      {/* Left: hamburger on mobile */}
+      <div className="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden h-9 w-9"
+          onClick={openMobile}
+          aria-label="Open menu"
+        >
+          <Menu className="w-5 h-5" />
+        </Button>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
-          <SelectTrigger className="w-32 bg-card border-border h-9" data-testid="select-language">
-            <SelectValue placeholder="Language" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="en">English</SelectItem>
-            <SelectItem value="fr">Français</SelectItem>
-            <SelectItem value="ar">العربية</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="flex items-center gap-1.5 md:gap-3">
+        {/* Language selector — desktop only */}
+        <div className="hidden md:block">
+          <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
+            <SelectTrigger className="w-32 bg-card border-border h-9" data-testid="select-language">
+              <SelectValue placeholder="Language" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="en">English</SelectItem>
+              <SelectItem value="fr">Français</SelectItem>
+              <SelectItem value="ar">العربية</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         <Button
           variant="ghost"
@@ -208,13 +222,13 @@ export function Topbar() {
           {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </Button>
 
-        <div className="h-8 w-px bg-border" />
+        <div className="hidden md:block h-8 w-px bg-border" />
 
         <NotificationBell />
 
-        <div className="h-8 w-px bg-border" />
+        <div className="hidden md:block h-8 w-px bg-border" />
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3">
           <Avatar className="h-8 w-8 rounded-md border border-border">
             <AvatarFallback className="rounded-md text-xs font-semibold bg-indigo-100 text-indigo-700">
               {initials}
@@ -229,12 +243,12 @@ export function Topbar() {
           <Button
             variant="ghost"
             size="sm"
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground px-2 md:px-3"
             onClick={handleLogout}
             data-testid="button-logout"
           >
-            <LogOut className="w-4 h-4 me-2" />
-            {t("nav.logout")}
+            <LogOut className="w-4 h-4 md:me-2" />
+            <span className="hidden md:inline">{t("nav.logout")}</span>
           </Button>
         </div>
       </div>
