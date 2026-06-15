@@ -103,7 +103,7 @@ function NotificationBell() {
       </Button>
 
       {open && (
-        <div className="absolute end-0 mt-2 w-72 sm:w-80 rounded-xl border border-border bg-popover shadow-lg z-50 overflow-hidden">
+        <div className="absolute end-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1rem)] rounded-xl border border-border bg-popover shadow-lg z-50 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm">{t("notif.title")}</span>
@@ -183,7 +183,7 @@ export function Topbar() {
     : user?.username?.charAt(0).toUpperCase() ?? "U";
 
   return (
-    <header className="h-14 md:h-16 bg-background border-b border-border flex items-center justify-between px-3 md:px-6 sticky top-0 z-20 w-full">
+    <header className="h-16 bg-background border-b border-border flex items-center justify-between px-3 md:px-6 sticky top-0 z-20 w-full">
       {/* Left: hamburger on mobile */}
       <div className="flex items-center gap-2">
         <Button
@@ -198,7 +198,7 @@ export function Topbar() {
       </div>
 
       <div className="flex items-center gap-1.5 md:gap-3">
-        {/* Language selector — desktop only */}
+        {/* Language selector — full on desktop, cycle button on mobile */}
         <div className="hidden md:block">
           <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
             <SelectTrigger className="w-32 bg-card border-border h-9" data-testid="select-language">
@@ -211,6 +211,20 @@ export function Topbar() {
             </SelectContent>
           </Select>
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="md:hidden h-9 w-12 text-xs font-bold tracking-wide"
+          onClick={() => {
+            const langs = ["en", "fr", "ar"] as const;
+            const next = langs[(langs.indexOf(language as typeof langs[number]) + 1) % langs.length];
+            setLanguage(next);
+          }}
+          aria-label="Change language"
+          data-testid="select-language"
+        >
+          {language.toUpperCase()}
+        </Button>
 
         <Button
           variant="ghost"

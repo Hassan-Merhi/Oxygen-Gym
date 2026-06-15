@@ -12,7 +12,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     <div className="min-h-[100dvh] flex w-full bg-muted/20">
       <Sidebar />
       <div
-        className={`flex-1 flex flex-col transition-all duration-300 ${
+        className={`flex-1 min-w-0 flex flex-col transition-all duration-300 ${
           collapsed ? "md:ltr:ml-16 md:rtl:mr-16" : "md:ltr:ml-64 md:rtl:mr-64"
         }`}
       >

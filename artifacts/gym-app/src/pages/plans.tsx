@@ -207,7 +207,7 @@ function PlanModal({
             <Textarea id="description" {...register("description")} rows={2} placeholder={t("plans.form.descriptionPlaceholder")} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="durationDays">{t("plans.form.duration")} (days) *</Label>
               <Input id="durationDays" type="number" min={1} {...register("durationDays")} placeholder="30" />
@@ -242,7 +242,7 @@ function PlanModal({
               <UserCheck className="w-3.5 h-3.5" />
               Coach Commission <span className="font-normal text-muted-foreground">(optional)</span>
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Default Coach</Label>
                 <Select

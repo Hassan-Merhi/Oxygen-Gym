@@ -35,6 +35,16 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -265,6 +275,7 @@ export default function MembersPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const LIMIT = 20;
+  const [archiveId, setArchiveId] = useState<number | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -666,6 +677,7 @@ export default function MembersPage() {
                         {m.planName ?? "—"} · {fmtDate(m.expiryDate)}
                         {days !== null && days >= 0 && days <= 7 && <span className="text-orange-500"> · {days}d</span>}
                       </p>
+                      {m.phone && <p className="text-xs text-muted-foreground/70 truncate">{m.phone}</p>}
                     </div>
                   </button>
                   <StatusBadge status={m.status} t={t} />
@@ -703,7 +715,7 @@ export default function MembersPage() {
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-red-600 focus:text-red-600"
-                            onClick={() => deleteMutation.mutate({ id: m.id })}
+                            onClick={() => setArchiveId(m.id)}
                           >
                             <Archive className="h-4 w-4 mr-2" />{t("members.actions.archive")}
                           </DropdownMenuItem>
@@ -845,7 +857,7 @@ export default function MembersPage() {
                             )}
                             <DropdownMenuItem
                               className="text-red-600 focus:text-red-600"
-                              onClick={() => deleteMutation.mutate({ id: m.id })}
+                              onClick={() => setArchiveId(m.id)}
                             >
                               <Archive className="h-4 w-4 mr-2" />{t("members.actions.archive")}
                             </DropdownMenuItem>
@@ -904,7 +916,7 @@ export default function MembersPage() {
             {/* Personal Info */}
             <div>
               <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 pb-2 border-b dark:border-slate-700">{t("members.form.personalInfo")}</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="col-span-2 border-l-4 border-primary pl-3 py-0.5 rounded-r-md">
                   <Label className="text-primary font-semibold">{t("members.form.name")} *</Label>
                   <Input {...form.register("name")} className="mt-1" />
@@ -920,7 +932,7 @@ export default function MembersPage() {
             {/* Membership */}
             <div>
               <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 pb-2 border-b dark:border-slate-700">{t("members.form.membershipInfo")}</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="border-l-4 border-primary pl-3 py-0.5 rounded-r-md">
                   <Label className="text-primary font-semibold">{t("members.form.plan")}</Label>
                   <Select value={form.watch("planId") || "none"} onValueChange={(v) => { const val = v === "none" ? "" : v; form.setValue("planId", val); watchedPlanId(val); }}>
@@ -965,7 +977,7 @@ export default function MembersPage() {
             {/* Payment */}
             <div>
               <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 pb-2 border-b dark:border-slate-700">{t("members.form.paymentInfo")}</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {planPrice > 0 && (
                   <div>
                     <Label>{t("members.form.planPrice")}</Label>
@@ -1017,7 +1029,7 @@ export default function MembersPage() {
             {coaches.length > 0 && (
               <div>
                 <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 pb-2 border-b dark:border-slate-700">Coach & Commission</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label>Assigned Coach</Label>
                     <Select value={form.watch("coachId") || "none"} onValueChange={(v) => form.setValue("coachId", v === "none" ? "" : v)}>
@@ -1051,7 +1063,7 @@ export default function MembersPage() {
 
       {/* ── Renew Modal ────────────────────────────────────────────────────── */}
       <Dialog open={!!renewMember} onOpenChange={(o) => { if (!o) setRenewMember(null); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t("members.renew.title")} — {renewMember?.name}</DialogTitle>
           </DialogHeader>
@@ -1080,7 +1092,7 @@ export default function MembersPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label>{t("members.renew.startDate")}</Label>
                 <Input type="date" {...renewForm.register("startDate")} className="mt-1"
@@ -1154,7 +1166,7 @@ export default function MembersPage() {
 
       {/* ── Freeze Modal ───────────────────────────────────────────────────── */}
       <Dialog open={!!freezeMember} onOpenChange={(o) => { if (!o) setFreezeMember(null); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="w-[95vw] max-w-sm">
           <DialogHeader>
             <DialogTitle>{t("members.freeze.title")} — {freezeMember?.name}</DialogTitle>
           </DialogHeader>
@@ -1188,7 +1200,7 @@ export default function MembersPage() {
 
       {/* ── Check-in Dialog ────────────────────────────────────────────────── */}
       <Dialog open={!!checkInMember} onOpenChange={(o) => { if (!o) { setCheckInMember(null); setCheckInForce(false); } }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="w-[95vw] max-w-sm">
           <DialogHeader>
             <DialogTitle>{t("members.checkin.title")}</DialogTitle>
           </DialogHeader>
@@ -1225,7 +1237,7 @@ export default function MembersPage() {
 
       {/* ── Reactivate Dialog ─────────────────────────────────────────────── */}
       <Dialog open={!!reactivateMember} onOpenChange={(o) => { if (!o) setReactivateMember(null); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="w-[95vw] max-w-sm">
           <DialogHeader>
             <DialogTitle>{t("members.reactivate.title")}</DialogTitle>
           </DialogHeader>
@@ -1324,6 +1336,25 @@ export default function MembersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Archive Confirmation ─────────────────────────────────────────────── */}
+      <AlertDialog open={!!archiveId} onOpenChange={(o) => { if (!o) setArchiveId(null); }}>
+        <AlertDialogContent className="w-[95vw] max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("members.actions.archive")}?</AlertDialogTitle>
+            <AlertDialogDescription>{t("members.archive.confirm") || "This member will be archived and hidden from active lists."}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (archiveId) deleteMutation.mutate({ id: archiveId }); setArchiveId(null); }}
+            >
+              {t("members.actions.archive")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

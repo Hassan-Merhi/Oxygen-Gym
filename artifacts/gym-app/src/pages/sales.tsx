@@ -695,7 +695,7 @@ export default function Sales() {
   const totalHistoryPages = historyItems ? Math.max(1, Math.ceil(historyItems.total / 15)) : 1;
 
   return (
-    <div className="flex flex-col h-full p-4 gap-4">
+    <div className="flex flex-col h-full gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">{t("sales.title")}</h1>
       </div>
@@ -726,7 +726,6 @@ export default function Sales() {
                 onChange={(e) => handleBarcodeChange(e.target.value)}
                 placeholder={t("sales.barcodePlaceholder")}
                 className="font-mono"
-                autoFocus
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && barcodeInput.trim()) {
                     if (barcodeTimer) clearTimeout(barcodeTimer);
@@ -901,8 +900,8 @@ export default function Sales() {
 
         {/* ── History Tab ───────────────────────────────────────────────── */}
         <TabsContent value="history" className="flex-1 flex flex-col gap-4 mt-4">
-          <div className="flex flex-wrap gap-3">
-            <div className="relative flex-1 min-w-[200px]">
+          <div className="flex flex-wrap gap-2">
+            <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 className="pl-9"
@@ -912,7 +911,7 @@ export default function Sales() {
               />
             </div>
             <Select value={historyStatus || "all"} onValueChange={(v) => { setHistoryStatus(v === "all" ? "" : v); setHistoryPage(1); }}>
-              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-40 shrink-0"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="completed">{t("sales.status.completed")}</SelectItem>
@@ -935,7 +934,7 @@ export default function Sales() {
               return (
                 <div key={sale.id as number} className={`flex items-center gap-3 px-3 py-3 ${sale.status === "voided" ? "opacity-60" : ""}`}>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-muted-foreground">{new Date(sale.saleDate as string).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
+                    <p className="text-xs text-muted-foreground">#{sale.id as number} · {new Date(sale.saleDate as string).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
                     <p className="font-bold text-sm tabular-nums">{fmtS(sale.totalAmount as number)}</p>
                     <p className="text-xs text-muted-foreground">Paid: {fmtS(sale.paymentAmount as number)}</p>
                   </div>

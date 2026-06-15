@@ -159,7 +159,7 @@ export function EmployeeRecordsTab() {
   const EmpForm = ({ onSubmit, isPending }: { onSubmit: (d: any) => void; isPending: boolean }) => (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField control={form.control} name="name" render={({ field }) => (
             <FormItem><FormLabel>{t("emp.table.name")}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
           )} />
@@ -775,7 +775,7 @@ function PayrollTab() {
 
       {/* Confirm dialogs */}
       <AlertDialog open={!!payId} onOpenChange={o => !o && setPayId(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="w-[95vw] max-w-sm">
           <AlertDialogHeader>
             <AlertDialogTitle>{t("payroll.markPaid")}</AlertDialogTitle>
             <AlertDialogDescription>{t("payroll.confirmPay")}</AlertDialogDescription>
@@ -790,7 +790,7 @@ function PayrollTab() {
       </AlertDialog>
 
       <AlertDialog open={!!cancelId} onOpenChange={o => !o && setCancelId(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="w-[95vw] max-w-sm">
           <AlertDialogHeader>
             <AlertDialogTitle>{t("payroll.cancelTitle")}</AlertDialogTitle>
             <AlertDialogDescription>{t("payroll.confirmCancel")}</AlertDialogDescription>
@@ -977,7 +977,7 @@ export function LoginUsersTab() {
               <FormField control={form.control} name="password" render={({ field }) => (
                 <FormItem><FormLabel>{t("auth.password")}</FormLabel><FormControl><Input type="password" {...field} placeholder="••••••••" /></FormControl><FormMessage /></FormItem>
               )} />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField control={form.control} name="role" render={({ field }) => (
                   <FormItem><FormLabel>{t("staff.table.role")}</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
@@ -1027,7 +1027,7 @@ export function LoginUsersTab() {
               <FormField control={form.control} name="password" render={({ field }) => (
                 <FormItem><FormLabel>{t("auth.password")} <span className="text-muted-foreground text-xs">({t("common.optional")})</span></FormLabel><FormControl><Input type="password" {...field} placeholder="••••••••" /></FormControl><FormMessage /></FormItem>
               )} />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField control={form.control} name="role" render={({ field }) => (
                   <FormItem><FormLabel>{t("staff.table.role")}</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>

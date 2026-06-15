@@ -57,6 +57,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { fmtDate, fmtDateTime } from "@/lib/date";
@@ -86,6 +87,7 @@ export default function Stock() {
   const [status, setStatus] = useState<ProductStatus>("active");
   const [lowStock, setLowStock] = useState(false);
   const [page, setPage] = useState(1);
+  const [showFilters, setShowFilters] = useState(false);
   const limit = 20;
 
   // ── Modals ─────────────────────────────────────────────────────────────────
@@ -177,30 +179,52 @@ export default function Stock() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-2">
-        <div className="relative flex-1 min-w-[220px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          <Input className="pl-9 h-9 bg-background" placeholder={t("stock.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input className="pl-9 h-9 bg-background" placeholder={t("stock.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+          <button
+            className={`md:hidden flex items-center gap-1.5 h-9 px-3 rounded-md border text-sm shrink-0 transition-colors ${showFilters ? "border-primary text-primary bg-primary/5" : "border-input bg-background text-muted-foreground"}`}
+            onClick={() => setShowFilters(v => !v)}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            {t("common.filters") || "Filters"}
+            {(status !== "active" || lowStock) && <span className="w-1.5 h-1.5 rounded-full bg-primary" />}
+          </button>
         </div>
-        <Select value={status} onValueChange={(v) => { setStatus(v as ProductStatus); setPage(1); }}>
-          <SelectTrigger className="w-32 h-9"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("stock.filter.status")}</SelectItem>
-            <SelectItem value="active">{t("stock.status.active")}</SelectItem>
-            <SelectItem value="archived">{t("stock.status.archived")}</SelectItem>
-            <SelectItem value="deleted">{t("stock.status.deleted")}</SelectItem>
-          </SelectContent>
-        </Select>
-        <label className="flex items-center gap-2 cursor-pointer select-none text-sm h-9 px-3 rounded-md border border-input bg-background hover:bg-muted/40 transition-colors">
-          <Checkbox checked={lowStock} onCheckedChange={(v) => { setLowStock(Boolean(v)); setPage(1); }} />
-          {t("stock.filter.lowStock")}
-        </label>
+        <div className={`flex flex-wrap gap-2 ${showFilters ? "flex" : "hidden md:flex"}`}>
+          <Select value={status} onValueChange={(v) => { setStatus(v as ProductStatus); setPage(1); }}>
+            <SelectTrigger className="w-32 h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("stock.filter.status")}</SelectItem>
+              <SelectItem value="active">{t("stock.status.active")}</SelectItem>
+              <SelectItem value="archived">{t("stock.status.archived")}</SelectItem>
+              <SelectItem value="deleted">{t("stock.status.deleted")}</SelectItem>
+            </SelectContent>
+          </Select>
+          <label className="flex items-center gap-2 cursor-pointer select-none text-sm h-9 px-3 rounded-md border border-input bg-background hover:bg-muted/40 transition-colors">
+            <Checkbox checked={lowStock} onCheckedChange={(v) => { setLowStock(Boolean(v)); setPage(1); }} />
+            {t("stock.filter.lowStock")}
+          </label>
+        </div>
       </div>
 
       {/* Mobile product cards */}
       <div className="md:hidden rounded-xl border border-border overflow-hidden bg-card shadow-sm divide-y divide-border/50">
         {productsQ.isLoading ? (
-          <div className="p-6 text-center text-muted-foreground text-sm">Loading…</div>
+          <div className="divide-y divide-border/50">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-3">
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3.5 bg-muted rounded animate-pulse w-2/3" />
+                  <div className="h-3 bg-muted rounded animate-pulse w-1/2" />
+                </div>
+                <div className="h-5 w-14 bg-muted rounded-full animate-pulse shrink-0" />
+              </div>
+            ))}
+          </div>
         ) : products.length === 0 ? (
           <div className="p-10 text-center">
             <Package className="w-9 h-9 text-muted-foreground/40 mx-auto mb-2" />
@@ -271,10 +295,10 @@ export default function Stock() {
             </thead>
             <tbody className="divide-y divide-border/50">
               {productsQ.isLoading ? (
-                <tr><td colSpan={12} className="text-center py-14 text-muted-foreground">Loading...</td></tr>
+                <tr><td colSpan={canViewCost ? 7 : 5} className="text-center py-14 text-muted-foreground">Loading...</td></tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-20">
+                  <td colSpan={canViewCost ? 7 : 5} className="text-center py-20">
                     <Package className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
                     <p className="text-muted-foreground font-medium">{t("stock.empty")}</p>
                     <p className="text-muted-foreground/50 text-xs mt-1">{t("stock.emptyHint")}</p>
@@ -522,8 +546,8 @@ function ProductModal({
 
         {error && <p className="text-sm text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="col-span-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
             <Label>{t("stock.field.name")} *</Label>
             <Input value={form.name} onChange={(e) => set("name", e.target.value)} className="mt-1" />
           </div>
@@ -577,11 +601,11 @@ function ProductModal({
               </SelectContent>
             </Select>
           </div>
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <Label>{t("stock.field.description")}</Label>
             <Textarea value={form.description} onChange={(e) => set("description", e.target.value)} className="mt-1" rows={2} />
           </div>
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <Label>{t("stock.field.notes")}</Label>
             <Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} className="mt-1" rows={2} />
           </div>
@@ -663,13 +687,13 @@ function PurchaseModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="w-[95vw] max-w-md">
+      <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("stock.addPurchase")}: {product.name}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>{t("stock.purchase.qty")} *</Label>
               <Input type="number" min="1" value={form.quantityAdded} onChange={(e) => set("quantityAdded", e.target.value)} className="mt-1" />

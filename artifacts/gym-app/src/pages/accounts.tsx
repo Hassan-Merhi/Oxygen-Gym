@@ -11,6 +11,16 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -135,6 +145,7 @@ export default function AccountsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: "", type: "asset" as AccountType, description: "" });
   const [saving, setSaving] = useState(false);
+  const [deleteAccountId, setDeleteAccountId] = useState<number | null>(null);
 
   async function loadAccounts() {
     setLoading(true);
@@ -190,13 +201,18 @@ export default function AccountsPage() {
     }
   }
 
-  async function handleDelete(id: number, e: React.MouseEvent) {
+  function handleDelete(id: number, e: React.MouseEvent) {
     e.stopPropagation();
-    if (!confirm("Delete this account? This cannot be undone.")) return;
-    const r = await apiFetch(`/api/accounts/chart/${id}`, { method: "DELETE" });
+    setDeleteAccountId(id);
+  }
+
+  async function doDeleteAccount() {
+    if (!deleteAccountId) return;
+    const r = await apiFetch(`/api/accounts/chart/${deleteAccountId}`, { method: "DELETE" });
+    setDeleteAccountId(null);
     if (!r.ok) { toast({ title: "Cannot delete account with transactions", variant: "destructive" }); return; }
-    setAccounts((prev) => prev.filter((a) => a.id !== id));
-    if (selected?.id === id) setSelected(null);
+    setAccounts((prev) => prev.filter((a) => a.id !== deleteAccountId));
+    if (selected?.id === deleteAccountId) setSelected(null);
     toast({ title: "Account deleted" });
   }
 
@@ -279,14 +295,14 @@ export default function AccountsPage() {
         </div>
 
         {/* Date filter bar */}
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <div className="flex items-center gap-2">
-            <Label className="text-sm text-muted-foreground whitespace-nowrap">From</Label>
-            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-38 h-9 text-sm" />
+            <Label className="text-sm text-muted-foreground whitespace-nowrap w-8">From</Label>
+            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="flex-1 sm:w-36 sm:flex-none h-9 text-sm" />
           </div>
           <div className="flex items-center gap-2">
-            <Label className="text-sm text-muted-foreground whitespace-nowrap">To</Label>
-            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-38 h-9 text-sm" />
+            <Label className="text-sm text-muted-foreground whitespace-nowrap w-8">To</Label>
+            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="flex-1 sm:w-36 sm:flex-none h-9 text-sm" />
           </div>
           {(dateFrom || dateTo) && (
             <Button variant="ghost" size="sm" onClick={() => { setDateFrom(""); setDateTo(""); }}>
@@ -334,6 +350,15 @@ export default function AccountsPage() {
             );
           })}
         </div>
+        {/* Mobile totals footer */}
+        {rows.length > 0 && !stmtLoading && (
+          <div className="md:hidden flex items-center justify-between gap-3 px-3 py-2.5 bg-muted/30 rounded-lg border border-border text-xs font-medium">
+            <span className="text-muted-foreground">{rows.length} txn</span>
+            <span className="text-emerald-600">In: {fmt(totalIn)}</span>
+            <span className="text-rose-600">Out: {fmt(totalOut)}</span>
+            <span className={cn("font-bold", balance >= 0 ? "text-blue-600" : "text-amber-600")}>Bal: {fmt(balance)}</span>
+          </div>
+        )}
 
         {/* Desktop statement table */}
         <div className="hidden md:block rounded-xl border border-border bg-card shadow-sm overflow-hidden">
@@ -543,8 +568,21 @@ export default function AccountsPage() {
       )}
 
       {/* Create dialog */}
+      <AlertDialog open={!!deleteAccountId} onOpenChange={(o) => { if (!o) setDeleteAccountId(null); }}>
+        <AlertDialogContent className="w-[95vw] max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Account?</AlertDialogTitle>
+            <AlertDialogDescription>This cannot be undone. Accounts with existing transactions cannot be deleted.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={doDeleteAccount} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="w-[95vw] max-w-md">
+        <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>New Account</DialogTitle>
           </DialogHeader>
