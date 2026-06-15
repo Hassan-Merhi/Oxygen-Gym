@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useI18n } from "@/lib/i18n";
 import { useGetMe } from "@/hooks/use-me";
+import { TOKEN_KEY } from "@/lib/auth-context";
 import {
   useGetAccountSummary,
   useGetProfitLoss,
@@ -132,13 +133,16 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
 
   const fetchCategoryDetails = useCallback(
     async (cat: string, from: string, to: string) => {
-      if (catDetails[cat]) return; // already loaded
-      setCatLoading((prev) => ({ ...prev, [cat]: true }));
+      const cacheKey = `${cat}::${from.slice(0, 10)}::${to.slice(0, 10)}`;
+      if (catDetails[cacheKey]) return; // already loaded for this period
+      setCatLoading((prev) => ({ ...prev, [cacheKey]: true }));
       try {
+        const token = localStorage.getItem(TOKEN_KEY);
+        const authHeaders: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
         const params = new URLSearchParams({ dateFrom: from.slice(0, 10), dateTo: to.slice(0, 10), limit: "200" });
         const [salesRes, expRes] = await Promise.all([
-          fetch(`/api/accounts/sales?${params}`),
-          fetch(`/api/accounts/expenses?${params}`),
+          fetch(`/api/accounts/sales?${params}`, { headers: authHeaders }),
+          fetch(`/api/accounts/expenses?${params}`, { headers: authHeaders }),
         ]);
         const salesJson = salesRes.ok ? await salesRes.json() : { items: [] };
         const expJson = expRes.ok ? await expRes.json() : { items: [] };
@@ -173,9 +177,9 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
           ...filterByCat(expJson.items ?? []),
         ].sort((a, b) => new Date(a.date as string).getTime() - new Date(b.date as string).getTime());
 
-        setCatDetails((prev) => ({ ...prev, [cat]: catRows }));
+        setCatDetails((prev) => ({ ...prev, [cacheKey]: catRows }));
       } finally {
-        setCatLoading((prev) => ({ ...prev, [cat]: false }));
+        setCatLoading((prev) => ({ ...prev, [cacheKey]: false }));
       }
     },
     [catDetails],
@@ -286,8 +290,9 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
                 <tbody>
                   {Object.entries(pl.breakdown).map(([cat, v]) => {
                     const isOpen = expandedCat === cat;
-                    const rows = catDetails[cat] ?? [];
-                    const loading = catLoading[cat];
+                    const cacheKey = `${cat}::${pl.dateFrom.slice(0, 10)}::${pl.dateTo.slice(0, 10)}`;
+                    const rows = catDetails[cacheKey] ?? [];
+                    const loading = catLoading[cacheKey];
                     return (
                       <>
                         <tr
