@@ -29,6 +29,24 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS coach_fee double precision DEFAULT 0,
         ADD COLUMN IF NOT EXISTS coach_name text
     `);
+
+    // Back-fill payment_date to match the member's start_date for all membership
+    // payments where the dates differ (handles historical entries recorded on today's date).
+    const backfill = await db.execute(sql`
+      UPDATE payments
+      SET payment_date = m.start_date
+      FROM members m
+      WHERE payments.member_id = m.id
+        AND m.start_date IS NOT NULL
+        AND payments.category = 'membership'
+        AND DATE(payments.payment_date AT TIME ZONE 'UTC')
+            != DATE(m.start_date AT TIME ZONE 'UTC')
+    `);
+    const fixed = (backfill as unknown as { rowCount?: number }).rowCount ?? 0;
+    if (fixed > 0) {
+      logger.info({ fixed }, "Back-filled payment_date from member start_date");
+    }
+
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");
