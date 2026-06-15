@@ -499,7 +499,7 @@ export default function Settings() {
   const backupEnabled = form.watch("backupEnabled");
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-500/20 to-slate-400/10 flex items-center justify-center">
           <Settings2 className="w-5 h-5 text-slate-600" />
@@ -511,7 +511,7 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="general">
-        <TabsList className="h-10">
+        <TabsList className="h-10 w-full overflow-x-auto flex-nowrap justify-start md:justify-center">
           <TabsTrigger value="general" className="gap-2">
             <Settings2 className="w-3.5 h-3.5" />
             General

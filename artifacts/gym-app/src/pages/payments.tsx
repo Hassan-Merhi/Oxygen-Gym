@@ -61,6 +61,7 @@ import {
   TrendingUp,
   Plus,
   Search,
+  SlidersHorizontal,
   ChevronLeft,
   ChevronRight,
   Pencil,
@@ -149,6 +150,7 @@ export default function CashBook() {
   const [dirFilter, setDirFilter] = useState("all");
   const [curFilter, setCurFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
 
@@ -605,60 +607,78 @@ export default function CashBook() {
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
 
         {/* Filters */}
-        <div className="flex flex-wrap gap-2 p-4 border-b border-border/50 bg-muted/10">
-          <div className="relative flex-1 min-w-[180px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+        <div className="p-4 border-b border-border/50 bg-muted/10 space-y-2">
+          {/* Search row — always visible */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                className="pl-8 h-8 text-sm"
+                placeholder="Search name, description…"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  debounce("_cs", () => {
+                    setSearchD(e.target.value);
+                    setPage(1);
+                  });
+                }}
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="md:hidden h-8 gap-1.5 shrink-0 text-sm"
+              onClick={() => setShowFilters(v => !v)}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Filters
+              {(dirFilter !== "all" || curFilter !== "all" || dateFrom || dateTo) && (
+                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+              )}
+            </Button>
+          </div>
+          {/* Collapsible filters — hidden on mobile by default, always shown on md+ */}
+          <div className={`flex flex-wrap gap-2 ${showFilters ? "flex" : "hidden md:flex"}`}>
+            <Select
+              value={dirFilter}
+              onValueChange={(v) => { setDirFilter(v); setPage(1); }}
+            >
+              <SelectTrigger className="h-8 w-32 text-sm">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="in">Money In</SelectItem>
+                <SelectItem value="out">Money Out</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={curFilter}
+              onValueChange={(v) => { setCurFilter(v); setPage(1); }}
+            >
+              <SelectTrigger className="h-8 w-24 text-sm">
+                <SelectValue placeholder="Currency" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="USD">USD</SelectItem>
+                <SelectItem value="CDF">CDF</SelectItem>
+              </SelectContent>
+            </Select>
             <Input
-              className="pl-8 h-8 text-sm"
-              placeholder="Search name, description…"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                debounce("_cs", () => {
-                  setSearchD(e.target.value);
-                  setPage(1);
-                });
-              }}
+              type="date"
+              className="h-8 w-36 text-sm"
+              value={dateFrom}
+              onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+            />
+            <Input
+              type="date"
+              className="h-8 w-36 text-sm"
+              value={dateTo}
+              onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
             />
           </div>
-          <Select
-            value={dirFilter}
-            onValueChange={(v) => { setDirFilter(v); setPage(1); }}
-          >
-            <SelectTrigger className="h-8 w-32 text-sm">
-              <SelectValue placeholder="All Types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="in">Money In</SelectItem>
-              <SelectItem value="out">Money Out</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select
-            value={curFilter}
-            onValueChange={(v) => { setCurFilter(v); setPage(1); }}
-          >
-            <SelectTrigger className="h-8 w-24 text-sm">
-              <SelectValue placeholder="Currency" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="USD">USD</SelectItem>
-              <SelectItem value="CDF">CDF</SelectItem>
-            </SelectContent>
-          </Select>
-          <Input
-            type="date"
-            className="h-8 w-36 text-sm"
-            value={dateFrom}
-            onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-          />
-          <Input
-            type="date"
-            className="h-8 w-36 text-sm"
-            value={dateTo}
-            onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-          />
         </div>
 
         {/* Mobile card view */}

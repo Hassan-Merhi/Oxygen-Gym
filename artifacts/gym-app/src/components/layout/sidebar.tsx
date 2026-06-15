@@ -60,7 +60,9 @@ export function Sidebar() {
       <aside
         className={cn(
           "bg-sidebar border-r border-sidebar-border h-full flex flex-col fixed left-0 top-0 z-40 transition-all duration-300",
-          collapsed ? "w-16" : "w-64",
+          // Mobile: always full-width drawer (w-64). Desktop: respect collapsed state.
+          "w-64",
+          collapsed && "md:w-16",
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
@@ -71,21 +73,21 @@ export function Sidebar() {
             alt="Oxygen Fitness Gym"
             className="h-8 w-8 shrink-0 rounded object-cover"
           />
-          {!collapsed && (
-            <span className="font-bold text-lg text-sidebar-foreground tracking-tight truncate flex-1">
-              OXYGEN GYM
-            </span>
-          )}
-          {/* Mobile close button */}
-          {!collapsed && (
-            <button
-              onClick={closeMobile}
-              className="md:hidden shrink-0 text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors"
-              aria-label="Close menu"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          )}
+          {/* Title: always visible on mobile; hidden on desktop when collapsed */}
+          <span className={cn(
+            "font-bold text-lg text-sidebar-foreground tracking-tight truncate flex-1",
+            collapsed && "md:hidden"
+          )}>
+            OXYGEN GYM
+          </span>
+          {/* Mobile close button — always rendered on mobile */}
+          <button
+            onClick={closeMobile}
+            className="md:hidden shrink-0 text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Nav */}
@@ -101,7 +103,8 @@ export function Sidebar() {
                   onClick={closeMobile}
                   className={cn(
                     "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                    collapsed && "justify-center px-2",
+                    // On desktop only: collapse to icon when sidebar is collapsed
+                    collapsed && "md:justify-center md:px-2",
                     isActive
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
@@ -109,7 +112,8 @@ export function Sidebar() {
                   data-testid={`nav-${item.id}`}
                 >
                   <item.icon className="w-4 h-4 shrink-0" />
-                  {!collapsed && t(item.labelKey)}
+                  {/* Label: always visible on mobile; hidden on desktop when collapsed */}
+                  <span className={cn(collapsed && "md:hidden")}>{t(item.labelKey)}</span>
                 </Link>
               );
             })}

@@ -498,7 +498,7 @@ export default function PlansPage() {
   };
 
   return (
-    <div className="max-w-6xl space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -576,7 +576,7 @@ export default function PlansPage() {
 
       {/* Grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-44 rounded-2xl" />
           ))}
@@ -602,7 +602,7 @@ export default function PlansPage() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((plan, i) => (
             <PlanCard
               key={plan.id}

@@ -278,7 +278,8 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
           <div>
             <h3 className="text-sm font-semibold text-muted-foreground mb-3">{t("acc.pl.breakdown")}</h3>
             <div className="rounded-xl border border-border overflow-hidden bg-card">
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto min-w-0">
+              <table className="w-full text-sm min-w-[480px]">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground w-8"></th>
@@ -352,6 +353,7 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         </>

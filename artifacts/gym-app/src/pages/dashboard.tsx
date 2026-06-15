@@ -209,8 +209,8 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={combinedChart} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barGap={4}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border/30" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} />
+                <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} width={45} />
                 <Tooltip {...tooltipStyle} formatter={(v: number, name: string) => [fmtMoney(v), name === "revenue" ? "Revenue" : "Expenses"]} />
                 <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
                 <Bar dataKey="revenue" fill="#6366f1" radius={[4, 4, 0, 0]} name="revenue" />
@@ -278,8 +278,8 @@ export default function Dashboard() {
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={kpis?.membershipGrowth ?? []} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border/30" vertical={false} />
-              <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
+              <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} width={30} />
               <Tooltip {...tooltipStyle} formatter={(v: number) => [v, "New members"]} />
               <Line type="monotone" dataKey="count" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3, fill: "#10b981" }} activeDot={{ r: 5 }} />
             </LineChart>
@@ -290,8 +290,8 @@ export default function Dashboard() {
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={kpis?.todayCheckins.hourly ?? []} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border/30" vertical={false} />
-              <XAxis dataKey="hour" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(h) => `${h}h`} />
-              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
+              <XAxis dataKey="hour" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(h) => `${h}h`} interval={2} />
+              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} width={30} />
               <Tooltip {...tooltipStyle} formatter={(v: number) => [v, "Check-ins"]} labelFormatter={(l) => `${l}:00`} />
               <Bar dataKey="count" fill="#06b6d4" radius={[4, 4, 0, 0]} />
             </BarChart>
