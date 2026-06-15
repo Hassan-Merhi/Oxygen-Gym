@@ -295,8 +295,48 @@ export default function AccountsPage() {
           )}
         </div>
 
-        {/* Statement table — scrollable on mobile */}
-        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+        {/* Mobile statement cards */}
+        <div className="md:hidden rounded-xl border border-border bg-card shadow-sm overflow-hidden divide-y divide-border/50">
+          {stmtLoading ? (
+            <div className="p-6 text-center text-muted-foreground text-sm">Loading…</div>
+          ) : rows.length === 0 ? (
+            <div className="p-10 text-center">
+              <FileText className="w-9 h-9 mx-auto text-muted-foreground/30 mb-2" />
+              <p className="text-sm text-muted-foreground">No transactions yet</p>
+            </div>
+          ) : rows.map((row) => {
+            const incoming = isIncoming(row.type);
+            const amt = Number(row.amountUsd);
+            return (
+              <div key={row.id} className="px-3 py-3 flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={cn(
+                      "inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium shrink-0",
+                      incoming ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700",
+                    )}>
+                      {voucherTypeLabel(row.type)}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{fmtDate(row.voucherDate)}</span>
+                  </div>
+                  {row.description && <p className="text-xs text-muted-foreground mt-0.5 truncate">{row.description}</p>}
+                  {(row.receivedFrom ?? row.paidTo) && <p className="text-xs text-muted-foreground/70 truncate">{row.receivedFrom ?? row.paidTo}</p>}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className={`font-bold tabular-nums text-sm ${incoming ? "text-emerald-600" : "text-rose-600"}`}>
+                    {incoming ? "+" : "−"}{fmt(amt)}
+                  </p>
+                  <p className={cn("text-xs tabular-nums", row.runningBalance >= 0 ? "text-muted-foreground" : "text-rose-600")}>
+                    Bal: {fmt(row.runningBalance)}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop statement table */}
+        <div className="hidden md:block rounded-xl border border-border bg-card shadow-sm overflow-hidden">
           <div className="overflow-x-auto min-w-0">
             <table className="w-full text-sm">
               <thead>

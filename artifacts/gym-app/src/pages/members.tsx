@@ -262,6 +262,7 @@ export default function MembersPage() {
   const [expiryWindow, setExpiryWindow] = useState("all");
   const [sortBy, setSortBy] = useState("name");
   const [sortOrder] = useState("asc");
+  const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const LIMIT = 20;
 
@@ -567,60 +568,76 @@ export default function MembersPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-9 h-9"
-            placeholder={t("members.searchPlaceholder")}
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          />
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-9 h-9"
+              placeholder={t("members.searchPlaceholder")}
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="md:hidden h-9 gap-1.5 shrink-0"
+            onClick={() => setShowFilters(v => !v)}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            {t("common.filters") || "Filters"}
+            {(statusFilter !== "all" || planFilter !== "all" || expiryWindow !== "all") && (
+              <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+            )}
+          </Button>
         </div>
-        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-36 h-9 text-sm">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            {["active","expired","frozen","inactive","archived"].map(s => (
-              <SelectItem key={s} value={s}>{t(`members.status.${s}`)}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={planFilter} onValueChange={(v) => { setPlanFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-36 h-9 text-sm">
-            <SelectValue placeholder="Plan" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Plans</SelectItem>
-            {plans.map((p: Plan) => (
-              <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={expiryWindow} onValueChange={(v) => { setExpiryWindow(v); setPage(1); }}>
-          <SelectTrigger className="w-40 h-9 text-sm">
-            <SelectValue placeholder="Expiry" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Expiry</SelectItem>
-            <SelectItem value="7">Expires in 7 days</SelectItem>
-            <SelectItem value="14">Expires in 14 days</SelectItem>
-            <SelectItem value="30">Expires in 30 days</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className="w-36 h-9 text-sm">
-            <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="name">{t("members.sort.name")}</SelectItem>
-            <SelectItem value="joinDate">{t("members.sort.joinDate")}</SelectItem>
-            <SelectItem value="expiryDate">{t("members.sort.expiryDate")}</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className={`flex flex-wrap items-center gap-2 ${showFilters ? "flex" : "hidden md:flex"}`}>
+          <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-36 h-9 text-sm">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              {["active","expired","frozen","inactive","archived"].map(s => (
+                <SelectItem key={s} value={s}>{t(`members.status.${s}`)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={planFilter} onValueChange={(v) => { setPlanFilter(v); setPage(1); }}>
+            <SelectTrigger className="w-36 h-9 text-sm">
+              <SelectValue placeholder="Plan" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Plans</SelectItem>
+              {plans.map((p: Plan) => (
+                <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={expiryWindow} onValueChange={(v) => { setExpiryWindow(v); setPage(1); }}>
+            <SelectTrigger className="w-40 h-9 text-sm">
+              <SelectValue placeholder="Expiry" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Expiry</SelectItem>
+              <SelectItem value="7">Expires in 7 days</SelectItem>
+              <SelectItem value="14">Expires in 14 days</SelectItem>
+              <SelectItem value="30">Expires in 30 days</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="w-36 h-9 text-sm">
+              <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">{t("members.sort.name")}</SelectItem>
+              <SelectItem value="joinDate">{t("members.sort.joinDate")}</SelectItem>
+              <SelectItem value="expiryDate">{t("members.sort.expiryDate")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Mobile card list — shown below md */}

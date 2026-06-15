@@ -513,7 +513,7 @@ function PayrollTab() {
 
           <div className="p-6 space-y-5">
             {/* Period + notes row */}
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Period Start</label>
                 <Input type="date" value={runPeriodStart} onChange={e => setRunPeriodStart(e.target.value)} />

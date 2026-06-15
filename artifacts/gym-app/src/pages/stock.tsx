@@ -197,8 +197,59 @@ export default function Stock() {
         </label>
       </div>
 
-      {/* Product table */}
-      <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm">
+      {/* Mobile product cards */}
+      <div className="md:hidden rounded-xl border border-border overflow-hidden bg-card shadow-sm divide-y divide-border/50">
+        {productsQ.isLoading ? (
+          <div className="p-6 text-center text-muted-foreground text-sm">Loading…</div>
+        ) : products.length === 0 ? (
+          <div className="p-10 text-center">
+            <Package className="w-9 h-9 text-muted-foreground/40 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">{t("stock.empty")}</p>
+          </div>
+        ) : products.map((p) => (
+          <div key={p.id} className={`flex items-center gap-3 px-3 py-3 ${p.isLowStock && p.status === "active" ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-semibold text-sm">{p.name}</span>
+                {p.isLowStock && p.status === "active" && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full border border-amber-200/60">
+                    <AlertTriangle className="w-3 h-3" />Low
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                <span className="font-bold tabular-nums text-foreground text-sm">{p.quantity}</span>
+                <span>·</span>
+                <span>{fmtMoney(p.sellingPrice, p.currency)}</span>
+              </div>
+            </div>
+            <StatusBadge status={p.status} t={t} />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {canManage && <DropdownMenuItem onClick={() => openEdit(p)}><Pencil className="w-4 h-4 mr-2" />{t("stock.actions.edit")}</DropdownMenuItem>}
+                {canManage && <DropdownMenuItem onClick={() => openPurchase(p)}><ShoppingCart className="w-4 h-4 mr-2" />{t("stock.actions.purchase")}</DropdownMenuItem>}
+                <DropdownMenuItem onClick={() => openHistory(p)}><History className="w-4 h-4 mr-2" />{t("stock.actions.history")}</DropdownMenuItem>
+                {canManage && (
+                  <>
+                    <DropdownMenuSeparator />
+                    {p.status === "active" && <DropdownMenuItem onClick={() => changeStatus(p, "archived")} className="text-amber-700"><Archive className="w-4 h-4 mr-2" />{t("stock.actions.archive")}</DropdownMenuItem>}
+                    {p.status === "archived" && <DropdownMenuItem onClick={() => changeStatus(p, "active")}><RotateCcw className="w-4 h-4 mr-2" />{t("stock.actions.restore")}</DropdownMenuItem>}
+                    {p.status !== "deleted" && <DropdownMenuItem onClick={() => changeStatus(p, "deleted")} className="text-rose-700"><Trash2 className="w-4 h-4 mr-2" />{t("stock.actions.delete")}</DropdownMenuItem>}
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop product table */}
+      <div className="hidden md:block rounded-xl border border-border overflow-hidden bg-card shadow-sm">
         <div className="overflow-x-auto min-w-0">
           <table className="w-full text-sm">
             <thead>

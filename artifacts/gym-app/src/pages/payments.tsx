@@ -661,8 +661,73 @@ export default function CashBook() {
           />
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Mobile card view */}
+        <div className="md:hidden divide-y divide-border/40">
+          {isLoading ? (
+            <div className="p-6 text-center text-muted-foreground text-sm">Loading…</div>
+          ) : pageItems.length === 0 ? (
+            <div className="p-10 text-center">
+              <Banknote className="w-9 h-9 mx-auto text-muted-foreground/30 mb-2" />
+              <p className="text-sm text-muted-foreground font-medium">No entries found</p>
+            </div>
+          ) : pageItems.map((entry) => {
+            const key = `${entry._kind}-${entry.id}`;
+            const bal = runningMap.get(key) ?? 0;
+            const isIn = entry.direction === "in";
+            const date = entry._kind === "payment" ? (entry as PayEntry).paymentDate : (entry as VchEntry).voucherDate;
+            const party = entry._kind === "payment" ? (entry as PayEntry).linkedEntityName : ((entry as VchEntry).paidTo ?? (entry as VchEntry).receivedFrom ?? (entry as VchEntry).linkedEntityName);
+            return (
+              <div key={key} className="flex items-start gap-3 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {entry._kind === "payment" ? (
+                      <DirBadge dir={(entry as PayEntry).direction} t={t} />
+                    ) : (
+                      <Badge className={`${isIn ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"} border-0 gap-1 text-xs`}>
+                        {isIn ? <ArrowDownCircle className="w-3 h-3" /> : <ArrowUpCircle className="w-3 h-3" />}
+                        {t(`vch.type.${(entry as VchEntry).voucherType}`)}
+                      </Badge>
+                    )}
+                    <span className="text-xs text-muted-foreground">{fmtDate(date)}</span>
+                  </div>
+                  {party && <p className="text-xs text-muted-foreground mt-0.5 truncate">{party}</p>}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className={`font-bold tabular-nums text-sm ${isIn ? "text-emerald-600" : "text-rose-600"}`}>
+                    {isIn ? "+" : "−"}{fmtAmt(entry.amount)} <span className="text-xs font-normal">{entry.currency}</span>
+                  </p>
+                  <p className={`text-xs tabular-nums ${bal >= 0 ? "text-muted-foreground" : "text-rose-600"}`}>Bal: ${fmtAmt(bal)}</p>
+                </div>
+                {canManage && (
+                  <div className="flex gap-1 shrink-0 mt-0.5">
+                    {entry._kind === "payment" ? (
+                      <>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openPayEdit(entry as PayEntry)}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setPayDeleteId(entry.id)} disabled={entry.status === "cancelled"}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => triggerPrint(entry.id)}>
+                          <Printer className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setVchDeleteId(entry.id)} disabled={entry.status === "cancelled"}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border/60 bg-muted/20">

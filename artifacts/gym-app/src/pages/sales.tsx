@@ -839,9 +839,9 @@ export default function Sales() {
               )}
             </div>
 
-            {/* Checkout panel */}
+            {/* Checkout panel — sticky on mobile when cart has items */}
             {cart.length > 0 && (
-              <div className="rounded-lg border bg-card p-4 space-y-4">
+              <div className="rounded-lg border bg-card p-4 space-y-4 md:static sticky bottom-0 z-10 shadow-lg md:shadow-none">
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
                   {cartTotals.discount > 0 && (
                     <>
