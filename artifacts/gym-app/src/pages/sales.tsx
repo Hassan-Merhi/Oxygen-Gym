@@ -447,6 +447,7 @@ export default function Sales() {
   const [voidingSale, setVoidingSale] = useState<Record<string, unknown> | null>(null);
   const [editSaleId, setEditSaleId] = useState<number | null>(null);
   const [editCurrency, setEditCurrency] = useState<"USD" | "CDF">("USD");
+  const [editSale, setEditSale] = useState<Record<string, unknown> | null>(null);
 
   const exchangeRate = (settings?.usdToCdfRate as number) ?? 2800;
 
@@ -966,8 +967,8 @@ export default function Sales() {
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { if (settings) printReceipt(sale, settings, t); }}>
                       <Printer className="h-4 w-4" />
                     </Button>
-                    {isAdmin && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditSaleId(sale.id as number); setEditCurrency((sale.currency as "USD" | "CDF") ?? "USD"); }}>
+                    {isAdmin && sale.status !== "voided" && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditSaleId(sale.id as number); setEditCurrency((sale.currency as "USD" | "CDF") ?? "USD"); setEditSale(sale); }}>
                         <Pencil className="h-4 w-4" />
                       </Button>
                     )}
@@ -1042,11 +1043,11 @@ export default function Sales() {
                           >
                             <Printer className="h-4 w-4" />
                           </Button>
-                          {isAdmin && (
+                          {isAdmin && sale.status !== "voided" && (
                             <Button
                               variant="ghost" size="icon" className="h-7 w-7"
                               title={t("sales.editCurrency")}
-                              onClick={() => { setEditSaleId(sale.id as number); setEditCurrency((sale.currency as "USD" | "CDF") ?? "USD"); }}
+                              onClick={() => { setEditSaleId(sale.id as number); setEditCurrency((sale.currency as "USD" | "CDF") ?? "USD"); setEditSale(sale); }}
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
@@ -1099,7 +1100,7 @@ export default function Sales() {
       />
 
       {/* ── Edit Sale Currency Dialog (admin only) ─────────────────────────── */}
-      <Dialog open={!!editSaleId} onOpenChange={(o) => { if (!o) setEditSaleId(null); }}>
+      <Dialog open={!!editSaleId} onOpenChange={(o) => { if (!o) { setEditSaleId(null); setEditSale(null); } }}>
         <DialogContent className="w-[95vw] max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1107,7 +1108,29 @@ export default function Sales() {
               {t("sales.editCurrency")}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 py-2">
+          {editSale && (
+            <div className="rounded-md bg-muted/50 px-3 py-2 text-sm space-y-1 border">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t("sales.history.number")}</span>
+                <span className="font-medium">{(editSale.saleNumber as string) ?? `#${editSale.id}`}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t("sales.history.date")}</span>
+                <span>{new Date(editSale.saleDate as string).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t("sales.history.total")}</span>
+                <span className="font-semibold">{(editSale.currency as string) === "CDF" ? "FC" : "$"} {(editSale.totalAmount as number)?.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t("sales.history.status")}</span>
+                <Badge variant={(editSale.status as string) === "voided" ? "destructive" : "default"} className="text-xs">
+                  {t(`sales.status.${editSale.status as string}`)}
+                </Badge>
+              </div>
+            </div>
+          )}
+          <div className="space-y-2">
             <Label className="text-sm font-medium">{t("sales.currency")}</Label>
             <Select value={editCurrency} onValueChange={(v) => setEditCurrency(v as "USD" | "CDF")}>
               <SelectTrigger className="w-full">
@@ -1120,7 +1143,7 @@ export default function Sales() {
             </Select>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditSaleId(null)}>{t("common.cancel")}</Button>
+            <Button variant="outline" onClick={() => { setEditSaleId(null); setEditSale(null); }}>{t("common.cancel")}</Button>
             <Button onClick={handlePatchCurrency} disabled={patchSaleMut.isPending}>
               {patchSaleMut.isPending ? t("common.loading") : t("common.save")}
             </Button>

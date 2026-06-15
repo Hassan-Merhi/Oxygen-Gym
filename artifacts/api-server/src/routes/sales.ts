@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { PatchSaleBody as PatchSaleBodySchema } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
 import {
@@ -278,12 +279,13 @@ router.patch("/:id", async (req: Request, res: Response) => {
   }
 
   const id = parseInt(req.params.id as string);
-  const { currency } = req.body as { currency?: string };
 
-  if (!currency || !["USD", "CDF"].includes(currency)) {
+  const parsed = PatchSaleBodySchema.safeParse(req.body);
+  if (!parsed.success) {
     res.status(400).json({ error: "currency must be USD or CDF" });
     return;
   }
+  const { currency } = parsed.data;
 
   const [existing] = await db.select().from(salesTable).where(eq(salesTable.id, id));
   if (!existing) {
