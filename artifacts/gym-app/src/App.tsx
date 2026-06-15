@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from 'wouter';
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useI18nDirection } from "@/lib/i18n";
@@ -28,7 +29,16 @@ import LoginPage from "@/pages/login";
 import SetupPage from "@/pages/setup";
 import { AppLayout } from "@/components/layout/app-layout";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => {
+        if (error instanceof ApiError && error.status === 401) return false;
+        return failureCount < 2;
+      },
+    },
+  },
+});
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -153,7 +163,7 @@ function LoginGuard() {
 function AppShell() {
   useI18nDirection();
   const queryClientHook = useQueryClient();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
 
   // Clear query cache on logout
   useEffect(() => {
@@ -161,6 +171,24 @@ function AppShell() {
       queryClientHook.clear();
     }
   }, [isAuthenticated, queryClientHook]);
+
+  // Global 401 handler — if any query or mutation returns 401, force logout
+  useEffect(() => {
+    const is401 = (err: unknown): boolean =>
+      err instanceof ApiError && err.status === 401;
+
+    const unsubQ = queryClientHook.getQueryCache().subscribe((event) => {
+      if (event.type === "updated" && event.action.type === "error" && is401(event.action.error)) {
+        logout();
+      }
+    });
+    const unsubM = queryClientHook.getMutationCache().subscribe((event) => {
+      if (event.type === "updated" && event.action.type === "error" && is401(event.action.error)) {
+        logout();
+      }
+    });
+    return () => { unsubQ(); unsubM(); };
+  }, [queryClientHook, logout]);
 
   return (
     <>
