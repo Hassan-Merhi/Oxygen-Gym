@@ -175,6 +175,7 @@ router.post("/", async (req: Request, res: Response) => {
     notes: body.notes,
     coachId: body.coachId ?? null,
     commissionAmount: body.commissionAmount ?? 0,
+    cashAccountId: body.cashAccountId ?? null,
   }).returning();
 
   if (body.planId && (amountPaid > 0 || planPrice)) {
@@ -291,7 +292,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
   const updateData: Record<string, unknown> = {};
   const dateFields = ["startDate", "expiryDate"];
-  const allowed = ["name","phone","planId","startDate","expiryDate","status","amountPaid","discount","currency","photoUrl","fingerprintId","qrCodeId","notes","coachId","commissionAmount"];
+  const allowed = ["name","phone","planId","startDate","expiryDate","status","amountPaid","discount","currency","photoUrl","fingerprintId","qrCodeId","notes","coachId","commissionAmount","cashAccountId"];
   for (const key of allowed) {
     if (body[key] !== undefined) {
       updateData[key] = dateFields.includes(key) && body[key]
@@ -481,6 +482,7 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
     startDate: new Date(body.startDate), expiryDate: new Date(body.expiryDate),
     amountPaid: body.amountPaid, discount: body.discount ?? 0, balance,
     currency: body.currency, status: "active",
+    ...(body.cashAccountId ? { cashAccountId: body.cashAccountId } : {}),
   }).where(eq(membersTable.id, id)).returning();
 
   const renewRate = await getExchangeRate();

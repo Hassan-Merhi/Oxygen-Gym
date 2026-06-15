@@ -2450,6 +2450,7 @@ components:
         notes: { type: string, nullable: true }
         coachId: { type: integer, nullable: true }
         commissionAmount: { type: number, nullable: true }
+        cashAccountId: { type: integer, nullable: true }
         createdAt: { type: string }
         updatedAt: { type: string }
       required: [id, name, status, currency, joinDate, createdAt, updatedAt]

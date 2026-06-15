@@ -376,7 +376,7 @@ export default function MembersPage() {
       startDate: toDateInput(m.startDate), expiryDate: toDateInput(m.expiryDate),
       status: m.status, amountPaid: m.amountPaid ?? 0, discount: m.discount ?? 0,
       currency: (m.currency as "USD" | "CDF") ?? "USD",
-      cashAccountId: "",
+      cashAccountId: m.cashAccountId ? String(m.cashAccountId) : "",
       notes: m.notes ?? "", fingerprintId: m.fingerprintId ?? "", qrCodeId: m.qrCodeId ?? "",
       coachId: m.coachId ? String(m.coachId) : "",
       commissionAmount: (m as any).commissionAmount ?? 0,

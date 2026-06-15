@@ -36,6 +36,8 @@ export const membersTable = pgTable("members", {
   fingerprintId: text("fingerprint_id"),
   qrCodeId: text("qr_code_id"),
   notes: text("notes"),
+  // Last-used cash account (pre-populates edit form)
+  cashAccountId: integer("cash_account_id"),
   // Coach commission
   coachId: integer("coach_id"),
   commissionAmount: doublePrecision("commission_amount").default(0),

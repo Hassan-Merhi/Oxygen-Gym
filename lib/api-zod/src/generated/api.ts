@@ -781,6 +781,7 @@ export const ListMembersResponse = zod.object({
   "notes": zod.string().nullish(),
   "coachId": zod.number().nullish(),
   "commissionAmount": zod.number().nullish(),
+  "cashAccountId": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })),
@@ -855,6 +856,7 @@ export const GetMemberResponse = zod.object({
   "notes": zod.string().nullish(),
   "coachId": zod.number().nullish(),
   "commissionAmount": zod.number().nullish(),
+  "cashAccountId": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -916,6 +918,7 @@ export const UpdateMemberResponse = zod.object({
   "notes": zod.string().nullish(),
   "coachId": zod.number().nullish(),
   "commissionAmount": zod.number().nullish(),
+  "cashAccountId": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -1002,6 +1005,7 @@ export const RenewMemberResponse = zod.object({
   "notes": zod.string().nullish(),
   "coachId": zod.number().nullish(),
   "commissionAmount": zod.number().nullish(),
+  "cashAccountId": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -1050,6 +1054,7 @@ export const FreezeMemberResponse = zod.object({
   "notes": zod.string().nullish(),
   "coachId": zod.number().nullish(),
   "commissionAmount": zod.number().nullish(),
+  "cashAccountId": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -1092,6 +1097,7 @@ export const ReactivateMemberResponse = zod.object({
   "notes": zod.string().nullish(),
   "coachId": zod.number().nullish(),
   "commissionAmount": zod.number().nullish(),
+  "cashAccountId": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -1138,6 +1144,7 @@ export const SetMemberStatusResponse = zod.object({
   "notes": zod.string().nullish(),
   "coachId": zod.number().nullish(),
   "commissionAmount": zod.number().nullish(),
+  "cashAccountId": zod.number().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })

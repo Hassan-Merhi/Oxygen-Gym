@@ -30,6 +30,12 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS coach_name text
     `);
 
+    // Add cash_account_id column to members if missing
+    await db.execute(sql`
+      ALTER TABLE members
+        ADD COLUMN IF NOT EXISTS cash_account_id integer
+    `);
+
     // Back-fill payment_date to match the member's start_date for all membership
     // payments where the dates differ (handles historical entries recorded on today's date).
     const backfill = await db.execute(sql`

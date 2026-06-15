@@ -428,6 +428,7 @@ export interface Member {
   notes?: string | null;
   coachId?: number | null;
   commissionAmount?: number | null;
+  cashAccountId?: number | null;
   createdAt: string;
   updatedAt: string;
 }
