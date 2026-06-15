@@ -1,9 +1,10 @@
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 interface PageHeaderProps {
   icon?: React.ElementType;
   iconClass?: string;
-  title: string;
+  title: ReactNode;
   subtitle?: string;
   actions?: React.ReactNode;
   className?: string;

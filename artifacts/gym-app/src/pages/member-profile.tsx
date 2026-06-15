@@ -127,19 +127,9 @@ function printReceipt(inv: ReceiptData, settings: Record<string, unknown>) {
   }, 500);
 }
 
+import { StatusBadge as MemberStatusBadge } from "@/lib/status-badge";
 function StatusBadge({ status, t }: { status: string; t: (k: string) => string }) {
-  const map: Record<string, string> = {
-    active: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
-    expired: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-    frozen: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-    inactive: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
-    archived: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500",
-  };
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${map[status] ?? map.inactive}`}>
-      {t(`members.status.${status}`) ?? status}
-    </span>
-  );
+  return <MemberStatusBadge status={status} label={t(`members.status.${status}`) ?? status} className="px-2.5" />;
 }
 
 function StatCard({ icon: Icon, label, value, color }: {

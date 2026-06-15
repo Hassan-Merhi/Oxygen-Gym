@@ -68,6 +68,8 @@ const en: Translations = {
   "auth.setupFailed": "Setup failed",
   "auth.passwordTooShort": "Password must be at least 6 characters",
   "auth.passwordsNoMatch": "Passwords do not match",
+  "auth.hero.headline": "Run your gym smarter, not harder.",
+  "auth.hero.sub": "Members, staff, payments, stock — everything in one clean dashboard built for gym operators.",
   "nav.comingSoon": "Coming Soon",
 
   "dashboard.title": "Command Center",
@@ -809,6 +811,8 @@ const fr: Translations = {
   "auth.setupFailed": "Échec de la configuration",
   "auth.passwordTooShort": "Le mot de passe doit comporter au moins 6 caractères",
   "auth.passwordsNoMatch": "Les mots de passe ne correspondent pas",
+  "auth.hero.headline": "Gérez votre salle plus intelligemment.",
+  "auth.hero.sub": "Membres, personnel, paiements, stock — tout dans un seul tableau de bord conçu pour les gérants.",
   "nav.comingSoon": "À Venir",
 
   "dashboard.title": "Centre de Commandement",
@@ -1550,6 +1554,8 @@ const ar: Translations = {
   "auth.setupFailed": "فشل الإعداد",
   "auth.passwordTooShort": "كلمة المرور يجب أن تكون 6 أحرف على الأقل",
   "auth.passwordsNoMatch": "كلمتا المرور غير متطابقتين",
+  "auth.hero.headline": "أدر صالتك بذكاء، لا بجهد.",
+  "auth.hero.sub": "الأعضاء، الموظفون، المدفوعات، المخزون — كل شيء في لوحة تحكم واحدة مصممة للمشغّلين.",
   "nav.comingSoon": "قريباً",
 
   "dashboard.title": "مركز القيادة",

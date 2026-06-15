@@ -73,14 +73,13 @@ export default function LoginPage() {
         <div className="relative space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/20 border border-primary/30">
             <Dumbbell className="w-3.5 h-3.5 text-primary" />
-            <span className="text-xs font-semibold text-primary">GymPro Management</span>
+            <span className="text-xs font-semibold text-primary">{t("auth.tagline")}</span>
           </div>
           <h2 className="text-3xl font-bold text-white leading-tight">
-            Run your gym<br />
-            <span className="text-primary">smarter</span>, not harder.
+            {t("auth.hero.headline")}
           </h2>
           <p className="text-sm text-slate-400 leading-relaxed max-w-xs">
-            Members, staff, payments, stock — everything in one clean dashboard built for gym operators.
+            {t("auth.hero.sub")}
           </p>
         </div>
 

@@ -1,6 +1,7 @@
 import { useI18n } from "@/lib/i18n";
 import { useGetMe, useGetDashboardKpis } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   Users, CalendarCheck, TrendingUp, Receipt,
   Clock, PackageX, ArrowUpRight, ArrowDownRight, Lock,
@@ -154,16 +155,13 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
 
-      {/* Header */}
-      <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{dateStr}</p>
-        <h1 className="text-2xl font-bold tracking-tight mt-1">
-          {meLoading
-            ? <Skeleton className="h-8 w-52 inline-block" />
-            : <>{t("dashboard.welcome")}, {me?.name} 👋</>
-          }
-        </h1>
-      </div>
+      <PageHeader
+        title={meLoading
+          ? <Skeleton className="h-7 w-52 inline-block" />
+          : `${t("dashboard.welcome")}, ${me?.name} 👋`
+        }
+        subtitle={dateStr}
+      />
 
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

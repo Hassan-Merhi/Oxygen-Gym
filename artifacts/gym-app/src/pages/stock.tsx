@@ -12,6 +12,7 @@ import {
   useGetProductHistory,
 } from "@workspace/api-client-react";
 import type { ProductRecord, StockPurchaseRecord } from "@workspace/api-client-react";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -152,18 +153,17 @@ export default function Stock() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("stock.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{total} {t("stock.card.total").toLowerCase()}</p>
-        </div>
-        {canManage && (
-          <Button onClick={openAdd} className="gap-2 shadow-sm">
+      <PageHeader
+        icon={Package}
+        iconClass="bg-indigo-500/10 text-indigo-500"
+        title={t("stock.title")}
+        subtitle={`${total} ${t("stock.card.total").toLowerCase()}`}
+        actions={canManage ? (
+          <Button onClick={openAdd} className="gap-2">
             <Plus className="w-4 h-4" />{t("stock.addProduct")}
           </Button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
