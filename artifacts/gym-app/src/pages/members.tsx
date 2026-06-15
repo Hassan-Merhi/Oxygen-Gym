@@ -301,7 +301,7 @@ export default function MembersPage() {
       return res.json();
     },
   });
-  const cashAccounts = chartAccounts.filter((a) => a.isActive);
+  const cashAccounts = chartAccounts.filter((a) => a.isActive && a.type !== "expense" && a.type !== "liability");
 
   // ── Queries
   const { data: membersData, isLoading } = useListMembers({
