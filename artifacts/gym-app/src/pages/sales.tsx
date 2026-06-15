@@ -11,6 +11,7 @@ import {
   usePatchSale,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -715,9 +716,11 @@ export default function Sales() {
 
   return (
     <div className="flex flex-col h-full gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">{t("sales.title")}</h1>
-      </div>
+      <PageHeader
+        icon={ShoppingCart}
+        iconClass="bg-emerald-500/10 text-emerald-600"
+        title={t("sales.title")}
+      />
 
       <Tabs defaultValue="pos" className="flex-1 flex flex-col">
         <TabsList className="w-fit">

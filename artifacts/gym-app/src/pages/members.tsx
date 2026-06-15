@@ -23,6 +23,7 @@ import {
 import type { Member, Plan } from "@workspace/api-client-react";
 import { useListStaffEmployees, getListStaffEmployeesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -556,27 +557,28 @@ export default function MembersPage() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("members.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{total} {t("members.total")}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {lastInvoiceData && (
-            <Button variant="outline" size="sm" onClick={() => setInvoicePrintData(lastInvoiceData)} className="gap-1.5">
-              <Printer className="h-4 w-4" />
-              {t("members.invoice.reprint")}
-            </Button>
-          )}
-          {canManage && (
-            <Button onClick={openAdd}>
-              <Plus className="h-4 w-4 mr-1.5" />
-              {t("members.addMember")}
-            </Button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        icon={Users}
+        iconClass="bg-blue-500/10 text-blue-500"
+        title={t("members.title")}
+        subtitle={`${total} ${t("members.total")}`}
+        actions={
+          <>
+            {lastInvoiceData && (
+              <Button variant="outline" size="sm" onClick={() => setInvoicePrintData(lastInvoiceData)} className="gap-1.5">
+                <Printer className="h-4 w-4" />
+                {t("members.invoice.reprint")}
+              </Button>
+            )}
+            {canManage && (
+              <Button onClick={openAdd}>
+                <Plus className="h-4 w-4 mr-1.5" />
+                {t("members.addMember")}
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {/* Filters */}
       <div className="space-y-2">

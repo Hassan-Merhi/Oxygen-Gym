@@ -89,28 +89,32 @@ function NotificationBell() {
       <Button
         variant="ghost"
         size="icon"
-        className="relative h-9 w-9"
+        className="relative h-9 w-9 text-muted-foreground hover:text-foreground"
         onClick={() => setOpen(v => !v)}
         aria-label={t("notif.bell")}
         data-testid="btn-notifications"
       >
         <Bell className="w-4 h-4" />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-bold px-1 leading-none ring-2 ring-background">
             {unread > 99 ? "99+" : unread}
           </span>
         )}
       </Button>
 
       {open && (
-        <div className="absolute end-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1rem)] rounded-xl border border-border bg-popover shadow-lg z-50 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div className="absolute end-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1rem)] rounded-xl border border-border bg-popover shadow-xl z-50 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm">{t("notif.title")}</span>
-              {unread > 0 && <Badge className="bg-red-500 text-white text-xs px-1.5 py-0 border-0">{unread}</Badge>}
+              {unread > 0 && (
+                <Badge className="bg-rose-500 text-white text-xs px-1.5 py-0 border-0 rounded-full">
+                  {unread}
+                </Badge>
+              )}
             </div>
             {unread > 0 && (
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleMarkAll}>
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-primary hover:text-primary" onClick={handleMarkAll}>
                 <CheckCheck className="w-3 h-3 mr-1" />
                 {t("notif.markAllRead")}
               </Button>
@@ -119,16 +123,16 @@ function NotificationBell() {
 
           <div className="max-h-80 overflow-y-auto">
             {recent.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2">
-                <Bell className="w-6 h-6 opacity-30" />
+              <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
+                <Bell className="w-7 h-7 opacity-20" />
                 <p className="text-xs">{t("notif.empty")}</p>
               </div>
             ) : (
               recent.map((n) => {
                 const Icon = TYPE_ICONS[n.type] ?? Bell;
                 return (
-                  <div key={n.key} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/50 border-b border-border/50 last:border-0">
-                    <div className={cn("mt-0.5 w-2 h-2 rounded-full shrink-0", PRIORITY_DOT[n.priority] ?? "bg-slate-400")} />
+                  <div key={n.key} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/40 border-b border-border/40 last:border-0 transition-colors">
+                    <div className={cn("mt-1.5 w-2 h-2 rounded-full shrink-0", PRIORITY_DOT[n.priority] ?? "bg-slate-400")} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <Icon className="w-3 h-3 text-muted-foreground shrink-0" />
@@ -139,7 +143,7 @@ function NotificationBell() {
                       <p className="text-xs text-foreground leading-snug">{n.message}</p>
                     </div>
                     <button
-                      className="shrink-0 text-muted-foreground hover:text-green-500 mt-0.5"
+                      className="shrink-0 text-muted-foreground hover:text-emerald-500 mt-0.5 transition-colors"
                       onClick={(e) => handleMarkRead(n.key, e)}
                       title={t("notif.markRead")}
                     >
@@ -151,7 +155,7 @@ function NotificationBell() {
             )}
           </div>
 
-          <div className="px-4 py-2.5 border-t border-border">
+          <div className="px-4 py-2.5 border-t border-border bg-muted/20">
             <a
               href="/notifications"
               className="block w-full text-center text-xs text-primary hover:underline font-medium"
@@ -183,13 +187,13 @@ export function Topbar() {
     : user?.username?.charAt(0).toUpperCase() ?? "U";
 
   return (
-    <header className="h-16 bg-background border-b border-border flex items-center justify-between px-3 md:px-6 sticky top-0 z-20 w-full">
+    <header className="h-16 bg-background border-b border-border/60 flex items-center justify-between px-3 md:px-6 sticky top-0 z-20 w-full shadow-sm">
       {/* Left: hamburger on mobile */}
       <div className="flex items-center gap-2">
         <Button
           variant="ghost"
           size="icon"
-          className="md:hidden h-9 w-9"
+          className="md:hidden h-9 w-9 text-muted-foreground hover:text-foreground"
           onClick={openMobile}
           aria-label="Open menu"
         >
@@ -197,11 +201,11 @@ export function Topbar() {
         </Button>
       </div>
 
-      <div className="flex items-center gap-1.5 md:gap-3">
-        {/* Language selector — full on desktop, cycle button on mobile */}
+      <div className="flex items-center gap-1.5 md:gap-2">
+        {/* Language selector */}
         <div className="hidden md:block">
           <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
-            <SelectTrigger className="w-32 bg-card border-border h-9" data-testid="select-language">
+            <SelectTrigger className="w-28 h-8 text-xs bg-muted/50 border-border/60" data-testid="select-language">
               <SelectValue placeholder="Language" />
             </SelectTrigger>
             <SelectContent>
@@ -214,7 +218,7 @@ export function Topbar() {
         <Button
           variant="ghost"
           size="sm"
-          className="md:hidden h-9 w-12 text-xs font-bold tracking-wide"
+          className="md:hidden h-8 w-11 text-xs font-bold tracking-wide text-muted-foreground hover:text-foreground"
           onClick={() => {
             const langs = ["en", "fr", "ar"] as const;
             const next = langs[(langs.indexOf(language as typeof langs[number]) + 1) % langs.length];
@@ -229,40 +233,41 @@ export function Topbar() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
           onClick={toggle}
           aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
         >
           {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </Button>
 
-        <div className="hidden md:block h-8 w-px bg-border" />
+        <div className="hidden md:block h-6 w-px bg-border mx-1" />
 
         <NotificationBell />
 
-        <div className="hidden md:block h-8 w-px bg-border" />
+        <div className="hidden md:block h-6 w-px bg-border mx-1" />
 
-        <div className="flex items-center gap-2 md:gap-3">
-          <Avatar className="h-8 w-8 rounded-md border border-border">
-            <AvatarFallback className="rounded-md text-xs font-semibold bg-indigo-100 text-indigo-700">
+        {/* User area */}
+        <div className="flex items-center gap-2 md:gap-2.5">
+          <Avatar className="h-8 w-8 rounded-lg border border-primary/20 shadow-sm">
+            <AvatarFallback className="rounded-lg text-xs font-bold bg-primary/10 text-primary">
               {initials}
             </AvatarFallback>
           </Avatar>
 
           <div className="hidden sm:flex flex-col leading-tight">
-            <span className="text-sm font-medium text-foreground">{user?.name ?? user?.username}</span>
-            <span className="text-xs text-muted-foreground capitalize">{user?.role}</span>
+            <span className="text-sm font-semibold text-foreground">{user?.name ?? user?.username}</span>
+            <span className="text-[11px] text-muted-foreground capitalize">{user?.role}</span>
           </div>
 
           <Button
             variant="ghost"
             size="sm"
-            className="text-muted-foreground hover:text-foreground px-2 md:px-3"
+            className="text-muted-foreground hover:text-foreground px-2 md:px-2.5 h-8"
             onClick={handleLogout}
             data-testid="button-logout"
           >
-            <LogOut className="w-4 h-4 md:me-2" />
-            <span className="hidden md:inline">{t("nav.logout")}</span>
+            <LogOut className="w-4 h-4 md:me-1.5" />
+            <span className="hidden md:inline text-sm">{t("nav.logout")}</span>
           </Button>
         </div>
       </div>

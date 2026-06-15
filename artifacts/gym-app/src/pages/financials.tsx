@@ -6,6 +6,7 @@ import {
   useGetAccountSummary,
   useGetProfitLoss,
 } from "@workspace/api-client-react";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -41,8 +42,11 @@ export default function Financials() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <h1 className="text-2xl font-bold text-foreground">{t("acc.title")}</h1>
+      <PageHeader
+        icon={BarChart3}
+        iconClass="bg-violet-500/10 text-violet-600"
+        title={t("acc.title")}
+      />
 
       {/* Account cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

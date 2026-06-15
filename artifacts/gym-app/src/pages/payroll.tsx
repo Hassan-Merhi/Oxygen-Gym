@@ -6,6 +6,7 @@ import {
 } from "@workspace/api-client-react";
 import { useGetMe } from "@/hooks/use-me";
 import { useQueryClient } from "@tanstack/react-query";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -16,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Plus, Loader2, CheckCircle, XCircle } from "lucide-react";
+import { Plus, Loader2, CheckCircle, XCircle, DollarSign } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { format } from "date-fns";
@@ -142,14 +143,16 @@ export default function Payroll() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">{t("payroll.title")}</h1>
-        {canManage && (
+      <PageHeader
+        icon={DollarSign}
+        iconClass="bg-emerald-500/10 text-emerald-600"
+        title={t("payroll.title")}
+        actions={canManage ? (
           <Button onClick={() => { form.reset({ staffEmployeeId: 0, periodStart: "", periodEnd: "", baseSalary: 0, bonus: 0, deduction: 0, currency: "USD", notes: "" }); setIsGenerateOpen(true); }}>
             <Plus className="w-4 h-4 mr-2" />{t("payroll.generate")}
           </Button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {/* Filters */}
       <div className="flex items-center gap-3">

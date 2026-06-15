@@ -15,6 +15,7 @@ import {
 } from "@workspace/api-client-react";
 import type { Plan } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -499,22 +500,18 @@ export default function PlansPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">Plans</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{t("plans.subtitle")}</p>
-        </div>
-        {canManage && (
-          <Button
-            onClick={() => { setEditPlan(null); setShowModal(true); }}
-            className="shrink-0"
-          >
+      <PageHeader
+        icon={Dumbbell}
+        iconClass="bg-indigo-500/10 text-indigo-500"
+        title="Plans"
+        subtitle={t("plans.subtitle")}
+        actions={canManage ? (
+          <Button onClick={() => { setEditPlan(null); setShowModal(true); }}>
             <Plus className="w-4 h-4 mr-1.5" />
             {t("plans.addPlan")}
           </Button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {/* Controls row */}
       <div className="flex items-center gap-3 flex-wrap">

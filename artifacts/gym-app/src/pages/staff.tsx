@@ -9,6 +9,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGetMe } from "@/hooks/use-me";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -1127,15 +1128,12 @@ export default function StaffPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500/20 to-blue-500/20 flex items-center justify-center">
-          <UserCog className="w-5 h-5 text-violet-600" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("staff.title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("staff.subtitle")}</p>
-        </div>
-      </div>
+      <PageHeader
+        icon={UserCog}
+        iconClass="bg-violet-500/10 text-violet-500"
+        title={t("staff.title")}
+        subtitle={t("staff.subtitle")}
+      />
 
       <Tabs defaultValue="staff">
         <TabsList className="h-10">

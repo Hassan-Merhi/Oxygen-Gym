@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useGetMe } from "@/hooks/use-me";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -449,25 +450,17 @@ export default function AccountsPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-blue-500/20 flex items-center justify-center">
-            <BookOpen className="w-5 h-5 text-indigo-600" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Chart of Accounts</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {totalActive} {totalActive === 1 ? "account" : "accounts"} · click any to view its ledger
-            </p>
-          </div>
-        </div>
-        {canManage && (
-          <Button onClick={() => setShowCreate(true)} className="gap-2 shadow-sm">
+      <PageHeader
+        icon={BookOpen}
+        iconClass="bg-indigo-500/10 text-indigo-600"
+        title="Chart of Accounts"
+        subtitle={`${totalActive} ${totalActive === 1 ? "account" : "accounts"} · click any to view its ledger`}
+        actions={canManage ? (
+          <Button onClick={() => setShowCreate(true)} className="gap-2">
             <Plus className="w-4 h-4" /> New Account
           </Button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {/* Type summary pills */}
       {!loading && totalActive > 0 && (

@@ -11,6 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -500,15 +501,12 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-500/20 to-slate-400/10 flex items-center justify-center">
-          <Settings2 className="w-5 h-5 text-slate-600" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("settings.title")}</h1>
-          <p className="text-sm text-muted-foreground">Manage your gym configuration and users</p>
-        </div>
-      </div>
+      <PageHeader
+        icon={Settings2}
+        iconClass="bg-slate-500/10 text-slate-600 dark:text-slate-400"
+        title={t("settings.title")}
+        subtitle="Manage your gym configuration and users"
+      />
 
       <Tabs defaultValue="general">
         <TabsList className="h-10 w-full overflow-x-auto flex-nowrap justify-start md:justify-center">

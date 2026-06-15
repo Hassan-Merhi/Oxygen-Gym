@@ -10,6 +10,7 @@ import {
   useGetSettings,
   type VoucherInputVoucherType,
 } from "@workspace/api-client-react";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +52,7 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   Loader2,
+  Receipt,
 } from "lucide-react";
 
 const VOUCHER_TYPES = [
@@ -254,16 +256,17 @@ export default function Vouchers() {
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">{t("vch.title")}</h1>
-        {canManage && (
+      <PageHeader
+        icon={Receipt}
+        iconClass="bg-amber-500/10 text-amber-600"
+        title={t("vch.title")}
+        actions={canManage ? (
           <Button onClick={() => { setForm(emptyForm()); setModalOpen(true); }} className="gap-2">
             <Plus className="w-4 h-4" />
             {t("vch.newVoucher")}
           </Button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">

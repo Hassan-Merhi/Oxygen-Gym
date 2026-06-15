@@ -16,6 +16,7 @@ import {
   type PaymentInputCategory,
   type VoucherInputVoucherType,
 } from "@workspace/api-client-react";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -530,50 +531,41 @@ export default function CashBook() {
   return (
     <div className="space-y-6">
 
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            {t("nav.cashbook")}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {t("cashbook.subtitle")}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={exportPdf} className="gap-2">
-            <Printer className="w-4 h-4" />
-            Export PDF
-          </Button>
-          {canManage && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button className="gap-2">
-                  <Plus className="w-4 h-4" />
-                  New Entry
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={openPayCreate}
-                  className="gap-2 cursor-pointer"
-                >
-                  <Banknote className="w-4 h-4" />
-                  New Transaction
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={openVchCreate}
-                  className="gap-2 cursor-pointer"
-                >
-                  <Receipt className="w-4 h-4" />
-                  New Voucher
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        icon={Banknote}
+        iconClass="bg-emerald-500/10 text-emerald-600"
+        title={t("nav.cashbook")}
+        subtitle={t("cashbook.subtitle")}
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={exportPdf} className="gap-2">
+              <Printer className="w-4 h-4" />
+              Export PDF
+            </Button>
+            {canManage && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button className="gap-2">
+                    <Plus className="w-4 h-4" />
+                    New Entry
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={openPayCreate} className="gap-2 cursor-pointer">
+                    <Banknote className="w-4 h-4" />
+                    New Transaction
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={openVchCreate} className="gap-2 cursor-pointer">
+                    <Receipt className="w-4 h-4" />
+                    New Voucher
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </>
+        }
+      />
 
       {/* ── Summary cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

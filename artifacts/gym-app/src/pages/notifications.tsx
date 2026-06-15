@@ -8,6 +8,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -73,18 +74,22 @@ export default function Notifications() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">{t("notif.title")}</h1>
-          {(data?.unreadCount ?? 0) > 0 && (
-            <Badge className="bg-red-500 text-white border-0">{data!.unreadCount}</Badge>
-          )}
-        </div>
-        <Button variant="outline" size="sm" onClick={handleMarkAllRead} disabled={markAllRead.isPending || (data?.unreadCount ?? 0) === 0}>
-          {markAllRead.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCheck className="h-4 w-4 mr-2" />}
-          {t("notif.markAllRead")}
-        </Button>
-      </div>
+      <PageHeader
+        icon={Bell}
+        iconClass="bg-amber-500/10 text-amber-600"
+        title={t("notif.title")}
+        actions={
+          <>
+            {(data?.unreadCount ?? 0) > 0 && (
+              <Badge className="bg-rose-500 text-white border-0 rounded-full">{data!.unreadCount}</Badge>
+            )}
+            <Button variant="outline" size="sm" onClick={handleMarkAllRead} disabled={markAllRead.isPending || (data?.unreadCount ?? 0) === 0}>
+              {markAllRead.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCheck className="h-4 w-4 mr-2" />}
+              {t("notif.markAllRead")}
+            </Button>
+          </>
+        }
+      />
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">

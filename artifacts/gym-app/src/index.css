@@ -111,13 +111,13 @@
   --input: 214.3 31.8% 91.4%;
   --ring: 242 85% 58%;
 
-  --sidebar: 0 0% 100%;
-  --sidebar-foreground: 222.2 84% 4.9%;
-  --sidebar-border: 214.3 31.8% 91.4%;
+  --sidebar: 224 44% 9%;
+  --sidebar-foreground: 215 20% 60%;
+  --sidebar-border: 220 33% 15%;
   --sidebar-primary: 242 85% 58%;
   --sidebar-primary-foreground: 210 40% 98%;
-  --sidebar-accent: 210 40% 96.1%;
-  --sidebar-accent-foreground: 222.2 47.4% 11.2%;
+  --sidebar-accent: 220 35% 15%;
+  --sidebar-accent-foreground: 210 40% 98%;
   --sidebar-ring: 242 85% 58%;
 
   --chart-1: 242 85% 58%;
