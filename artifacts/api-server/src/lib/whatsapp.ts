@@ -85,3 +85,24 @@ export function formatExpiryReminderMessage(member: {
   }
   return lines.join("\n");
 }
+
+export function formatDailySummaryMessage(opts: {
+  date: string;
+  cashIn: number;
+  expenses: number;
+  remaining: number;
+}): string {
+  const { date, cashIn, expenses, remaining } = opts;
+  const fmt = (n: number) =>
+    n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const remainEmoji = remaining >= 0 ? "✅" : "🔴";
+  return [
+    `📊 *Résumé de la journée — ${date}*`,
+    ``,
+    `💵 Total encaissé du jour : *${fmt(cashIn)} USD*`,
+    `💸 Total dépenses du jour : *${fmt(expenses)} USD*`,
+    `${remainEmoji} Solde net du jour : *${fmt(remaining)} USD*`,
+    ``,
+    `_OxygenGym — rapport automatique_`,
+  ].join("\n");
+}
