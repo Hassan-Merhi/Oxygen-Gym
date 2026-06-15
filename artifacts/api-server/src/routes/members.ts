@@ -197,12 +197,12 @@ router.post("/", async (req: Request, res: Response) => {
       category: "membership",
       direction: "in",
       notes: body.notes,
-      paymentDate: new Date(),
+      paymentDate: body.startDate ? new Date(body.startDate) : new Date(),
       status: "completed",
     }).returning();
     // Write to cash ledger so balance and KPIs reflect membership payments
     if (amountPaid > 0) {
-      await appendLedgerEntry({ sourceType: "payment", sourceNumber: paymentNumber, sourceId: newPayment.id, direction: "in", amount: amountPaid, currency: member.currency, exchangeRate: rate, description: `Membership — ${planName ?? ""} (${member.name})` });
+      await appendLedgerEntry({ sourceType: "payment", sourceNumber: paymentNumber, sourceId: newPayment.id, direction: "in", amount: amountPaid, currency: member.currency, exchangeRate: rate, description: `Membership — ${planName ?? ""} (${member.name})`, entryDate: body.startDate ? new Date(body.startDate) : new Date() });
     }
   }
 
@@ -229,6 +229,7 @@ router.post("/", async (req: Request, res: Response) => {
       account: accountName,
       category: "membership",
       description: `Membership payment — ${planName ?? ""}`,
+      voucherDate: body.startDate ? new Date(body.startDate) : new Date(),
       status: "recorded",
     });
   }
@@ -342,6 +343,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
     } else if (effectivePlanId) {
       // No prior payment existed — create one now
       const paymentNumber = await getNextNumber("PAY");
+      const effectiveDate = body.startDate ? new Date(body.startDate as string) : (existing.startDate ?? new Date());
       const [newPayment] = await db.insert(paymentsTable).values({
         paymentNumber,
         memberId: id,
@@ -357,11 +359,11 @@ router.patch("/:id", async (req: Request, res: Response) => {
         type: "membership",
         category: "membership",
         direction: "in",
-        paymentDate: new Date(),
+        paymentDate: effectiveDate,
         status: "completed",
       }).returning();
       if (newAp > 0) {
-        await appendLedgerEntry({ sourceType: "payment", sourceNumber: paymentNumber, sourceId: newPayment.id, direction: "in", amount: newAp, currency, exchangeRate: rate, description: `Membership payment — ${effectivePlanName} (${member.name})` });
+        await appendLedgerEntry({ sourceType: "payment", sourceNumber: paymentNumber, sourceId: newPayment.id, direction: "in", amount: newAp, currency, exchangeRate: rate, description: `Membership payment — ${effectivePlanName} (${member.name})`, entryDate: effectiveDate });
       }
     }
   }
@@ -386,6 +388,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
     const voucherNumber = await getNextNumber("VCH");
     const rate2 = await getExchangeRate();
     const { amountUsd: vUsd, amountCdf: vCdf } = toUsdCdf(newAp, currency, rate2);
+    const voucherEffectiveDate = body.startDate ? new Date(body.startDate as string) : (existing.startDate ?? new Date());
     await db.insert(vouchersTable).values({
       voucherNumber,
       voucherType: "cash_receipt",
@@ -402,6 +405,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
       account: accountName,
       category: "membership",
       description: `Membership payment — ${effectivePlanName}`,
+      voucherDate: voucherEffectiveDate,
       status: "recorded",
     });
   }
@@ -491,11 +495,12 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
     amountUsd: renewUsd, amountCdf: renewCdf,
     type: "membership", category: "membership", direction: "in",
     notes: body.notes ? body.notes : `Renewal: ${body.startDate} → ${body.expiryDate}`,
-    paymentDate: new Date(), status: "completed",
+    paymentDate: new Date(body.startDate), status: "completed",
   }).returning();
+  const renewEntryDate = new Date(body.startDate);
   // Write to cash ledger
   if (body.amountPaid > 0) {
-    await appendLedgerEntry({ sourceType: "payment", sourceNumber: paymentNumber, sourceId: renewPayment.id, direction: "in", amount: body.amountPaid, currency: body.currency, exchangeRate: renewRate, description: `Renewal — ${plan.name} (${existing.name})` });
+    await appendLedgerEntry({ sourceType: "payment", sourceNumber: paymentNumber, sourceId: renewPayment.id, direction: "in", amount: body.amountPaid, currency: body.currency, exchangeRate: renewRate, description: `Renewal — ${plan.name} (${existing.name})`, entryDate: renewEntryDate });
   }
 
   if ((body.amountPaid ?? 0) > 0 && body.cashAccountId) {
@@ -519,6 +524,7 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
       account: accountName,
       category: "membership",
       description: `Membership renewal — ${plan.name}`,
+      voucherDate: renewEntryDate,
       status: "recorded",
     });
   }
