@@ -277,9 +277,27 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
           {/* Category breakdown — expandable */}
           <div>
             <h3 className="text-sm font-semibold text-muted-foreground mb-3">{t("acc.pl.breakdown")}</h3>
-            <div className="rounded-xl border border-border overflow-hidden bg-card">
-              <div className="overflow-x-auto min-w-0">
-              <table className="w-full text-sm min-w-[480px]">
+
+            {/* Mobile card rows — shown below md */}
+            <div className="md:hidden rounded-xl border border-border overflow-hidden bg-card divide-y divide-border/40">
+              {Object.entries(pl.breakdown).map(([cat, v]) => (
+                <div key={cat} className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full capitalize">
+                      {cat.replace(/_/g, " ")}
+                    </span>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="font-semibold text-sm tabular-nums">{fmt(v.usd)}</p>
+                    <p className="text-xs text-muted-foreground tabular-nums">{fmtCdf(v.cdf)} CDF</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop expandable table — hidden on mobile */}
+            <div className="hidden md:block rounded-xl border border-border overflow-hidden bg-card">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground w-8"></th>
@@ -318,32 +336,34 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
                               ) : rows.length === 0 ? (
                                 <p className="text-xs text-muted-foreground text-center py-4">No transactions found for this category in this period.</p>
                               ) : (
-                                <table className="w-full text-xs border-t border-border/40">
-                                  <thead>
-                                    <tr className="bg-muted/30">
-                                      <th className="text-left px-8 py-2 font-medium text-muted-foreground">Date</th>
-                                      <th className="text-left px-4 py-2 font-medium text-muted-foreground">Description</th>
-                                      <th className="text-left px-4 py-2 font-medium text-muted-foreground">Party</th>
-                                      <th className="text-right px-4 py-2 font-medium text-muted-foreground">Amount</th>
-                                      <th className="text-right px-4 py-2 font-medium text-muted-foreground">USD</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {rows.map((r) => (
-                                      <tr key={r.id} className="border-t border-border/20 hover:bg-muted/20">
-                                        <td className="px-8 py-2 tabular-nums text-muted-foreground">
-                                          {new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
-                                        </td>
-                                        <td className="px-4 py-2 max-w-[200px] truncate">{r.description ?? "—"}</td>
-                                        <td className="px-4 py-2 text-muted-foreground">{r.party ?? "—"}</td>
-                                        <td className="px-4 py-2 text-right tabular-nums">
-                                          {Number(r.amount).toLocaleString()} <span className="text-muted-foreground">{r.currency}</span>
-                                        </td>
-                                        <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(Number(r.amountUsd))}</td>
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-xs border-t border-border/40 min-w-[560px]">
+                                    <thead>
+                                      <tr className="bg-muted/30">
+                                        <th className="text-left px-8 py-2 font-medium text-muted-foreground">Date</th>
+                                        <th className="text-left px-4 py-2 font-medium text-muted-foreground">Description</th>
+                                        <th className="text-left px-4 py-2 font-medium text-muted-foreground">Party</th>
+                                        <th className="text-right px-4 py-2 font-medium text-muted-foreground">Amount</th>
+                                        <th className="text-right px-4 py-2 font-medium text-muted-foreground">USD</th>
                                       </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                                    </thead>
+                                    <tbody>
+                                      {rows.map((r) => (
+                                        <tr key={r.id} className="border-t border-border/20 hover:bg-muted/20">
+                                          <td className="px-8 py-2 tabular-nums text-muted-foreground">
+                                            {new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+                                          </td>
+                                          <td className="px-4 py-2 max-w-[200px] truncate">{r.description ?? "—"}</td>
+                                          <td className="px-4 py-2 text-muted-foreground">{r.party ?? "—"}</td>
+                                          <td className="px-4 py-2 text-right tabular-nums">
+                                            {Number(r.amount).toLocaleString()} <span className="text-muted-foreground">{r.currency}</span>
+                                          </td>
+                                          <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(Number(r.amountUsd))}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
                               )}
                             </td>
                           </tr>
@@ -353,7 +373,6 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
                   })}
                 </tbody>
               </table>
-              </div>
             </div>
           </div>
         </>

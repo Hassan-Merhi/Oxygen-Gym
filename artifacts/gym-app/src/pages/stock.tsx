@@ -221,6 +221,12 @@ export default function Stock() {
                 <span className="font-bold tabular-nums text-foreground text-sm">{p.quantity}</span>
                 <span>·</span>
                 <span>{fmtMoney(p.sellingPrice, p.currency)}</span>
+                {(p as any).category && (
+                  <>
+                    <span>·</span>
+                    <span className="capitalize">{(p as any).category}</span>
+                  </>
+                )}
               </div>
             </div>
             <StatusBadge status={p.status} t={t} />
@@ -509,7 +515,7 @@ function ProductModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editing ? t("stock.editProduct") : t("stock.addProduct")}</DialogTitle>
         </DialogHeader>
@@ -657,7 +663,7 @@ function PurchaseModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="w-[95vw] max-w-md">
         <DialogHeader>
           <DialogTitle>{t("stock.addPurchase")}: {product.name}</DialogTitle>
         </DialogHeader>
@@ -743,7 +749,7 @@ function HistoryModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("stock.history.title")}: {product.name}</DialogTitle>
         </DialogHeader>

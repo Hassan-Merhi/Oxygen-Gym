@@ -191,7 +191,7 @@ function PlanModal({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) { reset(); onClose(); } }}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="w-[95vw] max-w-md">
         <DialogHeader>
           <DialogTitle>{plan ? t("plans.editPlan") : t("plans.addPlan")}</DialogTitle>
         </DialogHeader>

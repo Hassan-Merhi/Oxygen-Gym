@@ -321,14 +321,14 @@ export function EmployeeRecordsTab() {
       </div>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-[580px]">
+        <DialogContent className="w-[95vw] sm:max-w-[580px] max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{t("emp.addEmployee")}</DialogTitle></DialogHeader>
           <EmpForm onSubmit={onAddSubmit} isPending={createEmp.isPending} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-[580px]">
+        <DialogContent className="w-[95vw] sm:max-w-[580px] max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{t("emp.editEmployee")}</DialogTitle></DialogHeader>
           <EmpForm onSubmit={onEditSubmit} isPending={updateEmp.isPending} />
         </DialogContent>
@@ -964,7 +964,7 @@ export function LoginUsersTab() {
 
       {/* Add Dialog */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent>
+        <DialogContent className="w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{t("staff.addStaff")}</DialogTitle></DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onAddSubmit)} className="space-y-4">
@@ -1014,7 +1014,7 @@ export function LoginUsersTab() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
+        <DialogContent className="w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{t("staff.edit")}</DialogTitle></DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onEditSubmit)} className="space-y-4">
@@ -1064,7 +1064,7 @@ export function LoginUsersTab() {
 
       {/* Permissions Dialog */}
       <Dialog open={isPermsOpen} onOpenChange={setIsPermsOpen}>
-        <DialogContent className="sm:max-w-[580px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-[580px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t("staff.permissions")}: {selectedUser?.name}</DialogTitle>
           </DialogHeader>
