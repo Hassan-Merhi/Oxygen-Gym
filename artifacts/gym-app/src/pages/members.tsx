@@ -364,7 +364,8 @@ export default function MembersPage() {
 
   function openAdd() {
     const today = new Date().toISOString().split("T")[0];
-    form.reset({ status: "active", currency: "USD", amountPaid: 0, discount: 0, startDate: today, cashAccountId: "" });
+    const defaultAccount = cashAccounts.length === 1 ? String(cashAccounts[0].id) : "";
+    form.reset({ status: "active", currency: "USD", amountPaid: 0, discount: 0, startDate: today, cashAccountId: defaultAccount });
     setPlanPrice(0);
     setAddOpen(true);
   }
@@ -397,7 +398,13 @@ export default function MembersPage() {
   const discount = form.watch("discount") ?? 0;
   const balance = planPrice - discount - amountPaid;
 
-  // Auto-select first cash account when amount paid is entered
+  // Auto-select when only one account exists (fires on load and when amount changes)
+  useEffect(() => {
+    if (cashAccounts.length === 1 && !form.getValues("cashAccountId")) {
+      form.setValue("cashAccountId", String(cashAccounts[0].id));
+    }
+  }, [cashAccounts]);
+
   useEffect(() => {
     const paid = Number(amountPaid);
     if (paid > 0 && cashAccounts.length > 0 && !form.getValues("cashAccountId")) {
@@ -447,7 +454,13 @@ export default function MembersPage() {
   const renewDiscount = renewForm.watch("discount") ?? 0;
   const renewBalance = renewPlanPrice - renewDiscount - renewAmountPaid;
 
-  // Auto-select first cash account on renew form when amount paid is entered
+  // Auto-select when only one account exists on renew form
+  useEffect(() => {
+    if (cashAccounts.length === 1 && !renewForm.getValues("cashAccountId")) {
+      renewForm.setValue("cashAccountId", String(cashAccounts[0].id));
+    }
+  }, [cashAccounts]);
+
   useEffect(() => {
     const paid = Number(renewAmountPaid);
     if (paid > 0 && cashAccounts.length > 0 && !renewForm.getValues("cashAccountId")) {
@@ -457,7 +470,8 @@ export default function MembersPage() {
 
   function openRenew(m: Member) {
     const today = new Date().toISOString().split("T")[0];
-    renewForm.reset({ startDate: today, currency: (m.currency as "USD" | "CDF") ?? "USD", amountPaid: 0, discount: 0 });
+    const defaultAccount = cashAccounts.length === 1 ? String(cashAccounts[0].id) : "";
+    renewForm.reset({ startDate: today, currency: (m.currency as "USD" | "CDF") ?? "USD", amountPaid: 0, discount: 0, cashAccountId: defaultAccount });
     setRenewPlanPrice(0);
     setRenewMember(m);
   }
