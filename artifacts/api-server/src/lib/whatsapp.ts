@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { whatsappChatsTable, paymentsTable } from "@workspace/db/schema";
+import { whatsappChatsTable, paymentsTable, vouchersTable } from "@workspace/db/schema";
 import { eq, and, gte, lte, sum } from "drizzle-orm";
 import { logger } from "./logger";
 
@@ -107,27 +107,23 @@ export async function sendDailySummaryNow(): Promise<{ cashIn: number; expenses:
   const dayStart = new Date(`${lubDateStr}T00:00:00+02:00`);
   const dayEnd = new Date(`${lubDateStr}T23:59:59+02:00`);
 
-  const [inRow] = await db
-    .select({ total: sum(paymentsTable.amountUsd) })
-    .from(paymentsTable)
-    .where(and(
-      eq(paymentsTable.direction, "in"),
-      gte(paymentsTable.paymentDate, dayStart),
-      lte(paymentsTable.paymentDate, dayEnd)
-    ));
+  const [payInRow, payOutRow, vchInRow, vchOutRow] = await Promise.all([
+    db.select({ total: sum(paymentsTable.amountUsd) })
+      .from(paymentsTable)
+      .where(and(eq(paymentsTable.direction, "in"), gte(paymentsTable.paymentDate, dayStart), lte(paymentsTable.paymentDate, dayEnd))),
+    db.select({ total: sum(paymentsTable.amountUsd) })
+      .from(paymentsTable)
+      .where(and(eq(paymentsTable.direction, "out"), gte(paymentsTable.paymentDate, dayStart), lte(paymentsTable.paymentDate, dayEnd))),
+    db.select({ total: sum(vouchersTable.amountUsd) })
+      .from(vouchersTable)
+      .where(and(eq(vouchersTable.direction, "in"), eq(vouchersTable.status, "recorded"), gte(vouchersTable.voucherDate, dayStart), lte(vouchersTable.voucherDate, dayEnd))),
+    db.select({ total: sum(vouchersTable.amountUsd) })
+      .from(vouchersTable)
+      .where(and(eq(vouchersTable.direction, "out"), eq(vouchersTable.status, "recorded"), gte(vouchersTable.voucherDate, dayStart), lte(vouchersTable.voucherDate, dayEnd))),
+  ]);
 
-  const [outRow] = await db
-    .select({ total: sum(paymentsTable.amountUsd) })
-    .from(paymentsTable)
-    .where(and(
-      eq(paymentsTable.direction, "out"),
-      eq(paymentsTable.category, "expense"),
-      gte(paymentsTable.paymentDate, dayStart),
-      lte(paymentsTable.paymentDate, dayEnd)
-    ));
-
-  const cashIn = Number(inRow?.total ?? 0);
-  const expenses = Number(outRow?.total ?? 0);
+  const cashIn   = Number(payInRow[0]?.total ?? 0)  + Number(vchInRow[0]?.total ?? 0);
+  const expenses = Number(payOutRow[0]?.total ?? 0) + Number(vchOutRow[0]?.total ?? 0);
   const remaining = cashIn - expenses;
 
   const [year, month, day] = lubDateStr.split("-");
