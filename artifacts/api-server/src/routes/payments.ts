@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
-import { paymentsTable, settingsTable, cashLedgerTable, membersTable, commissionsTable } from "@workspace/db/schema";
+import { paymentsTable, settingsTable, cashLedgerTable, membersTable, commissionsTable, vouchersTable } from "@workspace/db/schema";
 import { eq, and, ilike, or, gte, lte, count, sum, desc, asc } from "drizzle-orm";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
@@ -30,39 +30,44 @@ router.get("/summary", async (req: Request, res: Response) => {
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
 
-  // Query payments table directly so membership payments (created via members.ts)
-  // are included — the cash ledger only captures payments created via this route.
-  const [todayIn, todayOut, allIn, allOut] = await Promise.all([
+  // Query both payments and vouchers so all cash flows are reflected in KPIs.
+  const [
+    payTodayIn, payTodayOut, payAllIn, payAllOut,
+    vchTodayIn, vchTodayOut, vchAllIn, vchAllOut,
+  ] = await Promise.all([
     db.select({ total: sum(paymentsTable.amountUsd) })
       .from(paymentsTable)
-      .where(and(
-        eq(paymentsTable.direction, "in"),
-        eq(paymentsTable.status, "completed"),
-        gte(paymentsTable.paymentDate, todayStart),
-        lte(paymentsTable.paymentDate, todayEnd),
-      )),
+      .where(and(eq(paymentsTable.direction, "in"), eq(paymentsTable.status, "completed"), gte(paymentsTable.paymentDate, todayStart), lte(paymentsTable.paymentDate, todayEnd))),
     db.select({ total: sum(paymentsTable.amountUsd) })
       .from(paymentsTable)
-      .where(and(
-        eq(paymentsTable.direction, "out"),
-        eq(paymentsTable.status, "completed"),
-        gte(paymentsTable.paymentDate, todayStart),
-        lte(paymentsTable.paymentDate, todayEnd),
-      )),
+      .where(and(eq(paymentsTable.direction, "out"), eq(paymentsTable.status, "completed"), gte(paymentsTable.paymentDate, todayStart), lte(paymentsTable.paymentDate, todayEnd))),
     db.select({ total: sum(paymentsTable.amountUsd) })
       .from(paymentsTable)
       .where(and(eq(paymentsTable.direction, "in"), eq(paymentsTable.status, "completed"))),
     db.select({ total: sum(paymentsTable.amountUsd) })
       .from(paymentsTable)
       .where(and(eq(paymentsTable.direction, "out"), eq(paymentsTable.status, "completed"))),
+    // Vouchers (not cancelled, not deleted)
+    db.select({ total: sum(vouchersTable.amountUsd) })
+      .from(vouchersTable)
+      .where(and(eq(vouchersTable.direction, "in"), eq(vouchersTable.status, "recorded"), gte(vouchersTable.voucherDate, todayStart), lte(vouchersTable.voucherDate, todayEnd))),
+    db.select({ total: sum(vouchersTable.amountUsd) })
+      .from(vouchersTable)
+      .where(and(eq(vouchersTable.direction, "out"), eq(vouchersTable.status, "recorded"), gte(vouchersTable.voucherDate, todayStart), lte(vouchersTable.voucherDate, todayEnd))),
+    db.select({ total: sum(vouchersTable.amountUsd) })
+      .from(vouchersTable)
+      .where(and(eq(vouchersTable.direction, "in"), eq(vouchersTable.status, "recorded"))),
+    db.select({ total: sum(vouchersTable.amountUsd) })
+      .from(vouchersTable)
+      .where(and(eq(vouchersTable.direction, "out"), eq(vouchersTable.status, "recorded"))),
   ]);
 
-  const cashInToday = Number(todayIn[0]?.total ?? 0);
-  const cashOutToday = Number(todayOut[0]?.total ?? 0);
-  const totalIn = Number(allIn[0]?.total ?? 0);
-  const totalOut = Number(allOut[0]?.total ?? 0);
-  const balanceUsd = totalIn - totalOut;
-  const balanceCdf = balanceUsd * rate;
+  const cashInToday  = Number(payTodayIn[0]?.total ?? 0)  + Number(vchTodayIn[0]?.total ?? 0);
+  const cashOutToday = Number(payTodayOut[0]?.total ?? 0) + Number(vchTodayOut[0]?.total ?? 0);
+  const totalIn      = Number(payAllIn[0]?.total ?? 0)    + Number(vchAllIn[0]?.total ?? 0);
+  const totalOut     = Number(payAllOut[0]?.total ?? 0)   + Number(vchAllOut[0]?.total ?? 0);
+  const balanceUsd   = totalIn - totalOut;
+  const balanceCdf   = balanceUsd * rate;
 
   res.json({
     cashInToday,
