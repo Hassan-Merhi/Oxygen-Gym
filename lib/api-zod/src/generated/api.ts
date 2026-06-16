@@ -2263,6 +2263,7 @@ export const PatchSaleBody = zod.object({
   "currency": zod.enum(['USD', 'CDF']).optional(),
   "notes": zod.string().nullish(),
   "saleDate": zod.string().nullish(),
+  "paymentAmount": zod.number().nullish(),
   "items": zod.array(zod.object({
   "productId": zod.number(),
   "unitPrice": zod.number(),

@@ -12,5 +12,6 @@ export interface PatchSaleBody {
   currency?: PatchSaleBodyCurrency;
   notes?: string | null;
   saleDate?: string | null;
+  paymentAmount?: number | null;
   items?: PatchSaleBodyItemsItem[] | null;
 }

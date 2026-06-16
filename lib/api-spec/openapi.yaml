@@ -3095,6 +3095,9 @@ components:
         saleDate:
           type: string
           nullable: true
+        paymentAmount:
+          type: number
+          nullable: true
         items:
           type: array
           nullable: true

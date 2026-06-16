@@ -424,13 +424,15 @@ function SaleEditDialog({
 
   const sale = saleRaw as unknown as Record<string, unknown> | undefined;
   const originalItems = ((sale?.items ?? []) as SaleItemData[]);
-  const sym = currency === "CDF" ? "FC" : "$";
-  const fmt = (n: number) => currency === "CDF" ? `FC ${n % 1 === 0 ? n : n.toFixed(2)}` : `$${n % 1 === 0 ? n : n.toFixed(2)}`;
 
   const [currency, setCurrency] = useState<"USD" | "CDF">("USD");
   const [saleDate, setSaleDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [editItems, setEditItems] = useState<Array<{ productId: number; productName: string; quantity: number; unitPrice: number; discount: number; costPrice: number }>>([]);
+
+  const sym = currency === "CDF" ? "FC" : "$";
+  const fmt = (n: number) => currency === "CDF" ? `FC ${n % 1 === 0 ? n : n.toFixed(2)}` : `$${n % 1 === 0 ? n : n.toFixed(2)}`;
 
   // Populate form when sale data loads
   useEffect(() => {
@@ -438,6 +440,7 @@ function SaleEditDialog({
     setCurrency((sale.currency as "USD" | "CDF") ?? "USD");
     setSaleDate(sale.saleDate ? new Date(sale.saleDate as string).toISOString().slice(0, 10) : "");
     setNotes((sale.notes as string) ?? "");
+    setPaymentAmount((sale.paymentAmount as number) ?? 0);
     setEditItems(originalItems.map((i) => ({
       productId: i.productId,
       productName: i.productName,
@@ -451,6 +454,7 @@ function SaleEditDialog({
 
   const liveTotal = editItems.reduce((s, i) => s + (i.unitPrice - i.discount) * i.quantity, 0);
   const liveDiscount = editItems.reduce((s, i) => s + i.discount * i.quantity, 0);
+  const liveChange = Math.max(0, paymentAmount - liveTotal);
 
   const handleSave = async () => {
     if (!saleId) return;
@@ -461,6 +465,7 @@ function SaleEditDialog({
           currency,
           notes: notes || null,
           saleDate: saleDate || null,
+          paymentAmount,
           items: editItems.map((i) => ({ productId: i.productId, unitPrice: i.unitPrice, discount: i.discount })),
         },
       });
@@ -564,13 +569,33 @@ function SaleEditDialog({
             </Table>
           </div>
 
+          {/* Payment received & change */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Payment Received ({sym})</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Change Due ({sym})</Label>
+              <div className="flex items-center h-9 px-3 rounded-md border bg-muted/40 text-sm font-semibold">
+                {fmt(liveChange)}
+              </div>
+            </div>
+          </div>
+
           {/* Live totals preview */}
           <div className="flex flex-col items-end gap-1 text-sm border-t pt-3">
             {liveDiscount > 0 && (
               <div className="flex gap-6"><span className="text-muted-foreground">Discount:</span><span className="text-destructive">-{fmt(liveDiscount)}</span></div>
             )}
             <div className="flex gap-6 font-bold text-base">
-              <span>New Total:</span><span>{fmt(liveTotal)}</span>
+              <span>Total:</span><span>{fmt(liveTotal)}</span>
             </div>
           </div>
         </div>

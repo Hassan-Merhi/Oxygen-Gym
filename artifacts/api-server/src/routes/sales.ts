@@ -285,7 +285,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
     res.status(400).json({ error: "Invalid patch body", details: parsed.error.issues });
     return;
   }
-  const { currency, notes, saleDate, items: patchItems } = parsed.data;
+  const { currency, notes, saleDate, paymentAmount: patchPayment, items: patchItems } = parsed.data;
 
   const [existing] = await db.select().from(salesTable).where(eq(salesTable.id, id));
   if (!existing) {
@@ -326,6 +326,12 @@ router.patch("/:id", async (req: Request, res: Response) => {
     newTotalAmountUsd = usd;
   }
 
+  // Payment amount correction
+  const newPaymentAmount = patchPayment !== undefined && patchPayment !== null
+    ? patchPayment
+    : (existing.paymentAmount ?? 0);
+  const newChangeDue = Math.max(0, newPaymentAmount - newTotalAmount);
+
   const [updated] = await db
     .update(salesTable)
     .set({
@@ -335,12 +341,41 @@ router.patch("/:id", async (req: Request, res: Response) => {
       totalCost: newTotalCost,
       totalProfit: newTotalProfit,
       totalAmountUsd: newTotalAmountUsd,
+      paymentAmount: newPaymentAmount,
+      changeDue: newChangeDue,
       ...(currency !== undefined && { currency }),
       ...(notes !== undefined && { notes }),
       ...(saleDate !== undefined && { saleDate: new Date(saleDate as string) }),
     })
     .where(eq(salesTable.id, id))
     .returning();
+
+  // Sync linked payment record so Cash Book & Financials stay accurate
+  if (existing.paymentId) {
+    const newAmountCdf = (updated.currency === "CDF") ? newTotalAmount : newTotalAmount * rate;
+    await db.update(paymentsTable).set({
+      amount: newTotalAmountUsd,
+      amountUsd: newTotalAmountUsd,
+      amountCdf: newAmountCdf,
+    }).where(eq(paymentsTable.id, existing.paymentId));
+  }
+
+  // Ledger correction: append a delta entry if the total changed
+  const oldUsd = existing.totalAmountUsd ?? existing.totalAmount ?? 0;
+  const delta = newTotalAmountUsd - oldUsd;
+  if (Math.abs(delta) > 0.0001) {
+    await appendLedgerEntry({
+      sourceType: "sale_correction",
+      sourceNumber: existing.saleNumber ?? `SALE-${id}`,
+      sourceId: id,
+      direction: delta > 0 ? "in" : "out",
+      amount: Math.abs(delta),
+      currency: "USD",
+      exchangeRate: rate,
+      description: `Correction for sale ${existing.saleNumber ?? id}`,
+      createdBy: callerName(req),
+    });
+  }
 
   await logActivity(req, "sale_updated", "sale", id, {
     updatedBy: callerName(req),
