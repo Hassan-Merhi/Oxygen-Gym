@@ -293,9 +293,14 @@ router.patch("/:id", async (req: Request, res: Response) => {
     return;
   }
 
+  // Recalculate totalAmount in the new currency using the sale's own exchange rate
+  const rate = existing.exchangeRate ?? 1;
+  const totalAmountUsd = existing.totalAmountUsd ?? existing.totalAmount ?? 0;
+  const newTotalAmount = currency === "CDF" ? totalAmountUsd * rate : totalAmountUsd;
+
   const [updated] = await db
     .update(salesTable)
-    .set({ currency })
+    .set({ currency, totalAmount: newTotalAmount })
     .where(eq(salesTable.id, id))
     .returning();
 
@@ -303,6 +308,8 @@ router.patch("/:id", async (req: Request, res: Response) => {
     field: "currency",
     from: existing.currency,
     to: currency,
+    oldAmount: existing.totalAmount,
+    newAmount: newTotalAmount,
     updatedBy: callerName(req),
   });
 
