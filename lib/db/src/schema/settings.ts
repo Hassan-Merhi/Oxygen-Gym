@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, doublePrecision, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -24,6 +24,9 @@ export const settingsTable = pgTable("settings", {
   // WhatsApp / Green API
   greenApiInstanceId: text("green_api_instance_id"),
   greenApiToken: text("green_api_token"),
+  // Daily cash summary WhatsApp report
+  dailySummaryEnabled: text("daily_summary_enabled").notNull().default("false"),
+  dailySummaryHour: integer("daily_summary_hour").notNull().default(21),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 

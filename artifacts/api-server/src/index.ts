@@ -2,9 +2,9 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import cron from "node-cron";
 import { db } from "@workspace/db";
-import { membersTable, settingsTable, whatsappReminderLogsTable, paymentsTable } from "@workspace/db/schema";
-import { and, eq, gte, lte, isNull, sql, sum } from "drizzle-orm";
-import { sendToAllChats, formatExpiryReminderMessage, formatDailySummaryMessage } from "./lib/whatsapp";
+import { membersTable, settingsTable, whatsappReminderLogsTable } from "@workspace/db/schema";
+import { and, eq, gte, lte, isNull, sql } from "drizzle-orm";
+import { sendToAllChats, formatExpiryReminderMessage, sendDailySummaryNow } from "./lib/whatsapp";
 
 const rawPort = process.env["PORT"];
 
@@ -52,6 +52,12 @@ async function runStartupMigrations() {
     if (fixed > 0) {
       logger.info({ fixed }, "Back-filled payment_date from member start_date");
     }
+
+    await db.execute(sql`
+      ALTER TABLE settings
+        ADD COLUMN IF NOT EXISTS daily_summary_enabled TEXT NOT NULL DEFAULT 'false',
+        ADD COLUMN IF NOT EXISTS daily_summary_hour INTEGER NOT NULL DEFAULT 21
+    `);
 
     logger.info("Startup migrations complete");
   } catch (err) {
@@ -154,61 +160,20 @@ cron.schedule("0 9 * * *", async () => {
   }
 });
 
-// ── Daily cash summary — runs every day at 20:00 UTC (22:00 Lubumbashi UTC+2) ─
-cron.schedule("0 20 * * *", async () => {
-  logger.info("Running daily cash summary WhatsApp job");
+// ── Daily cash summary — runs every hour, fires when Lubumbashi hour matches setting ─
+cron.schedule("0 * * * *", async () => {
   try {
     const settings = await db.query.settingsTable.findFirst();
     if (!settings?.greenApiInstanceId || !settings?.greenApiToken) return;
+    if (settings.dailySummaryEnabled !== "true") return;
 
-    const { greenApiInstanceId: instanceId, greenApiToken: token } = settings;
+    // Check current Lubumbashi hour (UTC+2) against configured hour
+    const lubumbashiHour = new Date(Date.now() + 2 * 60 * 60 * 1000).getUTCHours();
+    const configuredHour = settings.dailySummaryHour ?? 21;
+    if (lubumbashiHour !== configuredHour) return;
 
-    // Compute "today" in Lubumbashi (UTC+2)
-    const lubOffsetMs = 2 * 60 * 60 * 1000;
-    const lubNow = new Date(Date.now() + lubOffsetMs);
-    const lubDateStr = lubNow.toISOString().slice(0, 10); // "YYYY-MM-DD"
-
-    // Lubumbashi day boundaries expressed in UTC
-    const dayStart = new Date(`${lubDateStr}T00:00:00+02:00`);
-    const dayEnd = new Date(`${lubDateStr}T23:59:59+02:00`);
-
-    // Total cash in for the day (direction = 'in')
-    const [inRow] = await db
-      .select({ total: sum(paymentsTable.amountUsd) })
-      .from(paymentsTable)
-      .where(
-        and(
-          eq(paymentsTable.direction, "in"),
-          gte(paymentsTable.paymentDate, dayStart),
-          lte(paymentsTable.paymentDate, dayEnd)
-        )
-      );
-
-    // Total expenses for the day (direction = 'out', category = 'expense')
-    const [outRow] = await db
-      .select({ total: sum(paymentsTable.amountUsd) })
-      .from(paymentsTable)
-      .where(
-        and(
-          eq(paymentsTable.direction, "out"),
-          eq(paymentsTable.category, "expense"),
-          gte(paymentsTable.paymentDate, dayStart),
-          lte(paymentsTable.paymentDate, dayEnd)
-        )
-      );
-
-    const cashIn = Number(inRow?.total ?? 0);
-    const expenses = Number(outRow?.total ?? 0);
-    const remaining = cashIn - expenses;
-
-    // Format date as DD/MM/YYYY
-    const [year, month, day] = lubDateStr.split("-");
-    const friendlyDate = `${day}/${month}/${year}`;
-
-    const message = formatDailySummaryMessage({ date: friendlyDate, cashIn, expenses, remaining });
-    await sendToAllChats(instanceId, token, message);
-
-    logger.info({ cashIn, expenses, remaining }, "Daily cash summary sent");
+    logger.info({ lubumbashiHour }, "Running daily cash summary WhatsApp job");
+    await sendDailySummaryNow();
   } catch (err) {
     logger.error({ err }, "Daily cash summary job failed");
   }

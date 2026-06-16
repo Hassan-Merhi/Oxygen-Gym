@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
-import { whatsappChatsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { whatsappChatsTable, paymentsTable } from "@workspace/db/schema";
+import { eq, and, gte, lte, sum } from "drizzle-orm";
 import { logger } from "./logger";
 
 const GREEN_API_BASE = "https://api.green-api.com";
@@ -84,6 +84,54 @@ export function formatExpiryReminderMessage(member: {
     lines.push(`📅 Expire le : ${d.toLocaleDateString("fr-FR")}`);
   }
   return lines.join("\n");
+}
+
+export async function sendDailySummaryNow(): Promise<{ cashIn: number; expenses: number; remaining: number }> {
+  const settings = await db.query.settingsTable.findFirst();
+  if (!settings?.greenApiInstanceId || !settings?.greenApiToken) {
+    throw new Error("Green API credentials not configured");
+  }
+
+  const { greenApiInstanceId: instanceId, greenApiToken: token } = settings;
+
+  const lubOffsetMs = 2 * 60 * 60 * 1000;
+  const lubNow = new Date(Date.now() + lubOffsetMs);
+  const lubDateStr = lubNow.toISOString().slice(0, 10);
+
+  const dayStart = new Date(`${lubDateStr}T00:00:00+02:00`);
+  const dayEnd = new Date(`${lubDateStr}T23:59:59+02:00`);
+
+  const [inRow] = await db
+    .select({ total: sum(paymentsTable.amountUsd) })
+    .from(paymentsTable)
+    .where(and(
+      eq(paymentsTable.direction, "in"),
+      gte(paymentsTable.paymentDate, dayStart),
+      lte(paymentsTable.paymentDate, dayEnd)
+    ));
+
+  const [outRow] = await db
+    .select({ total: sum(paymentsTable.amountUsd) })
+    .from(paymentsTable)
+    .where(and(
+      eq(paymentsTable.direction, "out"),
+      eq(paymentsTable.category, "expense"),
+      gte(paymentsTable.paymentDate, dayStart),
+      lte(paymentsTable.paymentDate, dayEnd)
+    ));
+
+  const cashIn = Number(inRow?.total ?? 0);
+  const expenses = Number(outRow?.total ?? 0);
+  const remaining = cashIn - expenses;
+
+  const [year, month, day] = lubDateStr.split("-");
+  const friendlyDate = `${day}/${month}/${year}`;
+
+  const message = formatDailySummaryMessage({ date: friendlyDate, cashIn, expenses, remaining });
+  await sendToAllChats(instanceId, token, message);
+
+  logger.info({ cashIn, expenses, remaining }, "Daily cash summary sent");
+  return { cashIn, expenses, remaining };
 }
 
 export function formatDailySummaryMessage(opts: {

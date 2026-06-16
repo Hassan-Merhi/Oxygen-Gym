@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { whatsappChatsTable, settingsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
-import { sendToAllChats } from "../lib/whatsapp";
+import { sendToAllChats, sendDailySummaryNow } from "../lib/whatsapp";
 
 const router = Router();
 router.use(requireAuth());
@@ -142,6 +142,19 @@ router.post("/test", async (req: Request, res: Response) => {
   } catch (err) {
     req.log.error({ err }, "WhatsApp test failed");
     res.status(500).json({ error: "Test failed" });
+  }
+});
+
+// POST /api/whatsapp/send-daily-summary — trigger daily summary immediately
+router.post("/send-daily-summary", async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const result = await sendDailySummaryNow();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    req.log.error({ err }, "Send daily summary failed");
+    const msg = err instanceof Error ? err.message : "Failed";
+    res.status(500).json({ error: msg });
   }
 });
 

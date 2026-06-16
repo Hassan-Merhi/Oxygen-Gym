@@ -104,6 +104,7 @@ import type {
   SaleListResponse,
   SaleRecord,
   SalesPage,
+  SendDailySummary200,
   Settings,
   SettingsUpdate,
   StaffEmployee,
@@ -1525,6 +1526,76 @@ export const useTestWhatsappConnection = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getTestWhatsappConnectionMutationOptions(options));
+    }
+
+export const getSendDailySummaryUrl = () => {
+
+
+
+
+  return `/api/whatsapp/send-daily-summary`
+}
+
+/**
+ * @summary Send today's cash summary report via WhatsApp now
+ */
+export const sendDailySummary = async ( options?: RequestInit): Promise<SendDailySummary200> => {
+
+  return customFetch<SendDailySummary200>(getSendDailySummaryUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSendDailySummaryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDailySummary>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendDailySummary>>, TError,void, TContext> => {
+
+const mutationKey = ['sendDailySummary'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendDailySummary>>, void> = () => {
+
+
+          return  sendDailySummary(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendDailySummaryMutationResult = NonNullable<Awaited<ReturnType<typeof sendDailySummary>>>
+
+    export type SendDailySummaryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Send today's cash summary report via WhatsApp now
+ */
+export const useSendDailySummary = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendDailySummary>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendDailySummary>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSendDailySummaryMutationOptions(options));
     }
 
 export const getGetSettingsUrl = () => {

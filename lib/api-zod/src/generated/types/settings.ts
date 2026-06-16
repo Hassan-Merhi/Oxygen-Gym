@@ -34,5 +34,7 @@ export interface Settings {
   greenApiInstanceId?: string | null;
   /** @nullable */
   greenApiToken?: string | null;
+  dailySummaryEnabled: string;
+  dailySummaryHour: number;
   updatedAt: Date;
 }

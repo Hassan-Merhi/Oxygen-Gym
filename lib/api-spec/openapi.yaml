@@ -384,6 +384,25 @@ paths:
                   ok: { type: boolean }
                 required: [ok]
 
+  /whatsapp/send-daily-summary:
+    post:
+      operationId: sendDailySummary
+      tags: [settings]
+      summary: Send today's cash summary report via WhatsApp now
+      responses:
+        "200":
+          description: Summary sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  cashIn: { type: number }
+                  expenses: { type: number }
+                  remaining: { type: number }
+                required: [ok, cashIn, expenses, remaining]
+
   /settings:
     get:
       operationId: getSettings
@@ -2193,6 +2212,8 @@ components:
           type: ["string", "null"]
         greenApiToken:
           type: ["string", "null"]
+        dailySummaryEnabled: { type: string }
+        dailySummaryHour: { type: integer }
         updatedAt:
           type: string
           format: date-time
@@ -2204,6 +2225,8 @@ components:
         - language
         - backupEnabled
         - backupTime
+        - dailySummaryEnabled
+        - dailySummaryHour
         - updatedAt
 
     SettingsUpdate:
@@ -2237,6 +2260,8 @@ components:
           type: ["string", "null"]
         greenApiToken:
           type: ["string", "null"]
+        dailySummaryEnabled: { type: string }
+        dailySummaryHour: { type: integer }
 
     WhatsappChat:
       type: object

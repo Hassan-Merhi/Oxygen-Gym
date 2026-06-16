@@ -478,6 +478,17 @@ export const TestWhatsappConnectionResponse = zod.object({
 
 
 /**
+ * @summary Send today's cash summary report via WhatsApp now
+ */
+export const SendDailySummaryResponse = zod.object({
+  "ok": zod.boolean(),
+  "cashIn": zod.number(),
+  "expenses": zod.number(),
+  "remaining": zod.number()
+})
+
+
+/**
  * @summary Get gym settings
  */
 export const GetSettingsResponse = zod.object({
@@ -497,6 +508,8 @@ export const GetSettingsResponse = zod.object({
   "backupTime": zod.string(),
   "greenApiInstanceId": zod.string().nullish(),
   "greenApiToken": zod.string().nullish(),
+  "dailySummaryEnabled": zod.string(),
+  "dailySummaryHour": zod.number(),
   "updatedAt": zod.coerce.date()
 })
 
@@ -519,7 +532,9 @@ export const UpdateSettingsBody = zod.object({
   "backupEnabled": zod.string().optional(),
   "backupTime": zod.string().optional(),
   "greenApiInstanceId": zod.string().nullish(),
-  "greenApiToken": zod.string().nullish()
+  "greenApiToken": zod.string().nullish(),
+  "dailySummaryEnabled": zod.string().optional(),
+  "dailySummaryHour": zod.number().optional()
 })
 
 export const UpdateSettingsResponse = zod.object({
@@ -539,6 +554,8 @@ export const UpdateSettingsResponse = zod.object({
   "backupTime": zod.string(),
   "greenApiInstanceId": zod.string().nullish(),
   "greenApiToken": zod.string().nullish(),
+  "dailySummaryEnabled": zod.string(),
+  "dailySummaryHour": zod.number(),
   "updatedAt": zod.coerce.date()
 })
 

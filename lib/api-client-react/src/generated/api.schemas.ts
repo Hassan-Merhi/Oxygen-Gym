@@ -203,6 +203,8 @@ export interface Settings {
   greenApiInstanceId?: string | null;
   /** @nullable */
   greenApiToken?: string | null;
+  dailySummaryEnabled: string;
+  dailySummaryHour: number;
   updatedAt: string;
 }
 
@@ -248,6 +250,8 @@ export interface SettingsUpdate {
   greenApiInstanceId?: string | null;
   /** @nullable */
   greenApiToken?: string | null;
+  dailySummaryEnabled?: string;
+  dailySummaryHour?: number;
 }
 
 export interface WhatsappChat {
@@ -1308,6 +1312,13 @@ export type ListWhatsappContacts400 = {
 
 export type TestWhatsappConnection200 = {
   ok: boolean;
+};
+
+export type SendDailySummary200 = {
+  ok: boolean;
+  cashIn: number;
+  expenses: number;
+  remaining: number;
 };
 
 export type ListActivityLogsParams = {

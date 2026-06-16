@@ -25,7 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, Upload, X, ImageIcon, Settings2, Users, MessageCircle,
-  Plus, Trash2, Send, Eye, EyeOff, Search, MessageSquare,
+  Plus, Trash2, Send, Eye, EyeOff, Search, MessageSquare, Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LoginUsersTab, EmployeeRecordsTab } from "@/pages/staff";
@@ -123,6 +123,11 @@ function WhatsAppTab() {
   const [showToken, setShowToken] = useState(false);
   const [credsSaving, setCredsSaving] = useState(false);
 
+  const [dailyEnabled, setDailyEnabled] = useState(false);
+  const [dailyHour, setDailyHour] = useState(21);
+  const [dailySaving, setDailySaving] = useState(false);
+  const [sendingNow, setSendingNow] = useState(false);
+
   const [newLabel, setNewLabel] = useState("");
   const [newChatId, setNewChatId] = useState("");
   const [addingChat, setAddingChat] = useState(false);
@@ -145,8 +150,49 @@ function WhatsAppTab() {
     if (settings) {
       setInstanceId(settings.greenApiInstanceId ?? "");
       setToken(settings.greenApiToken ?? "");
+      setDailyEnabled(settings.dailySummaryEnabled === "true");
+      setDailyHour(settings.dailySummaryHour ?? 21);
     }
   }, [settings]);
+
+  const saveDailySettings = () => {
+    setDailySaving(true);
+    updateSettings.mutate(
+      { data: { dailySummaryEnabled: dailyEnabled ? "true" : "false", dailySummaryHour: dailyHour } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
+          toast({ title: t("common.success") });
+          setDailySaving(false);
+        },
+        onError: () => {
+          toast({ title: t("common.error"), variant: "destructive" });
+          setDailySaving(false);
+        },
+      }
+    );
+  };
+
+  const sendNow = async () => {
+    setSendingNow(true);
+    try {
+      const token = localStorage.getItem("gym_token");
+      const res = await fetch(`${BASE}api/whatsapp/send-daily-summary`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        toast({ title: t("settings.summarySent") });
+      } else {
+        const json = await res.json().catch(() => ({}));
+        toast({ title: (json as any).error ?? t("common.error"), variant: "destructive" });
+      }
+    } catch {
+      toast({ title: t("common.error"), variant: "destructive" });
+    } finally {
+      setSendingNow(false);
+    }
+  };
 
   const saveCreds = async () => {
     setCredsSaving(true);
@@ -260,6 +306,64 @@ function WhatsAppTab() {
                 ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
                 : <Send className="w-3.5 h-3.5 mr-1.5" />}
               {t("settings.sendTest")}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Daily Cash Summary */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                {t("settings.dailySummary")}
+              </CardTitle>
+              <CardDescription className="mt-1">{t("settings.dailySummaryDesc")}</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <label className="text-sm font-medium">{t("settings.dailySummaryEnabled")}</label>
+            <Switch
+              checked={dailyEnabled}
+              onCheckedChange={setDailyEnabled}
+            />
+          </div>
+          {dailyEnabled && (
+            <div className="space-y-1.5 max-w-[200px]">
+              <label className="text-sm font-medium">{t("settings.dailySummaryHour")}</label>
+              <Select value={String(dailyHour)} onValueChange={(v) => setDailyHour(Number(v))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <SelectItem key={h} value={String(h)}>
+                      {String(h).padStart(2, "0")}:00
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button size="sm" onClick={saveDailySettings} disabled={dailySaving}>
+              {dailySaving && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+              {t("settings.save")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={sendNow}
+              disabled={sendingNow || !instanceId || !token}
+            >
+              {sendingNow
+                ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                : <Send className="w-3.5 h-3.5 mr-1.5" />}
+              {t("settings.sendSummaryNow")}
             </Button>
           </div>
         </CardContent>
