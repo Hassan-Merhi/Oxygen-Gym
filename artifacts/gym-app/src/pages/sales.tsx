@@ -422,7 +422,18 @@ export default function Sales() {
 
   // Cart state
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [saleCurrency, setSaleCurrency] = useState<"USD" | "CDF">("USD");
+  const defaultCurrency = (settings?.defaultCurrency as "USD" | "CDF") ?? "USD";
+  const [saleCurrency, setSaleCurrency] = useState<"USD" | "CDF">(defaultCurrency);
+
+  // Sync default currency once settings load (they arrive async after mount).
+  // Only update if cart is empty so we don't change mid-transaction.
+  useEffect(() => {
+    const cur = settings?.defaultCurrency as "USD" | "CDF" | undefined;
+    if (cur && cart.length === 0) {
+      setSaleCurrency(cur);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings?.defaultCurrency]);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [notes, setNotes] = useState("");
   const [completing, setCompleting] = useState(false);
