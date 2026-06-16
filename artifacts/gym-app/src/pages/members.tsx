@@ -658,8 +658,18 @@ export default function MembersPage() {
             {items.map((m) => {
               const initials = m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
               const days = daysUntil(m.expiryDate);
+              const isExpired = m.status === "expired" || (days !== null && days < 0);
+              const isUrgent = !isExpired && days !== null && days <= 5;
+              const isWarning = !isExpired && !isUrgent && days !== null && days <= 14;
+              const mobileRowClass = isExpired
+                ? "flex items-center gap-2 px-3 py-3 bg-red-50/70 dark:bg-red-950/20 border-l-2 border-red-500"
+                : isUrgent
+                ? "flex items-center gap-2 px-3 py-3 bg-orange-50/60 dark:bg-orange-950/20 border-l-2 border-orange-400"
+                : isWarning
+                ? "flex items-center gap-2 px-3 py-3 bg-yellow-50/40 dark:bg-yellow-950/10 border-l-2 border-yellow-400"
+                : "flex items-center gap-2 px-3 py-3";
               return (
-                <div key={m.id} className="flex items-center gap-2 px-3 py-3">
+                <div key={m.id} className={mobileRowClass}>
                   <button onClick={() => navigate(`/members/${m.id}`)} className="flex items-center gap-2 flex-1 min-w-0 text-left">
                     <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0 ${avatarColor(m.name)}`}>
                       {initials}
@@ -668,7 +678,8 @@ export default function MembersPage() {
                       <p className="font-semibold text-sm truncate">{m.name}</p>
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">
                         {m.planName ?? "—"} · {fmtDate(m.expiryDate)}
-                        {days !== null && days >= 0 && days <= 7 && <span className="text-orange-500"> · {days}d</span>}
+                        {isExpired && <span className="text-red-600 font-semibold"> · Expiré</span>}
+                        {isUrgent && days !== null && <span className="text-orange-500 font-semibold"> · {days}j</span>}
                       </p>
                       {m.phone && <p className="text-xs text-muted-foreground/70 truncate">{m.phone}</p>}
                     </div>
@@ -762,17 +773,26 @@ export default function MembersPage() {
               </TableRow>
             ) : items.map((m) => {
               const days = daysUntil(m.expiryDate);
-              const expiryClass =
-                m.status === "expired" || (days !== null && days < 0)
-                  ? "text-red-600 font-medium"
-                  : days !== null && days <= 7
-                  ? "text-orange-500 font-medium"
-                  : days !== null && days <= 14
-                  ? "text-yellow-600 font-medium"
-                  : "text-foreground";
+              const isExpired = m.status === "expired" || (days !== null && days < 0);
+              const isUrgent = !isExpired && days !== null && days <= 5;
+              const isWarning = !isExpired && !isUrgent && days !== null && days <= 14;
+              const expiryClass = isExpired
+                ? "text-red-600 font-semibold"
+                : isUrgent
+                ? "text-orange-500 font-semibold"
+                : isWarning
+                ? "text-yellow-600 font-medium"
+                : "text-foreground";
+              const tableRowClass = isExpired
+                ? "border-border/50 bg-red-50/60 dark:bg-red-950/20 hover:bg-red-50/80 dark:hover:bg-red-950/30 transition-colors group border-l-2 border-l-red-500"
+                : isUrgent
+                ? "border-border/50 bg-orange-50/50 dark:bg-orange-950/20 hover:bg-orange-50/80 dark:hover:bg-orange-950/30 transition-colors group border-l-2 border-l-orange-400"
+                : isWarning
+                ? "border-border/50 bg-yellow-50/30 dark:bg-yellow-950/10 hover:bg-yellow-50/60 dark:hover:bg-yellow-950/20 transition-colors group"
+                : "border-border/50 hover:bg-muted/30 transition-colors group";
               const initials = m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
               return (
-                <TableRow key={m.id} className="border-border/50 hover:bg-muted/30 transition-colors group">
+                <TableRow key={m.id} className={tableRowClass}>
                   <TableCell className="py-3">
                     <button
                       onClick={() => navigate(`/members/${m.id}`)}
