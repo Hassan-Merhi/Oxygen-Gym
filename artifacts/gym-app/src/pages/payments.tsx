@@ -325,7 +325,7 @@ export default function CashBook() {
       amount: parseFloat(payForm.amount) || 0,
       discount: 0,
       currency: payForm.currency as "USD" | "CDF",
-      exchangeRate: parseFloat(payForm.exchangeRate) || 1,
+      exchangeRate: settings?.usdToCdfRate ?? 2800,
       account: payForm.account,
       notes: payForm.notes || undefined,
       paymentDate: payForm.paymentDate || undefined,
