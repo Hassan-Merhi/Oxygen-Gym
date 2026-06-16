@@ -424,9 +424,8 @@ function SaleEditDialog({
 
   const sale = saleRaw as unknown as Record<string, unknown> | undefined;
   const originalItems = ((sale?.items ?? []) as SaleItemData[]);
-  const saleCur = (sale?.currency as "USD" | "CDF") ?? "USD";
-  const sym = saleCur === "CDF" ? "FC" : "$";
-  const fmt = (n: number) => saleCur === "CDF" ? `FC ${n % 1 === 0 ? n : n.toFixed(2)}` : `$${n % 1 === 0 ? n : n.toFixed(2)}`;
+  const sym = currency === "CDF" ? "FC" : "$";
+  const fmt = (n: number) => currency === "CDF" ? `FC ${n % 1 === 0 ? n : n.toFixed(2)}` : `$${n % 1 === 0 ? n : n.toFixed(2)}`;
 
   const [currency, setCurrency] = useState<"USD" | "CDF">("USD");
   const [saleDate, setSaleDate] = useState("");
