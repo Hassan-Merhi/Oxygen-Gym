@@ -357,6 +357,8 @@ router.patch("/:id", async (req: Request, res: Response) => {
       amount: newTotalAmountUsd,
       amountUsd: newTotalAmountUsd,
       amountCdf: newAmountCdf,
+      // Keep paymentDate in sync with saleDate so period filters stay accurate
+      ...(saleDate !== undefined && { paymentDate: new Date(saleDate as string) }),
     }).where(eq(paymentsTable.id, existing.paymentId));
   }
 

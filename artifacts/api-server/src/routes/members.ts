@@ -267,7 +267,10 @@ router.post("/", async (req: Request, res: Response) => {
   // Fire-and-forget WhatsApp notification
   db.query.settingsTable.findFirst().then(async (settings) => {
     if (settings?.greenApiInstanceId && settings?.greenApiToken) {
-      const message = formatNewMemberMessage(member);
+      const message = formatNewMemberMessage({
+        ...member,
+        exchangeRate: settings.usdToCdfRate ?? 1,
+      });
       const sent = await sendToAllChats(settings.greenApiInstanceId, settings.greenApiToken, message);
       if (sent) {
         await db.insert(whatsappReminderLogsTable).values({ memberId: member.id, reminderType: "new_member" });

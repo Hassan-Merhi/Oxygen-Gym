@@ -48,6 +48,7 @@ export function formatNewMemberMessage(member: {
   planName?: string | null;
   amountPaid?: number | null;
   currency?: string | null;
+  exchangeRate?: number | null;
   expiryDate?: Date | string | null;
 }): string {
   const lines = [
@@ -56,7 +57,12 @@ export function formatNewMemberMessage(member: {
   if (member.phone) lines.push(`📞 Tél : ${member.phone}`);
   if (member.planName) lines.push(`🏷️ Abonnement : ${member.planName}`);
   if (member.amountPaid != null) {
-    lines.push(`💰 Montant payé : ${member.amountPaid} ${member.currency ?? "USD"}`);
+    const rate = member.exchangeRate ?? 1;
+    const amountUsd = member.currency === "CDF"
+      ? member.amountPaid / rate
+      : member.amountPaid;
+    const fmtUsd = amountUsd.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    lines.push(`💰 Montant payé : *${fmtUsd} USD*`);
   }
   if (member.expiryDate) {
     const d = new Date(member.expiryDate);
