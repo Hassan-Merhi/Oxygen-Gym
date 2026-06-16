@@ -96,6 +96,8 @@ router.patch("/", async (req, res) => {
         ...(data.backupTime !== undefined && { backupTime: data.backupTime }),
         ...(isAdmin && data.greenApiInstanceId !== undefined && { greenApiInstanceId: data.greenApiInstanceId }),
         ...(isAdmin && data.greenApiToken !== undefined && { greenApiToken: data.greenApiToken }),
+        ...(data.dailySummaryEnabled !== undefined && { dailySummaryEnabled: data.dailySummaryEnabled }),
+        ...(data.dailySummaryHour !== undefined && { dailySummaryHour: data.dailySummaryHour }),
       })
       .returning();
 
