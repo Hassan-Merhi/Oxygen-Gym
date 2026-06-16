@@ -130,6 +130,19 @@ router.post("/", async (req: Request, res: Response) => {
 
   if (!body.name) { res.status(400).json({ error: "name is required" }); return; }
 
+  if (body.startDate && body.expiryDate && new Date(body.expiryDate) <= new Date(body.startDate)) {
+    res.status(400).json({ error: "Expiry date must be after start date" });
+    return;
+  }
+  if ((body.amountPaid ?? 0) < 0) {
+    res.status(400).json({ error: "Amount paid cannot be negative" });
+    return;
+  }
+  if ((body.discount ?? 0) < 0) {
+    res.status(400).json({ error: "Discount cannot be negative" });
+    return;
+  }
+
   const memberNumber = await getNextNumber("MEM");
 
   let planName: string | undefined;
@@ -472,6 +485,19 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
   const [existing] = await db.select().from(membersTable).where(eq(membersTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
+  if (body.startDate && body.expiryDate && new Date(body.expiryDate) <= new Date(body.startDate)) {
+    res.status(400).json({ error: "Expiry date must be after start date" });
+    return;
+  }
+  if ((body.amountPaid ?? 0) < 0) {
+    res.status(400).json({ error: "Amount paid cannot be negative" });
+    return;
+  }
+  if ((body.discount ?? 0) < 0) {
+    res.status(400).json({ error: "Discount cannot be negative" });
+    return;
+  }
+
   const [plan] = await db.select().from(plansTable).where(eq(plansTable.id, body.planId));
   if (!plan) { res.status(400).json({ error: "Plan not found" }); return; }
 
@@ -495,7 +521,7 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
     amount: body.amountPaid, discount: body.discount ?? 0,
     currency: body.currency, exchangeRate: renewRate,
     amountUsd: renewUsd, amountCdf: renewCdf,
-    type: "membership", category: "membership", direction: "in",
+    type: "renewal", category: "membership", direction: "in",
     notes: body.notes ? body.notes : `Renewal: ${body.startDate} → ${body.expiryDate}`,
     paymentDate: new Date(body.startDate), status: "completed",
   }).returning();

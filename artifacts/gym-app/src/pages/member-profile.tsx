@@ -155,7 +155,7 @@ export default function MemberProfile({ id }: { id: number }) {
   const canViewAccounting = me?.role === "admin" || me?.permissions?.viewAccounting;
 
   const { data: member, isLoading } = useGetMember(id);
-  const { data: payments = [] } = useGetMemberPayments(id);
+  const { data: payments = [] } = useGetMemberPayments(id, { query: { enabled: canViewAccounting ?? false, queryKey: ["member-payments", id, canViewAccounting] } });
   const { data: checkins = [] } = useGetMemberCheckins(id);
   const { data: attStats } = useGetMemberAttendanceStats(id);
   const { data: settingsData } = useGetSettings();
@@ -503,9 +503,14 @@ export default function MemberProfile({ id }: { id: number }) {
                   </TableHeader>
                   <TableBody>
                     {(payments as MemberPayment[]).map((p) => {
-                      const planPrice = p.amount + (p.discount ?? 0);
-                      const balance = planPrice - (p.discount ?? 0) - p.amount;
-                      const isFirst = p.id === Math.max(...(payments as MemberPayment[]).map((x) => x.id));
+                      const latestId = Math.max(...(payments as MemberPayment[]).map((x) => x.id));
+                      const isLatest = p.id === latestId;
+                      // For the most recent payment use the stored member plan price & balance;
+                      // for historical payments reconstruct plan price from what was paid + discount.
+                      const planPrice = isLatest
+                        ? (member!.planPrice ?? (p.amount + (p.discount ?? 0)))
+                        : (p.amount + (p.discount ?? 0));
+                      const balance = isLatest ? (member!.balance ?? 0) : 0;
                       return (
                         <TableRow key={p.id}>
                           <TableCell className="font-mono text-xs text-slate-500">{p.paymentNumber ?? `#${p.id}`}</TableCell>
@@ -524,8 +529,8 @@ export default function MemberProfile({ id }: { id: number }) {
                                 memberName: member!.name,
                                 memberPhone: member!.phone ?? undefined,
                                 planName: p.planName ?? "Abonnement",
-                                startDate: isFirst ? (member!.startDate ?? undefined) : undefined,
-                                expiryDate: isFirst ? (member!.expiryDate ?? undefined) : undefined,
+                                startDate: member!.startDate ?? undefined,
+                                expiryDate: member!.expiryDate ?? undefined,
                                 amountPaid: p.amount,
                                 discount: p.discount ?? 0,
                                 planPrice,

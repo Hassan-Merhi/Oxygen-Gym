@@ -236,6 +236,15 @@ router.patch("/:id", async (req: Request, res: Response) => {
   const [existing] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
+  if (body.amount !== undefined && Number(body.amount) < 0) {
+    res.status(400).json({ error: "Amount cannot be negative" });
+    return;
+  }
+  if (body.discount !== undefined && Number(body.discount) < 0) {
+    res.status(400).json({ error: "Discount cannot be negative" });
+    return;
+  }
+
   const allowed = ["direction","category","linkedEntity","linkedEntityId","linkedEntityName","memberId","memberName","planId","planName","amount","discount","currency","exchangeRate","account","notes","paymentDate"];
   const update: Record<string, unknown> = {};
   for (const k of allowed) { if (body[k] !== undefined) update[k] = body[k]; }

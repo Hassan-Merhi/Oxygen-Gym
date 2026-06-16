@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { cashLedgerTable } from "@workspace/db/schema";
-import { desc } from "drizzle-orm";
+import { desc, sql } from "drizzle-orm";
 
 export interface LedgerEntryInput {
   entryDate?: Date;
@@ -58,10 +58,11 @@ export async function appendLedgerEntry(input: LedgerEntryInput): Promise<void> 
 }
 
 export async function getCurrentBalance(): Promise<{ balanceUsd: number; balanceCdf: number }> {
-  const [last] = await db
-    .select({ balanceUsd: cashLedgerTable.balanceUsd, balanceCdf: cashLedgerTable.balanceCdf })
-    .from(cashLedgerTable)
-    .orderBy(desc(cashLedgerTable.id))
-    .limit(1);
-  return { balanceUsd: last?.balanceUsd ?? 0, balanceCdf: last?.balanceCdf ?? 0 };
+  const [row] = await db
+    .select({
+      balanceUsd: sql<number>`COALESCE(SUM(CASE WHEN direction = 'in' THEN amount_usd ELSE -amount_usd END), 0)`,
+      balanceCdf: sql<number>`COALESCE(SUM(CASE WHEN direction = 'in' THEN amount_cdf ELSE -amount_cdf END), 0)`,
+    })
+    .from(cashLedgerTable);
+  return { balanceUsd: Number(row?.balanceUsd ?? 0), balanceCdf: Number(row?.balanceCdf ?? 0) };
 }

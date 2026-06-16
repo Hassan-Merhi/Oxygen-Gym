@@ -143,7 +143,7 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
       try {
         const token = localStorage.getItem(TOKEN_KEY);
         const authHeaders: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-        const params = new URLSearchParams({ dateFrom: from.slice(0, 10), dateTo: to.slice(0, 10), limit: "200" });
+        const params = new URLSearchParams({ dateFrom: from.slice(0, 10), dateTo: to.slice(0, 10), limit: "1000" });
         const [salesRes, expRes] = await Promise.all([
           fetch(`/api/accounts/sales?${params}`, { headers: authHeaders }),
           fetch(`/api/accounts/expenses?${params}`, { headers: authHeaders }),

@@ -1,5 +1,5 @@
 import { db, paymentsTable, expensesTable, payrollTable, salesTable, settingsTable } from "@workspace/db";
-import { and, gte, lte, eq, sum } from "drizzle-orm";
+import { and, gte, lte, eq, not, sum } from "drizzle-orm";
 
 async function getRate(): Promise<number> {
   const settings = await db.query.settingsTable.findFirst();
@@ -24,13 +24,15 @@ export interface ProfitBreakdown {
 export async function calculateProfit(from: Date, to: Date): Promise<ProfitBreakdown> {
   const rate = await getRate();
 
-  // Membership revenue
+  // Membership / non-sale revenue (exclude product_sale which is counted via salesTable below)
   const membershipRows = await db
     .select({ amount: paymentsTable.amount, currency: paymentsTable.currency })
     .from(paymentsTable)
     .where(
       and(
         eq(paymentsTable.status, "completed"),
+        eq(paymentsTable.direction, "in"),
+        not(eq(paymentsTable.category, "product_sale")),
         gte(paymentsTable.paymentDate, from),
         lte(paymentsTable.paymentDate, to),
       ),

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db, usersTable, pagePermissionsSchema, defaultStaffPermissions, defaultAdminPermissions, defaultManagerPermissions, activityLogsTable } from "@workspace/db";
 import { eq, isNull } from "drizzle-orm";
@@ -8,6 +8,15 @@ import { logActivity } from "../lib/activity";
 
 const router = Router();
 router.use(requireAuth());
+
+function requireAdmin(req: Request, res: Response): boolean {
+  const caller = (req as any).__gymproUser;
+  if (caller?.role !== "admin") {
+    res.status(403).json({ error: "Admin only" });
+    return false;
+  }
+  return true;
+}
 
 // ── GET /api/users ─────────────────────────────────────────────────────────────
 router.get("/", async (req, res) => {
@@ -34,6 +43,7 @@ router.get("/", async (req, res) => {
 
 // ── POST /api/users ────────────────────────────────────────────────────────────
 router.post("/", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
   const { username, name, email, phone, role, status, permissions, password } = req.body as {
     username: string;
     name: string;
@@ -124,6 +134,9 @@ router.patch("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
 
+  const caller = (req as any).__gymproUser;
+  const isAdmin = caller?.role === "admin";
+
   const { username, name, email, phone, role, status } = req.body as {
     username?: string;
     name?: string;
@@ -132,6 +145,16 @@ router.patch("/:id", async (req, res) => {
     role?: string;
     status?: string;
   };
+
+  // Only admin can update other users or change role/status
+  if (!isAdmin && caller?.id !== id) {
+    res.status(403).json({ error: "Cannot edit other users" });
+    return;
+  }
+  if (!isAdmin && (role !== undefined || status !== undefined)) {
+    res.status(403).json({ error: "Only admin can change role or status" });
+    return;
+  }
 
   try {
     if (username) {
@@ -172,6 +195,8 @@ router.patch("/:id", async (req, res) => {
 
 // ── DELETE /api/users/:id ──────────────────────────────────────────────────────
 router.delete("/:id", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
 
@@ -193,6 +218,8 @@ router.delete("/:id", async (req, res) => {
 
 // ── PATCH /api/users/:id/permissions ──────────────────────────────────────────
 router.patch("/:id/permissions", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
 

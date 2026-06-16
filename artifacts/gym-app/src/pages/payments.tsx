@@ -112,6 +112,7 @@ type VchForm = {
   amount: string;
   currency: string;
   description: string;
+  category: string;
 };
 
 const emptyPayForm = (): PayForm => ({
@@ -134,6 +135,7 @@ const emptyVchForm = (): VchForm => ({
   amount: "",
   currency: "USD",
   description: "",
+  category: "",
 });
 
 // ─── Main component ────────────────────────────────────────────────────────
@@ -238,15 +240,15 @@ export default function CashBook() {
     });
   }, [filtered]);
 
-  // ── Running balance (oldest→newest across merged set) ──
+  // ── Running balance (oldest→newest, USD only to avoid mixed-currency error) ──
   const runningMap = useMemo(() => {
     const reversed = [...sorted].reverse();
-    let sum = 0;
+    let runningSum = 0;
     const map = new Map<string, number>();
     reversed.forEach((entry) => {
-      const usd = (entry.amountUsd as number | null) ?? entry.amount ?? 0;
-      sum += entry.direction === "in" ? usd : -usd;
-      map.set(`${entry._kind}-${entry.id}`, sum);
+      const usd = (entry.amountUsd as number | null) ?? 0;
+      runningSum += entry.direction === "in" ? usd : -usd;
+      map.set(`${entry._kind}-${entry.id}`, runningSum);
     });
     return map;
   }, [sorted]);
@@ -372,9 +374,10 @@ export default function CashBook() {
       paidTo: !isIn ? vchForm.paidTo || undefined : undefined,
       amount: parseFloat(vchForm.amount) || 0,
       currency: vchForm.currency as "USD" | "CDF",
-      exchangeRate: 1,
+      exchangeRate: settings?.usdToCdfRate ?? 1,
       description: vchForm.description,
       account: "cash",
+      ...(vchForm.category ? { category: vchForm.category } : {}),
     };
     if (!payload.amount) {
       toast({ title: "Amount is required", variant: "destructive" });
@@ -1240,6 +1243,26 @@ export default function CashBook() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Category</Label>
+              <Select
+                value={vchForm.category}
+                onValueChange={(v) => setVchForm({ ...vchForm, category: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="membership">Membership</SelectItem>
+                  <SelectItem value="expense">Expense</SelectItem>
+                  <SelectItem value="payroll">Payroll</SelectItem>
+                  <SelectItem value="stock_purchase">Stock Purchase</SelectItem>
+                  <SelectItem value="product_sale">Product Sale</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-1.5">

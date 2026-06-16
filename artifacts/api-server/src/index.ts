@@ -59,6 +59,20 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS daily_summary_hour INTEGER NOT NULL DEFAULT 21
     `);
 
+    // Idempotent performance indexes
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_payments_member_id      ON payments(member_id);
+      CREATE INDEX IF NOT EXISTS idx_payments_payment_date   ON payments(payment_date);
+      CREATE INDEX IF NOT EXISTS idx_payments_status         ON payments(status);
+      CREATE INDEX IF NOT EXISTS idx_check_ins_member_id     ON check_ins(member_id);
+      CREATE INDEX IF NOT EXISTS idx_members_plan_id         ON members(plan_id);
+      CREATE INDEX IF NOT EXISTS idx_members_expiry_date     ON members(expiry_date);
+      CREATE INDEX IF NOT EXISTS idx_commissions_staff_id    ON commissions(staff_employee_id);
+      CREATE INDEX IF NOT EXISTS idx_commissions_member_id   ON commissions(member_id);
+      CREATE INDEX IF NOT EXISTS idx_activity_logs_user_id   ON activity_logs(user_id);
+      CREATE INDEX IF NOT EXISTS idx_cash_ledger_source_id   ON cash_ledger(source_id)
+    `);
+
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");
