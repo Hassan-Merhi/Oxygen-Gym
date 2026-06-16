@@ -145,7 +145,8 @@ export default function CashBook() {
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
 
-  const canManage = me?.role === "admin" || me?.permissions?.viewAccounting;
+  const canAdd = true; // anyone with Cash Book page access can add entries
+  const canManage = me?.role === "admin" || me?.permissions?.viewAccounting; // edit/delete restricted
 
   // ── Unified filter state ──
   const [search, setSearch] = useState("");
@@ -545,7 +546,7 @@ export default function CashBook() {
               <Printer className="w-4 h-4" />
               Export PDF
             </Button>
-            {canManage && (
+            {canAdd && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button className="gap-2">

@@ -140,7 +140,8 @@ export default function Vouchers() {
   const createMutation = useCreateVoucher();
   const deleteMutation = useDeleteVoucher();
 
-  const canManage = me?.role === "admin" || me?.permissions?.viewAccounting;
+  const canAdd = true; // anyone with Vouchers page access can create
+  const canManage = me?.role === "admin" || me?.permissions?.viewAccounting; // delete restricted
 
   const membersQuery = useListMembers({ page: 1, limit: 200, status: "active" });
   const membersList = membersQuery.data?.items ?? [];
@@ -260,7 +261,7 @@ export default function Vouchers() {
         icon={Receipt}
         iconClass="bg-amber-500/10 text-amber-600"
         title={t("vch.title")}
-        actions={canManage ? (
+        actions={canAdd ? (
           <Button onClick={() => { setForm(emptyForm()); setModalOpen(true); }} className="gap-2">
             <Plus className="w-4 h-4" />
             {t("vch.newVoucher")}
