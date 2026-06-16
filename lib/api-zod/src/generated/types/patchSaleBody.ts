@@ -6,7 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { PatchSaleBodyCurrency } from './patchSaleBodyCurrency';
+import type { PatchSaleBodyItemsItem } from './patchSaleBodyItemsItem';
 
 export interface PatchSaleBody {
-  currency: PatchSaleBodyCurrency;
+  currency?: PatchSaleBodyCurrency;
+  notes?: string | null;
+  saleDate?: string | null;
+  items?: PatchSaleBodyItemsItem[] | null;
 }

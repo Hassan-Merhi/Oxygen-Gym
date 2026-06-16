@@ -270,7 +270,7 @@ router.post("/", async (req: Request, res: Response) => {
   res.status(201).json({ ...sale, paymentId: payment.id });
 });
 
-// ── Patch sale (admin: correct currency) ───────────────────────────────────────
+// ── Patch sale (admin: edit currency, date, notes, item prices) ───────────────
 router.patch("/:id", async (req: Request, res: Response) => {
   const user = (req as any).__gymproUser as { role?: string } | undefined;
   if (user?.role !== "admin") {
@@ -282,10 +282,10 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
   const parsed = PatchSaleBodySchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "currency must be USD or CDF" });
+    res.status(400).json({ error: "Invalid patch body", details: parsed.error.issues });
     return;
   }
-  const { currency } = parsed.data;
+  const { currency, notes, saleDate, items: patchItems } = parsed.data;
 
   const [existing] = await db.select().from(salesTable).where(eq(salesTable.id, id));
   if (!existing) {
@@ -293,23 +293,56 @@ router.patch("/:id", async (req: Request, res: Response) => {
     return;
   }
 
-  // Recalculate totalAmount in the new currency using the sale's own exchange rate
   const rate = existing.exchangeRate ?? 1;
-  const totalAmountUsd = existing.totalAmountUsd ?? existing.totalAmount ?? 0;
-  const newTotalAmount = currency === "CDF" ? totalAmountUsd * rate : totalAmountUsd;
+  const existingItems = (existing.items ?? []) as SaleItem[];
+
+  // Recalculate items when prices/discounts are edited
+  let newItems: SaleItem[] = existingItems;
+  let newTotalAmount: number = existing.totalAmount ?? 0;
+  let newTotalDiscount: number = existing.totalDiscount ?? 0;
+  let newTotalCost: number = existing.totalCost ?? 0;
+  let newTotalProfit: number = existing.totalProfit ?? 0;
+  let newTotalAmountUsd: number = existing.totalAmountUsd ?? existing.totalAmount ?? 0;
+
+  if (patchItems && patchItems.length > 0) {
+    newItems = existingItems.map((item) => {
+      const patch = patchItems.find((p) => p.productId === item.productId);
+      if (!patch) return item;
+      const lineTotal = (patch.unitPrice - patch.discount) * item.quantity;
+      const lineProfit = lineTotal - (item.costPrice ?? 0) * item.quantity;
+      return { ...item, unitPrice: patch.unitPrice, discount: patch.discount, lineTotal, profit: lineProfit };
+    });
+
+    const targetCur = currency ?? existing.currency;
+    newTotalAmount = newItems.reduce((s, i) => s + (i.lineTotal ?? 0), 0);
+    newTotalDiscount = newItems.reduce((s, i) => s + (i.discount ?? 0) * i.quantity, 0);
+    newTotalCost = newItems.reduce((s, i) => s + (i.costPrice ?? 0) * i.quantity, 0);
+    newTotalProfit = newTotalAmount - newTotalCost;
+    newTotalAmountUsd = targetCur === "CDF" ? newTotalAmount / rate : newTotalAmount;
+  } else if (currency && currency !== existing.currency) {
+    // Currency-only change: convert existing total
+    const usd = existing.totalAmountUsd ?? existing.totalAmount ?? 0;
+    newTotalAmount = currency === "CDF" ? usd * rate : usd;
+    newTotalAmountUsd = usd;
+  }
 
   const [updated] = await db
     .update(salesTable)
-    .set({ currency, totalAmount: newTotalAmount })
+    .set({
+      items: newItems,
+      totalAmount: newTotalAmount,
+      totalDiscount: newTotalDiscount,
+      totalCost: newTotalCost,
+      totalProfit: newTotalProfit,
+      totalAmountUsd: newTotalAmountUsd,
+      ...(currency !== undefined && { currency }),
+      ...(notes !== undefined && { notes }),
+      ...(saleDate !== undefined && { saleDate: new Date(saleDate as string) }),
+    })
     .where(eq(salesTable.id, id))
     .returning();
 
   await logActivity(req, "sale_updated", "sale", id, {
-    field: "currency",
-    from: existing.currency,
-    to: currency,
-    oldAmount: existing.totalAmount,
-    newAmount: newTotalAmount,
     updatedBy: callerName(req),
   });
 

@@ -1001,8 +1001,17 @@ export const PatchSaleBodyCurrency = {
   CDF: 'CDF',
 } as const;
 
+export type PatchSaleBodyItemsItem = {
+  productId: number;
+  unitPrice: number;
+  discount: number;
+};
+
 export interface PatchSaleBody {
-  currency: PatchSaleBodyCurrency;
+  currency?: PatchSaleBodyCurrency;
+  notes?: string | null;
+  saleDate?: string | null;
+  items?: PatchSaleBodyItemsItem[] | null;
 }
 
 export interface VoidSaleBody {

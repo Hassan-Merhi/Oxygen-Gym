@@ -404,6 +404,189 @@ function SaleDetailDialog({
   );
 }
 
+// ─── Sale Edit Dialog ──────────────────────────────────────────────────────────
+function SaleEditDialog({
+  saleId,
+  open,
+  onClose,
+  onSaved,
+  t,
+}: {
+  saleId: number | null;
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+  t: (k: string) => string;
+}) {
+  const { data: saleRaw } = useGetSale(saleId ?? 0, { query: { enabled: !!saleId && open, queryKey: ["getSaleEdit", saleId] } });
+  const patchSaleMut = usePatchSale();
+  const { toast } = useToast();
+
+  const sale = saleRaw as unknown as Record<string, unknown> | undefined;
+  const originalItems = ((sale?.items ?? []) as SaleItemData[]);
+  const saleCur = (sale?.currency as "USD" | "CDF") ?? "USD";
+  const sym = saleCur === "CDF" ? "FC" : "$";
+  const fmt = (n: number) => saleCur === "CDF" ? `FC ${n % 1 === 0 ? n : n.toFixed(2)}` : `$${n % 1 === 0 ? n : n.toFixed(2)}`;
+
+  const [currency, setCurrency] = useState<"USD" | "CDF">("USD");
+  const [saleDate, setSaleDate] = useState("");
+  const [notes, setNotes] = useState("");
+  const [editItems, setEditItems] = useState<Array<{ productId: number; productName: string; quantity: number; unitPrice: number; discount: number; costPrice: number }>>([]);
+
+  // Populate form when sale data loads
+  useEffect(() => {
+    if (!sale) return;
+    setCurrency((sale.currency as "USD" | "CDF") ?? "USD");
+    setSaleDate(sale.saleDate ? new Date(sale.saleDate as string).toISOString().slice(0, 10) : "");
+    setNotes((sale.notes as string) ?? "");
+    setEditItems(originalItems.map((i) => ({
+      productId: i.productId,
+      productName: i.productName,
+      quantity: i.quantity,
+      unitPrice: i.unitPrice,
+      discount: i.discount ?? 0,
+      costPrice: i.costPrice ?? 0,
+    })));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saleRaw]);
+
+  const liveTotal = editItems.reduce((s, i) => s + (i.unitPrice - i.discount) * i.quantity, 0);
+  const liveDiscount = editItems.reduce((s, i) => s + i.discount * i.quantity, 0);
+
+  const handleSave = async () => {
+    if (!saleId) return;
+    try {
+      await patchSaleMut.mutateAsync({
+        id: saleId,
+        data: {
+          currency,
+          notes: notes || null,
+          saleDate: saleDate || null,
+          items: editItems.map((i) => ({ productId: i.productId, unitPrice: i.unitPrice, discount: i.discount })),
+        },
+      });
+      toast({ title: "Sale updated" });
+      onSaved();
+      onClose();
+    } catch {
+      toast({ title: "Failed to save changes", variant: "destructive" });
+    }
+  };
+
+  if (!sale) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="h-5 w-5" />
+            Edit Sale — {sale.saleNumber as string}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Meta fields */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>{t("sales.currency")}</Label>
+              <Select value={currency} onValueChange={(v) => setCurrency(v as "USD" | "CDF")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="USD">USD ($)</SelectItem>
+                  <SelectItem value="CDF">CDF (FC)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Date</Label>
+              <Input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Notes</Label>
+            <Textarea rows={2} value={notes} placeholder="Optional notes…" onChange={(e) => setNotes(e.target.value)} />
+          </div>
+
+          {/* Items */}
+          <div>
+            <Label className="mb-2 block font-semibold">Items</Label>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Product</TableHead>
+                  <TableHead className="text-center w-12">Qty</TableHead>
+                  <TableHead className="text-right w-32">Unit Price ({sym})</TableHead>
+                  <TableHead className="text-right w-32">Discount ({sym})</TableHead>
+                  <TableHead className="text-right w-24">Line Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {editItems.map((item, idx) => {
+                  const lineTotal = (item.unitPrice - item.discount) * item.quantity;
+                  return (
+                    <TableRow key={item.productId}>
+                      <TableCell className="text-sm">{item.productName}</TableCell>
+                      <TableCell className="text-center text-muted-foreground">{item.quantity}</TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="text-right h-8 w-full"
+                          value={item.unitPrice}
+                          onChange={(e) => {
+                            const updated = [...editItems];
+                            updated[idx] = { ...item, unitPrice: parseFloat(e.target.value) || 0 };
+                            setEditItems(updated);
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="text-right h-8 w-full"
+                          value={item.discount}
+                          onChange={(e) => {
+                            const updated = [...editItems];
+                            updated[idx] = { ...item, discount: parseFloat(e.target.value) || 0 };
+                            setEditItems(updated);
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell className="text-right font-semibold text-sm">{fmt(lineTotal)}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Live totals preview */}
+          <div className="flex flex-col items-end gap-1 text-sm border-t pt-3">
+            {liveDiscount > 0 && (
+              <div className="flex gap-6"><span className="text-muted-foreground">Discount:</span><span className="text-destructive">-{fmt(liveDiscount)}</span></div>
+            )}
+            <div className="flex gap-6 font-bold text-base">
+              <span>New Total:</span><span>{fmt(liveTotal)}</span>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
+          <Button onClick={handleSave} disabled={patchSaleMut.isPending}>
+            {patchSaleMut.isPending ? t("common.loading") : t("common.save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function Sales() {
   const { t } = useI18n();
@@ -458,8 +641,6 @@ export default function Sales() {
   const [voidReason, setVoidReason] = useState("");
   const [voidingSale, setVoidingSale] = useState<Record<string, unknown> | null>(null);
   const [editSaleId, setEditSaleId] = useState<number | null>(null);
-  const [editCurrency, setEditCurrency] = useState<"USD" | "CDF">("USD");
-  const [editSale, setEditSale] = useState<Record<string, unknown> | null>(null);
 
   const exchangeRate = (settings?.usdToCdfRate as number) ?? 2800;
 
@@ -474,7 +655,6 @@ export default function Sales() {
   // Mutations
   const completeSaleMut = useCompleteSale();
   const voidSaleMut = useVoidSale();
-  const patchSaleMut = usePatchSale();
 
   // Computed cart totals
   const toSaleCurrency = useCallback((price: number, fromCurrency: string) => {
@@ -682,19 +862,6 @@ export default function Sales() {
       toast({ title: msg, variant: "destructive" });
     } finally {
       setCompleting(false);
-    }
-  };
-
-  // ── Patch sale currency (admin only) ──────────────────────────────────────
-  const handlePatchCurrency = async () => {
-    if (!editSaleId) return;
-    try {
-      await patchSaleMut.mutateAsync({ id: editSaleId, data: { currency: editCurrency } });
-      toast({ title: t("sales.toast.currencyUpdated") });
-      queryClient.invalidateQueries();
-      setEditSaleId(null);
-    } catch {
-      toast({ title: t("sales.toast.updateFailed"), variant: "destructive" });
     }
   };
 
@@ -982,7 +1149,7 @@ export default function Sales() {
                       <Printer className="h-4 w-4" />
                     </Button>
                     {isAdmin && sale.status !== "voided" && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditSaleId(sale.id as number); setEditCurrency((sale.currency as "USD" | "CDF") ?? "USD"); setEditSale(sale); }}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditSaleId(sale.id as number)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
                     )}
@@ -1060,8 +1227,8 @@ export default function Sales() {
                           {isAdmin && sale.status !== "voided" && (
                             <Button
                               variant="ghost" size="icon" className="h-7 w-7"
-                              title={t("sales.editCurrency")}
-                              onClick={() => { setEditSaleId(sale.id as number); setEditCurrency((sale.currency as "USD" | "CDF") ?? "USD"); setEditSale(sale); }}
+                              title="Edit sale"
+                              onClick={() => setEditSaleId(sale.id as number)}
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
@@ -1113,57 +1280,14 @@ export default function Sales() {
         t={t}
       />
 
-      {/* ── Edit Sale Currency Dialog (admin only) ─────────────────────────── */}
-      <Dialog open={!!editSaleId} onOpenChange={(o) => { if (!o) { setEditSaleId(null); setEditSale(null); } }}>
-        <DialogContent className="w-[95vw] max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Pencil className="h-4 w-4" />
-              {t("sales.editCurrency")}
-            </DialogTitle>
-          </DialogHeader>
-          {editSale && (
-            <div className="rounded-md bg-muted/50 px-3 py-2 text-sm space-y-1 border">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">{t("sales.history.number")}</span>
-                <span className="font-medium">{(editSale.saleNumber as string) ?? `#${editSale.id}`}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">{t("sales.history.date")}</span>
-                <span>{new Date(editSale.saleDate as string).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">{t("sales.history.total")}</span>
-                <span className="font-semibold">{(editSale.currency as string) === "CDF" ? "FC" : "$"} {(editSale.totalAmount as number)?.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">{t("sales.history.status")}</span>
-                <Badge variant={(editSale.status as string) === "voided" ? "destructive" : "default"} className="text-xs">
-                  {t(`sales.status.${editSale.status as string}`)}
-                </Badge>
-              </div>
-            </div>
-          )}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">{t("sales.currency")}</Label>
-            <Select value={editCurrency} onValueChange={(v) => setEditCurrency(v as "USD" | "CDF")}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="USD">USD ($)</SelectItem>
-                <SelectItem value="CDF">CDF (FC)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setEditSaleId(null); setEditSale(null); }}>{t("common.cancel")}</Button>
-            <Button onClick={handlePatchCurrency} disabled={patchSaleMut.isPending}>
-              {patchSaleMut.isPending ? t("common.loading") : t("common.save")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* ── Edit Sale Dialog (admin only) ──────────────────────────────────── */}
+      <SaleEditDialog
+        saleId={editSaleId}
+        open={!!editSaleId}
+        onClose={() => setEditSaleId(null)}
+        onSaved={() => queryClient.invalidateQueries()}
+        t={t}
+      />
 
       {/* ── Void Confirm Dialog ────────────────────────────────────────────── */}
       <AlertDialog open={!!voidSaleId} onOpenChange={(o) => { if (!o) { setVoidSaleId(null); setVoidReason(""); setVoidingSale(null); } }}>

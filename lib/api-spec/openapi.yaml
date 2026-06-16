@@ -3089,7 +3089,22 @@ components:
         currency:
           type: string
           enum: [USD, CDF]
-      required: [currency]
+        notes:
+          type: string
+          nullable: true
+        saleDate:
+          type: string
+          nullable: true
+        items:
+          type: array
+          nullable: true
+          items:
+            type: object
+            properties:
+              productId: { type: integer }
+              unitPrice: { type: number }
+              discount: { type: number }
+            required: [productId, unitPrice, discount]
 
     VoidSaleBody:
       type: object
