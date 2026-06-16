@@ -286,10 +286,17 @@ export default function CashBook() {
       setTimeout(fn, ms);
   }
 
+  const isAdmin = me?.role === "admin";
+
   // ── Payment handlers ──
   function openPayCreate() {
     setPayEditId(null);
-    setPayForm(emptyPayForm());
+    // Staff are locked to expense/out — prefill accordingly
+    if (!isAdmin) {
+      setPayForm({ ...emptyPayForm(), direction: "out", category: "expense" });
+    } else {
+      setPayForm(emptyPayForm());
+    }
     setPayModal(true);
   }
   function openPayEdit(item: PayEntry) {
@@ -1017,73 +1024,87 @@ export default function CashBook() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-1">
-            <div className="space-y-1.5">
-              <Label>Type</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { v: "in", label: "Money In", icon: ArrowDownCircle },
-                  { v: "out", label: "Money Out", icon: ArrowUpCircle },
-                ].map(({ v, label, icon: Icon }) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setPayForm({ ...payForm, direction: v })}
-                    className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all ${
-                      payForm.direction === v
-                        ? v === "in"
-                          ? "bg-emerald-50 border-emerald-400 text-emerald-700"
-                          : "bg-rose-50 border-rose-400 text-rose-700"
-                        : "bg-muted/30 border-border text-muted-foreground hover:bg-muted"
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5 shrink-0" />
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Category</Label>
-              <Select
-                value={payForm.category}
-                onValueChange={(v) => setPayForm({ ...payForm, category: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAY_CATEGORIES.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {t(`pay.cat.${c}`)}
-                    </SelectItem>
+            {/* Type — locked to Money Out for staff */}
+            {isAdmin ? (
+              <div className="space-y-1.5">
+                <Label>Type</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { v: "in", label: "Money In", icon: ArrowDownCircle },
+                    { v: "out", label: "Money Out", icon: ArrowUpCircle },
+                  ].map(({ v, label, icon: Icon }) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setPayForm({ ...payForm, direction: v })}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+                        payForm.direction === v
+                          ? v === "in"
+                            ? "bg-emerald-50 border-emerald-400 text-emerald-700"
+                            : "bg-rose-50 border-rose-400 text-rose-700"
+                          : "bg-muted/30 border-border text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5 shrink-0" />
+                      {label}
+                    </button>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-rose-400 bg-rose-50 text-rose-700 text-sm font-medium w-full">
+                <ArrowUpCircle className="w-3.5 h-3.5 shrink-0" />
+                Money Out — Expense
+              </div>
+            )}
 
-            <div className="grid grid-cols-2 gap-3">
+            {/* Category — locked to Expense for staff */}
+            {isAdmin && (
               <div className="space-y-1.5">
-                <Label>Name / Person</Label>
-                <Input
-                  placeholder="Member, vendor…"
-                  value={payForm.linkedEntityName}
-                  onChange={(e) =>
-                    setPayForm({ ...payForm, linkedEntityName: e.target.value })
-                  }
-                />
+                <Label>Category</Label>
+                <Select
+                  value={payForm.category}
+                  onValueChange={(v) => setPayForm({ ...payForm, category: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAY_CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {t(`pay.cat.${c}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label>Date</Label>
-                <Input
-                  type="date"
-                  value={payForm.paymentDate}
-                  onChange={(e) =>
-                    setPayForm({ ...payForm, paymentDate: e.target.value })
-                  }
-                />
+            )}
+
+            {/* Name / Person — admin only */}
+            {isAdmin && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Name / Person</Label>
+                  <Input
+                    placeholder="Member, vendor…"
+                    value={payForm.linkedEntityName}
+                    onChange={(e) =>
+                      setPayForm({ ...payForm, linkedEntityName: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Date</Label>
+                  <Input
+                    type="date"
+                    value={payForm.paymentDate}
+                    onChange={(e) =>
+                      setPayForm({ ...payForm, paymentDate: e.target.value })
+                    }
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2 space-y-1.5">
