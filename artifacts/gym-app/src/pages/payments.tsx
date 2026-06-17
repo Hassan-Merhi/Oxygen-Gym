@@ -241,15 +241,17 @@ export default function CashBook() {
     });
   }, [filtered]);
 
-  // ── Running balance (oldest→newest, USD only to avoid mixed-currency error) ──
+  // ── Running balance (oldest→newest, tracking USD and CDF separately) ──
   const runningMap = useMemo(() => {
     const reversed = [...sorted].reverse();
-    let runningSum = 0;
-    const map = new Map<string, number>();
+    let sumUsd = 0, sumCdf = 0;
+    const map = new Map<string, { usd: number; cdf: number }>();
     reversed.forEach((entry) => {
-      const usd = (entry.amountUsd as number | null) ?? 0;
-      runningSum += entry.direction === "in" ? usd : -usd;
-      map.set(`${entry._kind}-${entry.id}`, runningSum);
+      const u = (entry.amountUsd as number | null) ?? 0;
+      const c = (entry.amountCdf as number | null) ?? 0;
+      if (entry.direction === "in") { sumUsd += u; sumCdf += c; }
+      else { sumUsd -= u; sumCdf -= c; }
+      map.set(`${entry._kind}-${entry.id}`, { usd: sumUsd, cdf: sumCdf });
     });
     return map;
   }, [sorted]);
@@ -463,7 +465,7 @@ export default function CashBook() {
 
     const rows = sorted.map((entry, idx) => {
       const key = `${entry._kind}-${entry.id}`;
-      const bal = runningMap.get(key) ?? 0;
+      const balObj = runningMap.get(key) ?? { usd: 0, cdf: 0 };
       const isIn = entry.direction === "in";
       const sign = isIn ? "+" : "−";
       const color = isIn ? "#059669" : "#dc2626";
@@ -489,7 +491,7 @@ export default function CashBook() {
         <td>${typeStr}</td>
         <td>${party}</td>
         <td style="text-align:right;color:${color};font-weight:600">${sign}${fmtAmt(entry.amount)} ${entry.currency}</td>
-        <td style="text-align:right;font-weight:600;color:${bal < 0 ? "#dc2626" : "#111"}">${bal >= 0 ? "" : "−"}$${fmtAmt(Math.abs(bal))}</td>
+        <td style="text-align:right;font-weight:600;color:${balObj.usd < 0 ? "#dc2626" : "#111"}">$${fmtAmt(Math.abs(balObj.usd))} / FC ${Math.round(Math.abs(balObj.cdf)).toLocaleString()}</td>
         <td>${desc}</td>
       </tr>`;
     }).join("");
@@ -701,14 +703,18 @@ export default function CashBook() {
             </div>
           ) : pageItems.map((entry) => {
             const key = `${entry._kind}-${entry.id}`;
-            const bal = runningMap.get(key) ?? 0;
+            const bal = runningMap.get(key) ?? { usd: 0, cdf: 0 };
             const isIn = entry.direction === "in";
             const date = entry._kind === "payment" ? (entry as PayEntry).paymentDate : (entry as VchEntry).voucherDate;
             const party = entry._kind === "payment" ? (entry as PayEntry).linkedEntityName : ((entry as VchEntry).paidTo ?? (entry as VchEntry).receivedFrom ?? (entry as VchEntry).linkedEntityName);
+            const desc = entry._kind === "payment" ? (entry as PayEntry).notes : (entry as VchEntry).description;
             return (
-              <div key={key} className="flex items-start gap-3 px-4 py-3">
+              <div key={key} className="flex items-start gap-3 px-4 py-3.5 border-b border-border/30 last:border-0">
+                {/* Color stripe */}
+                <div className={`w-0.5 self-stretch rounded-full shrink-0 ${isIn ? "bg-emerald-400" : "bg-rose-400"}`} />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-xs text-muted-foreground">{fmtDate(date)}</span>
                     {entry._kind === "payment" ? (
                       <DirBadge dir={(entry as PayEntry).direction} t={t} />
                     ) : (
@@ -717,15 +723,22 @@ export default function CashBook() {
                         {t(`vch.type.${(entry as VchEntry).voucherType}`)}
                       </Badge>
                     )}
-                    <span className="text-xs text-muted-foreground">{fmtDate(date)}</span>
                   </div>
-                  {party && <p className="text-xs text-muted-foreground mt-0.5 truncate">{party}</p>}
+                  {party && <p className="text-sm font-medium truncate">{party}</p>}
+                  {desc && <p className="text-xs text-muted-foreground truncate mt-0.5">{desc}</p>}
                 </div>
                 <div className="text-right shrink-0">
                   <p className={`font-bold tabular-nums text-sm ${isIn ? "text-emerald-600" : "text-rose-600"}`}>
-                    {isIn ? "+" : "−"}{fmtAmt(entry.amount)} <span className="text-xs font-normal">{entry.currency}</span>
+                    {isIn ? "+" : "−"}{fmtAmt(entry.amount)} <span className="text-xs font-normal opacity-70">{entry.currency}</span>
                   </p>
-                  <p className={`text-xs tabular-nums ${bal >= 0 ? "text-muted-foreground" : "text-rose-600"}`}>Bal: ${fmtAmt(bal)}</p>
+                  <p className={`text-xs tabular-nums mt-0.5 ${bal.usd >= 0 ? "text-muted-foreground" : "text-rose-600"}`}>
+                    ${fmtAmt(bal.usd)}
+                  </p>
+                  {bal.cdf !== 0 && (
+                    <p className={`text-xs tabular-nums ${bal.cdf >= 0 ? "text-muted-foreground" : "text-rose-600"}`}>
+                      FC {Math.round(bal.cdf).toLocaleString()}
+                    </p>
+                  )}
                 </div>
                 {canManage && (
                   <div className="flex gap-1 shrink-0 mt-0.5">
@@ -760,151 +773,112 @@ export default function CashBook() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border/60 bg-muted/20">
-                <th className="text-left px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Date</th>
-                <th className="text-left px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Type</th>
-                <th className="text-left px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground hidden md:table-cell">From / To</th>
-                <th className="text-right px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Amount</th>
-                <th className="text-right px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Balance</th>
-                <th className="text-left px-5 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground hidden lg:table-cell">Description</th>
-                {canManage && <th className="px-5 py-3 w-24" />}
+                <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground w-28">Date</th>
+                <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Details</th>
+                <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground w-36">Amount</th>
+                <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground w-44">Running Balance</th>
+                {canManage && <th className="px-4 py-3 w-20" />}
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/40">
+            <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-muted-foreground">
-                    Loading…
-                  </td>
+                  <td colSpan={5} className="text-center py-12 text-muted-foreground">Loading…</td>
                 </tr>
               ) : pageItems.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-16">
+                  <td colSpan={5} className="text-center py-16">
                     <Banknote className="w-9 h-9 mx-auto text-muted-foreground/30 mb-2" />
                     <p className="text-muted-foreground font-medium">No entries found</p>
-                    <p className="text-muted-foreground/50 text-xs mt-0.5">
-                      Try adjusting your filters
-                    </p>
+                    <p className="text-muted-foreground/50 text-xs mt-0.5">Try adjusting your filters</p>
                   </td>
                 </tr>
               ) : (
                 pageItems.map((entry) => {
                   const key = `${entry._kind}-${entry.id}`;
-                  const bal = runningMap.get(key) ?? 0;
+                  const bal = runningMap.get(key) ?? { usd: 0, cdf: 0 };
                   const isIn = entry.direction === "in";
-                  const date =
-                    entry._kind === "payment"
-                      ? (entry as PayEntry).paymentDate
-                      : (entry as VchEntry).voucherDate;
-                  const party =
-                    entry._kind === "payment"
-                      ? (entry as PayEntry).linkedEntityName
-                      : ((entry as VchEntry).paidTo ??
-                          (entry as VchEntry).receivedFrom ??
-                          (entry as VchEntry).linkedEntityName);
-                  const description =
-                    entry._kind === "payment"
-                      ? (entry as PayEntry).notes
-                      : (entry as VchEntry).description;
+                  const date = entry._kind === "payment" ? (entry as PayEntry).paymentDate : (entry as VchEntry).voucherDate;
+                  const party = entry._kind === "payment"
+                    ? (entry as PayEntry).linkedEntityName
+                    : ((entry as VchEntry).paidTo ?? (entry as VchEntry).receivedFrom ?? (entry as VchEntry).linkedEntityName);
+                  const description = entry._kind === "payment"
+                    ? (entry as PayEntry).notes
+                    : (entry as VchEntry).description;
 
                   return (
-                    <tr
-                      key={key}
-                      className="hover:bg-muted/20 transition-colors group"
-                    >
-                      <td className="px-5 py-3.5 whitespace-nowrap text-sm font-medium">
-                        {fmtDate(date)}
+                    <tr key={key} className="border-b border-border/30 hover:bg-muted/20 transition-colors group">
+                      {/* Date */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="text-xs text-muted-foreground font-medium">{fmtDate(date)}</span>
                       </td>
-                      <td className="px-5 py-3.5">
-                        {entry._kind === "payment" ? (
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <DirBadge dir={(entry as PayEntry).direction} t={t} />
-                            <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-medium">
-                              {t(`pay.cat.${(entry as PayEntry).category}`)}
-                            </span>
+
+                      {/* Details — badge + party + description */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-start gap-2.5">
+                          {/* Left color stripe */}
+                          <div className={`w-0.5 self-stretch rounded-full shrink-0 mt-0.5 ${isIn ? "bg-emerald-400" : "bg-rose-400"}`} />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                              {entry._kind === "payment" ? (
+                                <>
+                                  <DirBadge dir={(entry as PayEntry).direction} t={t} />
+                                  <span className="text-xs bg-muted/60 text-muted-foreground px-2 py-0.5 rounded-full font-medium">
+                                    {t(`pay.cat.${(entry as PayEntry).category}`)}
+                                  </span>
+                                </>
+                              ) : (
+                                <Badge className={`${isIn ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"} border-0 gap-1 text-xs`}>
+                                  {isIn ? <ArrowDownCircle className="w-3 h-3" /> : <ArrowUpCircle className="w-3 h-3" />}
+                                  {t(`vch.type.${(entry as VchEntry).voucherType}`)}
+                                </Badge>
+                              )}
+                            </div>
+                            {party && <p className="text-sm font-medium truncate max-w-xs">{party}</p>}
+                            {description && <p className="text-xs text-muted-foreground truncate max-w-xs mt-0.5">{description}</p>}
                           </div>
-                        ) : (
-                          <Badge
-                            className={`${isIn ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"} border-0 gap-1 text-xs`}
-                          >
-                            {isIn ? (
-                              <ArrowDownCircle className="w-3 h-3" />
-                            ) : (
-                              <ArrowUpCircle className="w-3 h-3" />
-                            )}
-                            {t(`vch.type.${(entry as VchEntry).voucherType}`)}
-                          </Badge>
-                        )}
+                        </div>
                       </td>
-                      <td className="px-5 py-3.5 hidden md:table-cell text-sm font-medium">
-                        {party ?? "—"}
-                      </td>
-                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                        <span
-                          className={`font-bold tabular-nums text-base ${isIn ? "text-emerald-600" : "text-rose-600"}`}
-                        >
-                          {isIn ? "+" : "−"}
-                          {fmtAmt(entry.amount)}
+
+                      {/* Amount */}
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <span className={`font-bold tabular-nums text-base ${isIn ? "text-emerald-600" : "text-rose-600"}`}>
+                          {isIn ? "+" : "−"}{fmtAmt(entry.amount)}
                         </span>
-                        <span className="ml-1.5 text-xs font-medium text-muted-foreground">
+                        <span className={`ml-1 text-xs font-semibold ${isIn ? "text-emerald-500" : "text-rose-500"} opacity-70`}>
                           {entry.currency}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                        <span
-                          className={`font-bold tabular-nums text-sm ${bal >= 0 ? "text-foreground" : "text-rose-600"}`}
-                        >
-                          ${fmtAmt(bal)}
-                        </span>
-                        <span className="ml-1 text-xs text-muted-foreground">
-                          USD
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 hidden lg:table-cell max-w-[200px]">
-                        <p className="text-sm text-muted-foreground truncate">
-                          {description ?? "—"}
+
+                      {/* Running Balance — USD + CDF */}
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <p className={`font-semibold tabular-nums text-sm ${bal.usd >= 0 ? "text-foreground" : "text-rose-600"}`}>
+                          ${fmtAmt(bal.usd)} <span className="text-xs font-normal text-muted-foreground">USD</span>
+                        </p>
+                        <p className={`text-xs tabular-nums mt-0.5 ${bal.cdf >= 0 ? "text-muted-foreground" : "text-rose-500"}`}>
+                          FC {Math.round(bal.cdf).toLocaleString()} <span className="opacity-70">CDF</span>
                         </p>
                       </td>
+
+                      {/* Actions */}
                       {canManage && (
-                        <td className="px-5 py-3.5">
+                        <td className="px-4 py-3">
                           <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                             {entry._kind === "payment" ? (
                               <>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => openPayEdit(entry as PayEntry)}
-                                >
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openPayEdit(entry as PayEntry)}>
                                   <Pencil className="w-3.5 h-3.5" />
                                 </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-destructive hover:text-destructive"
-                                  onClick={() => setPayDeleteId(entry.id)}
-                                  disabled={entry.status === "cancelled"}
-                                >
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setPayDeleteId(entry.id)} disabled={entry.status === "cancelled"}>
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
                               </>
                             ) : (
                               <>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => triggerPrint(entry.id)}
-                                  title="Print voucher"
-                                >
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => triggerPrint(entry.id)} title="Print voucher">
                                   <Printer className="w-3.5 h-3.5" />
                                 </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-destructive hover:text-destructive"
-                                  onClick={() => setVchDeleteId(entry.id)}
-                                  disabled={entry.status === "cancelled"}
-                                >
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setVchDeleteId(entry.id)} disabled={entry.status === "cancelled"}>
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
                               </>
