@@ -629,8 +629,8 @@ export default function Sales() {
 
   // Cart state
   const [cart, setCart] = useState<CartItem[]>([]);
-  const defaultCurrency = (settings?.defaultCurrency as "USD" | "CDF") ?? "USD";
-  const [saleCurrency, setSaleCurrency] = useState<"USD" | "CDF">(defaultCurrency);
+  const defaultCurrency = (settings?.defaultCurrency as "USD" | "CDF") ?? "CDF";
+  const [saleCurrency, setSaleCurrency] = useState<"USD" | "CDF">("CDF");
 
   // Sync default currency once settings load (they arrive async after mount).
   // Only update if cart is empty so we don't change mid-transaction.
