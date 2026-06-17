@@ -14,6 +14,7 @@ import {
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 import { appendLedgerEntry } from "../lib/ledger";
+import { postDoubleEntry } from "../lib/accounting";
 
 const router = Router();
 router.use(requireAuth());
@@ -30,8 +31,8 @@ async function getExchangeRate(): Promise<number> {
 function enrichProduct(p: typeof productsTable.$inferSelect, rate: number) {
   const sellingUsd = p.currency === "USD" ? p.sellingPrice : p.sellingPrice / rate;
   const costUsd = p.currency === "USD" ? p.costPrice : p.costPrice / rate;
-  const stockValueUsd = sellingUsd * p.quantity;   // retail value
-  const costValueUsd = costUsd * p.quantity;        // cost / COGS value (#17 fix)
+  const stockValueUsd = sellingUsd * p.quantity;
+  const costValueUsd = costUsd * p.quantity;
   const stockValueCdf = stockValueUsd * rate;
   const costValueCdf = costValueUsd * rate;
   const profitPerUnit = sellingUsd - costUsd;
@@ -105,7 +106,7 @@ router.get("/", async (req: Request, res: Response) => {
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-  let rows = await db
+  const rows = await db
     .select()
     .from(productsTable)
     .where(where)
@@ -276,6 +277,7 @@ router.post("/:id/purchases", async (req: Request, res: Response) => {
   const totalCostCdf = currency === "CDF" ? totalCostNum : totalCostNum * rate;
 
   const purchaseNumber = await getNextNumber("purchase");
+  const creator = callerName(req);
 
   const [purchase] = await db
     .insert(stockPurchasesTable)
@@ -294,7 +296,7 @@ router.post("/:id/purchases", async (req: Request, res: Response) => {
       notes: notes || null,
       paidFromCash: paidFromCash ? 1 : 0,
       purchaseDate: purchaseDate ? new Date(purchaseDate) : new Date(),
-      createdBy: callerName(req),
+      createdBy: creator,
     })
     .returning();
 
@@ -309,10 +311,11 @@ router.post("/:id/purchases", async (req: Request, res: Response) => {
     .set({ quantity: newQty, costPrice: newCostPrice })
     .where(eq(productsTable.id, productId));
 
-  // Cash ledger entry if paid from cash
+  // Cash ledger + accounting entries when paid from cash
   if (paidFromCash) {
+    const entryDate = purchaseDate ? new Date(purchaseDate) : new Date();
     await appendLedgerEntry({
-      entryDate: purchaseDate ? new Date(purchaseDate) : new Date(),
+      entryDate,
       sourceType: "stock_purchase",
       sourceNumber: purchaseNumber,
       sourceId: purchase.id,
@@ -321,8 +324,28 @@ router.post("/:id/purchases", async (req: Request, res: Response) => {
       currency,
       exchangeRate: rate,
       description: `Stock purchase: ${product.name} (${quantityAdded} units)`,
-      createdBy: callerName(req),
+      createdBy: creator,
     });
+
+    try {
+      await postDoubleEntry({
+        entryDate,
+        sourceType: "stock_purchase",
+        sourceId: purchase.id,
+        sourceNumber: purchaseNumber,
+        debitName: "Inventory",
+        debitType: "asset",
+        creditName: "Cash",
+        creditType: "asset",
+        amount: totalCostNum,
+        amountUsd: totalCostUsd,
+        amountCdf: totalCostCdf,
+        currency,
+        exchangeRate: rate,
+        description: `Stock purchase: ${product.name} (${quantityAdded} units)`,
+        createdBy: creator,
+      });
+    } catch { /* non-fatal */ }
   }
 
   await logActivity(req, "stock_purchase_added", "product", productId, {
@@ -353,5 +376,10 @@ router.get("/:id/history", async (req: Request, res: Response) => {
     .limit(100);
   res.json(entries);
 });
+
+// Suppress unused import warnings
+void sum;
+void lte;
+void count;
 
 export default router;

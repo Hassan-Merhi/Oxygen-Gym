@@ -8,10 +8,11 @@ import {
   paymentsTable,
   commissionsTable,
 } from "@workspace/db/schema";
-import { eq, and, ilike, desc, count, gte, lte, or, sum } from "drizzle-orm";
+import { eq, and, ilike, desc, count, gte, lte, or } from "drizzle-orm";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 import { appendLedgerEntry } from "../lib/ledger";
+import { postDoubleEntry, reverseEntries } from "../lib/accounting";
 
 const router = Router();
 router.use(requireAuth());
@@ -89,12 +90,10 @@ router.post("/", async (req: Request, res: Response) => {
   const deductionAmt = deduction ?? 0;
   const salCurrency = currency ?? employee.salaryCurrency ?? "USD";
 
-  // Auto-fetch pending commissions for this employee
   const pendingCommissions = await db
     .select()
     .from(commissionsTable)
     .where(and(eq(commissionsTable.staffEmployeeId, staffEmployeeId), eq(commissionsTable.status, "pending")));
-  // Convert each commission to salary currency before summing (#6 fix)
   const commissionBonus = pendingCommissions.reduce((total, c) => {
     const amt = c.amount ?? 0;
     const commCur = c.currency ?? salCurrency;
@@ -130,7 +129,6 @@ router.post("/", async (req: Request, res: Response) => {
     createdBy: creator,
   }).returning();
 
-  // Lock pending commissions to this payroll draft so they can't be double-counted (#14 fix)
   if (pendingCommissions.length > 0) {
     await db
       .update(commissionsTable)
@@ -159,45 +157,66 @@ router.patch("/:id/pay", async (req: Request, res: Response) => {
   const rate = await getExchangeRate();
   const creator = callerName(req);
   const netPayUsd = record.currency === "USD" ? record.netPay : record.netPay / rate;
+  const netPayCdf = record.currency === "CDF" ? record.netPay : record.netPay * rate;
 
-  // 1. Create payment record
+  // 1. Create payment record — use original currency/amount (not USD-converted)
   const paymentNumber = await getNextNumber("PAY");
   const [payment] = await db.insert(paymentsTable).values({
     paymentNumber,
     direction: "out",
     category: "payroll",
     type: "payroll",
-    amount: netPayUsd,
-    currency: "USD",
+    amount: record.netPay,
+    currency: record.currency,
     exchangeRate: rate,
     amountUsd: netPayUsd,
-    amountCdf: record.currency === "CDF" ? record.netPay : netPayUsd * rate,
+    amountCdf: netPayCdf,
     account: "cash",
     notes: `Payroll ${record.payrollNumber} — ${record.staffName}`,
     createdBy: creator,
     status: "completed",
   }).returning();
 
-  // 2. Cash ledger OUT
+  // 2. Cash ledger OUT — use original currency/amount
   await appendLedgerEntry({
     sourceType: "payroll",
     sourceNumber: record.payrollNumber ?? undefined,
     sourceId: record.id,
     direction: "out",
-    amount: netPayUsd,
-    currency: "USD",
+    amount: record.netPay,
+    currency: record.currency,
     exchangeRate: rate,
     description: `Payroll ${record.payrollNumber} — ${record.staffName}`,
     createdBy: creator,
   });
 
-  // 3. Mark linked commissions as paid
+  // 3. Double-entry accounting: Payroll Expense debit / Cash credit
+  try {
+    await postDoubleEntry({
+      sourceType: "payroll",
+      sourceId: record.id,
+      sourceNumber: record.payrollNumber ?? undefined,
+      debitName: "Payroll Expense",
+      debitType: "expense",
+      creditName: "Cash",
+      creditType: "asset",
+      amount: record.netPay,
+      amountUsd: netPayUsd,
+      amountCdf: netPayCdf,
+      currency: record.currency,
+      exchangeRate: rate,
+      description: `Payroll ${record.payrollNumber} — ${record.staffName}`,
+      createdBy: creator,
+    });
+  } catch { /* non-fatal */ }
+
+  // 4. Mark linked commissions as paid
   await db
     .update(commissionsTable)
     .set({ status: "paid", paidAt: new Date() })
     .where(and(eq(commissionsTable.payrollId, id), eq(commissionsTable.status, "pending")));
 
-  // 4. Update payroll record
+  // 5. Update payroll record
   const [updated] = await db.update(payrollTable).set({
     status: "paid",
     paidAt: new Date(),
@@ -229,24 +248,37 @@ router.patch("/:id/cancel", async (req: Request, res: Response) => {
   const rate = await getExchangeRate();
   const creator = callerName(req);
 
-  // If already paid, reverse the ledger and cancel the linked payment record (#5 fix)
   if (record.status === "paid") {
-    const netPayUsd = record.netPayUsd ?? (record.currency === "USD" ? record.netPay : record.netPay / rate);
+    const netPayAmt = record.netPay;
+    const netPayCur = record.currency;
+    const netPayUsd = record.netPayUsd ?? (netPayCur === "USD" ? netPayAmt : netPayAmt / rate);
+    const netPayCdf = netPayCur === "CDF" ? netPayAmt : netPayAmt * rate;
+
+    // Reverse ledger entry
     await appendLedgerEntry({
       sourceType: "payroll_reversal",
       sourceNumber: record.payrollNumber ?? undefined,
       sourceId: record.id,
       direction: "in",
-      amount: netPayUsd,
-      currency: "USD",
-      exchangeRate: rate,
+      amount: netPayAmt,
+      currency: netPayCur,
+      exchangeRate: record.exchangeRate ?? rate,
       description: `Reversal of payroll ${record.payrollNumber} — ${reason}`,
       createdBy: creator,
     });
-    // Cancel the payment record so it no longer shows in expense totals
+
+    // Reverse accounting entries
+    try {
+      await reverseEntries("payroll", record.id, "payroll_reversal", creator);
+    } catch { /* non-fatal */ }
+
+    // Cancel the payment record
     if (record.paymentId) {
       await db.update(paymentsTable).set({ status: "cancelled" }).where(eq(paymentsTable.id, record.paymentId));
     }
+
+    void netPayUsd;
+    void netPayCdf;
   }
 
   const [updated] = await db.update(payrollTable).set({

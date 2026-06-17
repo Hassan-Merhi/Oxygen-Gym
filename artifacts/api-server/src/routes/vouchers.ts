@@ -6,6 +6,7 @@ import { eq, and, ilike, or, gte, lte, count, isNull, desc } from "drizzle-orm";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 import { appendLedgerEntry } from "../lib/ledger";
+import { postDoubleEntry, reverseEntries, categoryAccountNames } from "../lib/accounting";
 
 const router = Router();
 router.use(requireAuth());
@@ -19,7 +20,6 @@ async function getExchangeRate(): Promise<number> {
   return s?.rate ?? 2800;
 }
 
-// direction by voucher type
 function voucherDirection(voucherType: string): "in" | "out" {
   return ["cash_receipt", "customer_payment"].includes(voucherType) ? "in" : "out";
 }
@@ -123,6 +123,33 @@ router.post("/", async (req: Request, res: Response) => {
     createdBy,
   });
 
+  // ── Double-entry accounting ──────────────────────────────────────────────
+  try {
+    const voucherCategory = direction === "in" ? "other" : "expense";
+    const { debitName, debitType, creditName, creditType } = categoryAccountNames(
+      voucherCategory,
+      direction,
+      body.account ?? "cash",
+      body.category,
+    );
+    await postDoubleEntry({
+      sourceType: "voucher",
+      sourceId: voucher.id,
+      sourceNumber: voucherNumber,
+      debitName,
+      debitType,
+      creditName,
+      creditType,
+      amount: body.amount,
+      amountUsd,
+      amountCdf,
+      currency: body.currency,
+      exchangeRate,
+      description: body.description,
+      createdBy,
+    });
+  } catch { /* non-fatal */ }
+
   await logActivity(req, "voucher_created", "voucher", voucher.id, {
     number: voucherNumber,
     type: body.voucherType,
@@ -167,20 +194,78 @@ router.patch("/:id", async (req: Request, res: Response) => {
   const [voucher] = await db.update(vouchersTable).set(update).where(eq(vouchersTable.id, id)).returning();
   if (!voucher) { res.status(404).json({ error: "Not found" }); return; }
 
+  // ── Ledger + accounting correction ──────────────────────────────────────
   const oldAmount = existing.amount ?? 0;
   const newAmount = (update.amount as number) ?? oldAmount;
   const newVoucherType = (update.voucherType as string) ?? existing.voucherType;
   const oldDir = voucherDirection(existing.voucherType);
   const newDir = voucherDirection(newVoucherType);
-  // Trigger ledger correction when amount OR direction (voucherType) changes
-  if ((oldAmount !== newAmount || oldDir !== newDir) && existing.status === "recorded") {
-    const rate = await getExchangeRate();
+  const newCurrency = (update.currency as string) ?? existing.currency;
+  const newExchangeRate = (update.exchangeRate as number) ?? existing.exchangeRate ?? await getExchangeRate();
+
+  const financialsChanged =
+    existing.status === "recorded" &&
+    (oldAmount !== newAmount ||
+     oldDir !== newDir ||
+     existing.currency !== newCurrency ||
+     Math.abs((existing.exchangeRate ?? 1) - newExchangeRate) > 0.0001);
+
+  if (financialsChanged) {
     if (oldAmount > 0) {
-      await appendLedgerEntry({ sourceType: "voucher_correction", sourceNumber: existing.voucherNumber ?? undefined, sourceId: id, direction: oldDir === "in" ? "out" : "in", amount: oldAmount, currency: existing.currency, exchangeRate: existing.exchangeRate ?? rate, description: `Correction: reversed voucher ${existing.voucherNumber ?? id}` });
+      await appendLedgerEntry({
+        sourceType: "voucher_correction",
+        sourceNumber: existing.voucherNumber ?? undefined,
+        sourceId: id,
+        direction: oldDir === "in" ? "out" : "in",
+        amount: oldAmount,
+        currency: existing.currency,
+        exchangeRate: existing.exchangeRate ?? newExchangeRate,
+        description: `Correction: reversed voucher ${existing.voucherNumber ?? id}`,
+      });
     }
     if (newAmount > 0) {
-      await appendLedgerEntry({ sourceType: "voucher_correction", sourceNumber: existing.voucherNumber ?? undefined, sourceId: id, direction: newDir, amount: newAmount, currency: (update.currency as string) ?? existing.currency, exchangeRate: (update.exchangeRate as number) ?? existing.exchangeRate ?? rate, description: `Correction: updated voucher ${existing.voucherNumber ?? id}` });
+      await appendLedgerEntry({
+        sourceType: "voucher_correction",
+        sourceNumber: existing.voucherNumber ?? undefined,
+        sourceId: id,
+        direction: newDir,
+        amount: newAmount,
+        currency: newCurrency,
+        exchangeRate: newExchangeRate,
+        description: `Correction: updated voucher ${existing.voucherNumber ?? id}`,
+      });
     }
+    // Reverse and repost accounting entries
+    try {
+      await reverseEntries("voucher", id, "voucher_correction", callerName(req));
+      if (newAmount > 0) {
+        const newAmountUsd = newCurrency === "USD" ? newAmount : newAmount / newExchangeRate;
+        const newAmountCdf = newCurrency === "CDF" ? newAmount : newAmount * newExchangeRate;
+        const voucherCategory = newDir === "in" ? "other" : "expense";
+        const { debitName, debitType, creditName, creditType } = categoryAccountNames(
+          voucherCategory,
+          newDir,
+          ((update.account as string) ?? existing.account) || "cash",
+          ((update.category as string) ?? existing.category) ?? undefined,
+        );
+        await postDoubleEntry({
+          sourceType: "voucher_correction",
+          sourceId: id,
+          sourceNumber: existing.voucherNumber ?? undefined,
+          debitName,
+          debitType,
+          creditName,
+          creditType,
+          amount: newAmount,
+          amountUsd: newAmountUsd,
+          amountCdf: newAmountCdf,
+          currency: newCurrency,
+          exchangeRate: newExchangeRate,
+          description: `Corrected voucher ${existing.voucherNumber ?? id}`,
+          createdBy: callerName(req),
+        });
+      }
+    } catch { /* non-fatal */ }
   }
 
   await logActivity(req, "voucher_edited", "voucher", id, { number: voucher.voucherNumber });
@@ -198,9 +283,21 @@ router.delete("/:id", async (req: Request, res: Response) => {
     .returning();
   if (!voucher) { res.status(404).json({ error: "Not found" }); return; }
   if (existing.status === "recorded" && (existing.amount ?? 0) > 0) {
-    const rate = await getExchangeRate();
+    const rate = existing.exchangeRate ?? await getExchangeRate();
     const dir = existing.direction as "in" | "out";
-    await appendLedgerEntry({ sourceType: "voucher_reversal", sourceNumber: existing.voucherNumber ?? undefined, sourceId: id, direction: dir === "in" ? "out" : "in", amount: existing.amount!, currency: existing.currency, exchangeRate: existing.exchangeRate ?? rate, description: `Cancelled voucher ${existing.voucherNumber ?? id}` });
+    await appendLedgerEntry({
+      sourceType: "voucher_reversal",
+      sourceNumber: existing.voucherNumber ?? undefined,
+      sourceId: id,
+      direction: dir === "in" ? "out" : "in",
+      amount: existing.amount!,
+      currency: existing.currency,
+      exchangeRate: rate,
+      description: `Cancelled voucher ${existing.voucherNumber ?? id}`,
+    });
+    try {
+      await reverseEntries("voucher", id, "voucher_reversal", callerName(req));
+    } catch { /* non-fatal */ }
   }
   await logActivity(req, "voucher_archived", "voucher", id, { number: voucher.voucherNumber });
   res.json({ ok: true });

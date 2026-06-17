@@ -5,6 +5,7 @@ import { db } from "@workspace/db";
 import { settingsTable } from "@workspace/db/schema";
 import { sql } from "drizzle-orm";
 import { sendDailySummaryNow } from "./lib/whatsapp";
+import { seedDefaultAccounts } from "./lib/accounting";
 
 const rawPort = process.env["PORT"];
 
@@ -30,14 +31,11 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS coach_name text
     `);
 
-    // Add cash_account_id column to members if missing
     await db.execute(sql`
       ALTER TABLE members
         ADD COLUMN IF NOT EXISTS cash_account_id integer
     `);
 
-    // Back-fill payment_date to match the member's start_date for all membership
-    // payments where the dates differ (handles historical entries recorded on today's date).
     const backfill = await db.execute(sql`
       UPDATE payments
       SET payment_date = m.start_date
@@ -59,7 +57,6 @@ async function runStartupMigrations() {
         ADD COLUMN IF NOT EXISTS daily_summary_hour INTEGER NOT NULL DEFAULT 21
     `);
 
-    // Idempotent performance indexes
     await db.execute(sql`
       CREATE INDEX IF NOT EXISTS idx_payments_member_id      ON payments(member_id);
       CREATE INDEX IF NOT EXISTS idx_payments_payment_date   ON payments(payment_date);
@@ -73,10 +70,34 @@ async function runStartupMigrations() {
       CREATE INDEX IF NOT EXISTS idx_cash_ledger_source_id   ON cash_ledger(source_id)
     `);
 
+    // ── Create accounting_entries table if not present (idempotent) ────────────
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS accounting_entries (
+        id SERIAL PRIMARY KEY,
+        entry_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        source_type TEXT NOT NULL,
+        source_id INTEGER,
+        source_number TEXT,
+        account_id INTEGER,
+        account_name_snapshot TEXT,
+        debit_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
+        credit_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
+        debit_cdf DOUBLE PRECISION NOT NULL DEFAULT 0,
+        credit_cdf DOUBLE PRECISION NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'USD',
+        amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+        exchange_rate DOUBLE PRECISION NOT NULL DEFAULT 1,
+        description TEXT,
+        created_by TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_accounting_entries_source     ON accounting_entries(source_type, source_id);
+      CREATE INDEX IF NOT EXISTS idx_accounting_entries_account_id ON accounting_entries(account_id)
+    `);
+
     // ── Repair CDF records stored with wrong exchange_rate = 1 ────────────────
-    // Any payment or sale in CDF with exchange_rate < 10 was recorded before the
-    // rate was properly wired, causing amountUsd = raw_CDF_amount instead of
-    // amount ÷ rate. Recompute using the current settings rate.
     const repairResult = await db.execute(sql`
       WITH rate AS (
         SELECT COALESCE(usd_to_cdf_rate, 2800) AS r FROM settings LIMIT 1
@@ -110,6 +131,9 @@ async function runStartupMigrations() {
       logger.info({ repairedSales }, "Repaired CDF sale records with wrong exchange_rate");
     }
 
+    // ── Seed default chart of accounts (idempotent) ───────────────────────────
+    await seedDefaultAccounts();
+
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");
@@ -134,7 +158,6 @@ cron.schedule("0 * * * *", async () => {
     if (!settings?.greenApiInstanceId || !settings?.greenApiToken) return;
     if (settings.dailySummaryEnabled !== "true") return;
 
-    // Check current Lubumbashi hour (UTC+2) against configured hour
     const lubumbashiHour = new Date(Date.now() + 2 * 60 * 60 * 1000).getUTCHours();
     const configuredHour = settings.dailySummaryHour ?? 21;
     if (lubumbashiHour !== configuredHour) return;

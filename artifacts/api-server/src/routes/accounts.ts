@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
-import { paymentsTable, vouchersTable, cashLedgerTable, chartOfAccountsTable } from "@workspace/db/schema";
+import { paymentsTable, vouchersTable, cashLedgerTable, chartOfAccountsTable, accountingEntriesTable } from "@workspace/db/schema";
 import {
   and, gte, lte, eq, inArray, sum, not,
   desc, count, or, ilike, asc,
@@ -180,7 +180,6 @@ router.get("/expenses", async (req: Request, res: Response) => {
   const limitNum = Math.min(200, Math.max(1, parseInt(limit)));
   const offset = (pageNum - 1) * limitNum;
 
-  // Combine out-payments and out-vouchers into unified rows
   const payConditions = [
     eq(paymentsTable.direction, "out"),
     eq(paymentsTable.status, "completed"),
@@ -220,8 +219,7 @@ router.get("/expenses", async (req: Request, res: Response) => {
     );
   }
 
-  // Fetch items and accurate counts separately (#11 fix — old total was capped at 2×limit)
-  const fetchLimit = limitNum + offset; // enough items to paginate correctly in memory
+  const fetchLimit = limitNum + offset;
   const [payments, vouchers, [payCountRow], [vchCountRow]] = await Promise.all([
     db.select().from(paymentsTable).where(and(...payConditions)).orderBy(desc(paymentsTable.paymentDate)).limit(fetchLimit),
     db.select().from(vouchersTable).where(and(...vchConditions)).orderBy(desc(vouchersTable.voucherDate)).limit(fetchLimit),
@@ -231,7 +229,6 @@ router.get("/expenses", async (req: Request, res: Response) => {
 
   const total = Number(payCountRow.total) + Number(vchCountRow.total);
 
-  // Normalize into unified shape
   const unified = [
     ...payments.map((p) => ({
       id: `pay-${p.id}`,
@@ -294,7 +291,6 @@ router.get("/profit-loss", async (req: Request, res: Response) => {
     sumVouchers("out", from, to),
   ]);
 
-  // Breakdown by category
   const catRows = await db
     .select({ category: paymentsTable.category, usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) })
     .from(paymentsTable)
@@ -378,11 +374,32 @@ router.put("/chart/:id", async (req: Request, res: Response) => {
   res.json(row);
 });
 
-// DELETE /accounts/chart/:id
+// DELETE /accounts/chart/:id — soft-deactivate; reject if it has accounting entries
 router.delete("/chart/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  await db.delete(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, id));
-  res.status(204).end();
+
+  // Refuse hard-delete if any accounting entries are linked to this account
+  const [hasEntries] = await db
+    .select({ cnt: count() })
+    .from(accountingEntriesTable)
+    .where(eq(accountingEntriesTable.accountId, id));
+
+  if (Number(hasEntries.cnt) > 0) {
+    res.status(409).json({
+      error: "Account has existing accounting entries and cannot be deleted. Deactivate it instead.",
+    });
+    return;
+  }
+
+  // Soft-deactivate
+  const [row] = await db
+    .update(chartOfAccountsTable)
+    .set({ isActive: false })
+    .where(eq(chartOfAccountsTable.id, id))
+    .returning();
+
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ ok: true, deactivated: true });
 });
 
 // GET /accounts/chart/:id/statement?dateFrom=&dateTo=
@@ -395,25 +412,48 @@ router.get("/chart/:id/statement", async (req: Request, res: Response) => {
   });
   if (!account) { res.status(404).json({ error: "Not found" }); return; }
 
-  const conditions = [eq(vouchersTable.account, account.name.toLowerCase().replace(/ /g, "_"))];
-  if (dateFrom) conditions.push(gte(vouchersTable.voucherDate, new Date(dateFrom)));
-  if (dateTo) conditions.push(lte(vouchersTable.voucherDate, new Date(dateTo)));
+  const conditions: ReturnType<typeof eq>[] = [
+    eq(accountingEntriesTable.accountId, id) as ReturnType<typeof eq>,
+  ];
+  if (dateFrom) conditions.push(gte(accountingEntriesTable.entryDate, new Date(dateFrom)) as ReturnType<typeof eq>);
+  if (dateTo) conditions.push(lte(accountingEntriesTable.entryDate, new Date(dateTo + "T23:59:59")) as ReturnType<typeof eq>);
 
   const rows = await db
     .select()
-    .from(vouchersTable)
+    .from(accountingEntriesTable)
     .where(and(...conditions))
-    .orderBy(asc(vouchersTable.voucherDate), asc(vouchersTable.id));
+    .orderBy(asc(accountingEntriesTable.entryDate), asc(accountingEntriesTable.id));
 
+  // Running balance: asset/expense accounts are debit-normal; income/liability/equity are credit-normal
+  const isCredit = ["income", "liability", "equity"].includes(account.type);
   let runningBalance = 0;
   const withBalance = rows.map((r) => {
-    const amt = Number(r.amountUsd ?? 0);
-    const delta = r.voucherType === "cash_receipt" || r.voucherType === "customer_payment" ? amt : -amt;
+    const debit = r.debitUsd ?? 0;
+    const credit = r.creditUsd ?? 0;
+    const delta = isCredit ? credit - debit : debit - credit;
     runningBalance += delta;
-    return { ...r, runningBalance };
+    return {
+      id: r.id,
+      date: r.entryDate,
+      description: r.description ?? "",
+      party: r.sourceNumber ?? "",
+      sourceType: r.sourceType,
+      sourceId: r.sourceId,
+      amount: r.amount,
+      currency: r.currency,
+      debitUsd: r.debitUsd,
+      creditUsd: r.creditUsd,
+      debitCdf: r.debitCdf,
+      creditCdf: r.creditCdf,
+      exchangeRate: r.exchangeRate,
+      runningBalance,
+    };
   });
 
   res.json({ account, rows: withBalance });
 });
+
+// Suppress unused import warnings
+void cashLedgerTable;
 
 export default router;

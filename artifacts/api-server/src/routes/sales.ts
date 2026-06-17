@@ -12,6 +12,7 @@ import { eq, and, ilike, or, desc, count, gte, lte } from "drizzle-orm";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 import { appendLedgerEntry } from "../lib/ledger";
+import { postDoubleEntry, reverseEntries } from "../lib/accounting";
 import type { SaleItem } from "@workspace/db/schema";
 
 const router = Router();
@@ -109,7 +110,6 @@ router.post("/", async (req: Request, res: Response) => {
   const settings = await getSettings();
   const rate = settings.usdToCdfRate ?? 2800;
 
-  // Validate & load products
   const productIds = [...new Set(items.map((i) => i.productId))];
   const products = await db.select().from(productsTable).where(
     or(...productIds.map((pid) => eq(productsTable.id, pid))) as ReturnType<typeof eq>
@@ -117,7 +117,6 @@ router.post("/", async (req: Request, res: Response) => {
 
   const productMap = new Map(products.map((p) => [p.id, p]));
 
-  // Validate stock and status
   for (const item of items) {
     const product = productMap.get(item.productId);
     if (!product) {
@@ -139,7 +138,6 @@ router.post("/", async (req: Request, res: Response) => {
     }
   }
 
-  // Build sale items with cost/profit
   let totalAmount = 0;
   let totalDiscount = 0;
   let totalCost = 0;
@@ -148,7 +146,6 @@ router.post("/", async (req: Request, res: Response) => {
   const saleItems: SaleItem[] = items.map((item) => {
     const product = productMap.get(item.productId)!;
 
-    // Convert cost to sale currency if needed
     let costInSaleCurrency = product.costPrice;
     if (product.currency !== currency) {
       if (currency === "USD" && product.currency === "CDF") {
@@ -182,16 +179,15 @@ router.post("/", async (req: Request, res: Response) => {
 
   const changeDue = Math.max(0, paymentAmount - totalAmount);
 
-  // Convert to USD for reporting
   const toUsd = (amount: number) => currency === "USD" ? amount : amount / rate;
   const totalAmountUsd = toUsd(totalAmount);
   const totalCostUsd = toUsd(totalCost);
   const totalProfitUsd = toUsd(totalProfit);
+  const amountCdf = currency === "CDF" ? totalAmount : totalAmount * rate;
 
   const saleNumber = await getNextNumber("sale");
   const paymentNumber = await getNextNumber("PAY");
   const creator = callerName(req);
-  const amountCdf = currency === "CDF" ? totalAmount : totalAmount * rate;
 
   const { sale, payment } = await db.transaction(async (tx) => {
     // 1. Create sale record
@@ -223,14 +219,14 @@ router.post("/", async (req: Request, res: Response) => {
         .where(eq(productsTable.id, item.productId));
     }
 
-    // 3. Create payment record
+    // 3. Create payment record — use original currency/amount (not USD-converted)
     const [payment] = await tx.insert(paymentsTable).values({
       paymentNumber,
       direction: "in",
       category: "product_sale",
       type: "product_sale",
-      amount: totalAmountUsd,
-      currency: "USD",
+      amount: totalAmount,
+      currency,
       exchangeRate: rate,
       amountUsd: totalAmountUsd,
       amountCdf,
@@ -243,23 +239,42 @@ router.post("/", async (req: Request, res: Response) => {
     // 4. Link payment to sale
     await tx.update(salesTable).set({ paymentId: payment.id }).where(eq(salesTable.id, sale.id));
 
+    // 5. Cash ledger entry (inside transaction) — use original currency/amount
+    await appendLedgerEntry({
+      sourceType: "sale",
+      sourceNumber: saleNumber,
+      sourceId: sale.id,
+      direction: "in",
+      amount: totalAmount,
+      currency,
+      exchangeRate: rate,
+      description: `Product sale ${saleNumber}`,
+      createdBy: creator,
+    }, tx);
+
+    // 6. Double-entry accounting (inside transaction)
+    try {
+      await postDoubleEntry({
+        sourceType: "sale",
+        sourceId: sale.id,
+        sourceNumber: saleNumber,
+        debitName: "Cash",
+        debitType: "asset",
+        creditName: "Sales Revenue",
+        creditType: "income",
+        amount: totalAmount,
+        amountUsd: totalAmountUsd,
+        amountCdf,
+        currency,
+        exchangeRate: rate,
+        description: `Product sale ${saleNumber}`,
+        createdBy: creator,
+      }, tx);
+    } catch { /* non-fatal — don't rollback the sale */ }
+
     return { sale, payment };
   });
 
-  // 5. Cash ledger entry (outside transaction — non-critical)
-  await appendLedgerEntry({
-    sourceType: "sale",
-    sourceNumber: saleNumber,
-    sourceId: sale.id,
-    direction: "in",
-    amount: totalAmountUsd,
-    currency: "USD",
-    exchangeRate: rate,
-    description: `Product sale ${saleNumber}`,
-    createdBy: creator,
-  });
-
-  // 6. Activity log
   await logActivity(req, "sale_created", "sale", sale.id, {
     saleNumber,
     totalAmount,
@@ -293,12 +308,10 @@ router.patch("/:id", async (req: Request, res: Response) => {
     return;
   }
 
-  // Always use the current settings rate — not the stale rate stored on the old record
   const editSettings = await getSettings();
   const rate = editSettings.usdToCdfRate ?? 2800;
   const existingItems = (existing.items ?? []) as SaleItem[];
 
-  // Recalculate items when prices/discounts are edited
   let newItems: SaleItem[] = existingItems;
   let newTotalAmount: number = existing.totalAmount ?? 0;
   let newTotalDiscount: number = existing.totalDiscount ?? 0;
@@ -322,12 +335,10 @@ router.patch("/:id", async (req: Request, res: Response) => {
     newTotalProfit = newTotalAmount - newTotalCost;
     newTotalAmountUsd = targetCur === "CDF" ? newTotalAmount / rate : newTotalAmount;
   } else if (currency && currency !== existing.currency) {
-    // Currency-only change: keep the same number, reinterpret currency
     newTotalAmount = existing.totalAmount ?? 0;
     newTotalAmountUsd = currency === "CDF" ? newTotalAmount / rate : newTotalAmount;
   }
 
-  // Payment amount correction
   const newPaymentAmount = patchPayment !== undefined && patchPayment !== null
     ? patchPayment
     : (existing.paymentAmount ?? 0);
@@ -351,19 +362,16 @@ router.patch("/:id", async (req: Request, res: Response) => {
     .where(eq(salesTable.id, id))
     .returning();
 
-  // Sync linked payment record so Cash Book & Financials stay accurate
   if (existing.paymentId) {
     const newAmountCdf = (updated.currency === "CDF") ? newTotalAmount : newTotalAmount * rate;
     await db.update(paymentsTable).set({
       amount: newTotalAmountUsd,
       amountUsd: newTotalAmountUsd,
       amountCdf: newAmountCdf,
-      // Keep paymentDate in sync with saleDate so period filters stay accurate
       ...(saleDate !== undefined && { paymentDate: new Date(saleDate as string) }),
     }).where(eq(paymentsTable.id, existing.paymentId));
   }
 
-  // Ledger correction: append a delta entry if the total changed
   const oldUsd = existing.totalAmountUsd ?? existing.totalAmount ?? 0;
   const delta = newTotalAmountUsd - oldUsd;
   if (Math.abs(delta) > 0.0001) {
@@ -432,30 +440,32 @@ router.patch("/:id/void", async (req: Request, res: Response) => {
     .where(eq(salesTable.id, id))
     .returning();
 
-  // 3. Cancel the linked payment record so it no longer appears in revenue
+  // 3. Cancel the linked payment record
   if (sale.paymentId) {
     await db.update(paymentsTable).set({ status: "cancelled" }).where(eq(paymentsTable.id, sale.paymentId));
   }
 
-  // 4. Reverse cash ledger entry
-  const totalAmountUsd = sale.totalAmountUsd ?? sale.totalAmount;
-  const amountCdf = sale.currency === "CDF" ? sale.totalAmount : totalAmountUsd * rate;
+  // 4. Reverse cash ledger entry using original currency/amount
+  const voidAmount = sale.currency === "CDF" ? sale.totalAmount : (sale.totalAmountUsd ?? sale.totalAmount);
+  const voidCurrency = sale.currency ?? "USD";
 
   await appendLedgerEntry({
     sourceType: "void_sale",
     sourceNumber: sale.saleNumber ?? undefined,
     sourceId: sale.id,
     direction: "out",
-    amount: totalAmountUsd,
-    currency: "USD",
-    exchangeRate: rate,
+    amount: voidAmount,
+    currency: voidCurrency,
+    exchangeRate: sale.exchangeRate ?? rate,
     description: `Void sale ${sale.saleNumber ?? id} — ${reason}`,
     createdBy: creator,
   });
 
-  void amountCdf; // recorded in ledger internally via currency conversion
+  // 5. Reverse accounting entries
+  try {
+    await reverseEntries("sale", sale.id, "void_sale", creator);
+  } catch { /* non-fatal */ }
 
-  // 4. Activity log
   await logActivity(req, "sale_voided", "sale", sale.id, {
     saleNumber: sale.saleNumber,
     reason,

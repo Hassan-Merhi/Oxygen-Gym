@@ -6,6 +6,7 @@ import { eq, and, ilike, or, gte, lte, count, sum, desc, asc } from "drizzle-orm
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 import { appendLedgerEntry, getCurrentBalance } from "../lib/ledger";
+import { postDoubleEntry, reverseEntries, categoryAccountNames } from "../lib/accounting";
 
 const router = Router();
 router.use(requireAuth());
@@ -30,8 +31,6 @@ router.get("/summary", async (req: Request, res: Response) => {
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
 
-  // Query both payments and vouchers so all cash flows are reflected in KPIs.
-  // Each aggregation row returns both amountUsd and amountCdf sums.
   const [
     payTodayIn, payTodayOut, payAllIn, payAllOut,
     vchTodayIn, vchTodayOut, vchAllIn, vchAllOut,
@@ -198,6 +197,31 @@ router.post("/", async (req: Request, res: Response) => {
     createdBy,
   });
 
+  // ── Double-entry accounting ──────────────────────────────────────────────
+  try {
+    const { debitName, debitType, creditName, creditType } = categoryAccountNames(
+      body.category,
+      body.direction as "in" | "out",
+      body.account ?? "cash",
+    );
+    await postDoubleEntry({
+      sourceType: "payment",
+      sourceId: payment.id,
+      sourceNumber: paymentNumber,
+      debitName,
+      debitType,
+      creditName,
+      creditType,
+      amount: body.amount,
+      amountUsd,
+      amountCdf,
+      currency: body.currency,
+      exchangeRate,
+      description: `${body.category} — ${body.linkedEntityName ?? body.memberName ?? ""}`,
+      createdBy,
+    });
+  } catch { /* never let accounting entry creation break payment */ }
+
   // ── Auto-create commission if member has a coach assigned ────────────────
   if (body.memberId && body.direction === "in") {
     try {
@@ -205,7 +229,6 @@ router.post("/", async (req: Request, res: Response) => {
       if (member) {
         let coachId = member.coachId;
         let commissionAmount = member.commissionAmount ?? 0;
-        // If member has no coach but plan does, propagate plan's coach to member
         if (!coachId && body.planId) {
           const { plansTable } = await import("@workspace/db/schema");
           const [plan] = await db.select().from(plansTable).where(eq(plansTable.id, body.planId));
@@ -275,18 +298,72 @@ router.patch("/:id", async (req: Request, res: Response) => {
   const [payment] = await db.update(paymentsTable).set(update).where(eq(paymentsTable.id, id)).returning();
   if (!payment) { res.status(404).json({ error: "Not found" }); return; }
 
+  // ── Ledger + accounting correction ──────────────────────────────────────
   const oldAmount = existing.amount ?? 0;
   const newAmount = (update.amount as number) ?? oldAmount;
   const oldDir = existing.direction as "in" | "out";
   const newDir = (update.direction as "in" | "out") ?? oldDir;
-  if (oldAmount !== newAmount || oldDir !== newDir) {
-    const rate = await getExchangeRate();
+  const newCurrency = (update.currency as string) ?? existing.currency;
+  const newExchangeRate = (update.exchangeRate as number) ?? existing.exchangeRate ?? await getExchangeRate();
+
+  const financialsChanged =
+    oldAmount !== newAmount ||
+    oldDir !== newDir ||
+    existing.currency !== newCurrency ||
+    Math.abs((existing.exchangeRate ?? 1) - newExchangeRate) > 0.0001;
+
+  if (financialsChanged) {
     if (oldAmount > 0) {
-      await appendLedgerEntry({ sourceType: "payment_correction", sourceId: id, direction: oldDir === "in" ? "out" : "in", amount: oldAmount, currency: existing.currency, exchangeRate: existing.exchangeRate ?? rate, description: `Correction: reversed payment ${existing.paymentNumber ?? id}` });
+      await appendLedgerEntry({
+        sourceType: "payment_correction",
+        sourceId: id,
+        direction: oldDir === "in" ? "out" : "in",
+        amount: oldAmount,
+        currency: existing.currency,
+        exchangeRate: existing.exchangeRate ?? newExchangeRate,
+        description: `Correction: reversed payment ${existing.paymentNumber ?? id}`,
+      });
     }
     if (newAmount > 0) {
-      await appendLedgerEntry({ sourceType: "payment_correction", sourceId: id, direction: newDir, amount: newAmount, currency: (update.currency as string) ?? existing.currency, exchangeRate: (update.exchangeRate as number) ?? existing.exchangeRate ?? rate, description: `Correction: updated payment ${existing.paymentNumber ?? id}` });
+      await appendLedgerEntry({
+        sourceType: "payment_correction",
+        sourceId: id,
+        direction: newDir,
+        amount: newAmount,
+        currency: newCurrency,
+        exchangeRate: newExchangeRate,
+        description: `Correction: updated payment ${existing.paymentNumber ?? id}`,
+      });
     }
+    // Reverse existing accounting entries and post corrected ones
+    try {
+      await reverseEntries("payment", id, "payment_correction", callerName(req));
+      if (newAmount > 0) {
+        const newAmountUsd = newCurrency === "USD" ? newAmount : newAmount / newExchangeRate;
+        const newAmountCdf = newCurrency === "CDF" ? newAmount : newAmount * newExchangeRate;
+        const { debitName, debitType, creditName, creditType } = categoryAccountNames(
+          ((update.category as string) ?? existing.category) || "other",
+          newDir,
+          ((update.account as string) ?? existing.account) || "cash",
+        );
+        await postDoubleEntry({
+          sourceType: "payment_correction",
+          sourceId: id,
+          sourceNumber: existing.paymentNumber ?? undefined,
+          debitName,
+          debitType,
+          creditName,
+          creditType,
+          amount: newAmount,
+          amountUsd: newAmountUsd,
+          amountCdf: newAmountCdf,
+          currency: newCurrency,
+          exchangeRate: newExchangeRate,
+          description: `Corrected payment ${existing.paymentNumber ?? id}`,
+          createdBy: callerName(req),
+        });
+      }
+    } catch { /* accounting entry correction failure is non-fatal */ }
   }
 
   await logActivity(req, "payment_edited", "payment", id, { number: payment.paymentNumber });
@@ -304,12 +381,27 @@ router.delete("/:id", async (req: Request, res: Response) => {
     .returning();
   if (!payment) { res.status(404).json({ error: "Not found" }); return; }
   if (existing.status === "completed" && (existing.amount ?? 0) > 0) {
-    const rate = await getExchangeRate();
+    const rate = existing.exchangeRate ?? await getExchangeRate();
     const dir = existing.direction as "in" | "out";
-    await appendLedgerEntry({ sourceType: "payment_reversal", sourceId: id, direction: dir === "in" ? "out" : "in", amount: existing.amount!, currency: existing.currency, exchangeRate: existing.exchangeRate ?? rate, description: `Cancelled payment ${existing.paymentNumber ?? id}` });
+    await appendLedgerEntry({
+      sourceType: "payment_reversal",
+      sourceId: id,
+      direction: dir === "in" ? "out" : "in",
+      amount: existing.amount!,
+      currency: existing.currency,
+      exchangeRate: rate,
+      description: `Cancelled payment ${existing.paymentNumber ?? id}`,
+    });
+    try {
+      await reverseEntries("payment", id, "payment_reversal", callerName(req));
+    } catch { /* non-fatal */ }
   }
   await logActivity(req, "payment_archived", "payment", id, { number: payment.paymentNumber });
   res.json({ ok: true });
 });
+
+// Suppress unused import warning (cashLedgerTable imported in original, keep for compat)
+void cashLedgerTable;
+void getCurrentBalance;
 
 export default router;

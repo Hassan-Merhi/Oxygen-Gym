@@ -191,6 +191,97 @@ async function currencyAudit(): Promise<AuditSection> {
   return { name: "Multi-Currency Audit", pass: issues.length === 0, issueCount: issues.length, issues };
 }
 
+async function accountingEntriesAudit(): Promise<AuditSection> {
+  const tableExists = await db.execute(sql`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.tables WHERE table_name = 'accounting_entries'
+    ) AS exists
+  `);
+  if (!(tableExists.rows[0] as any)?.exists) {
+    return { name: "Accounting Entries Audit", pass: true, issueCount: 0, issues: [{ description: "accounting_entries table not yet created", severity: "warning" }] };
+  }
+
+  const [
+    completedPaymentsMissing,
+    recordedVouchersMissing,
+    completedSalesMissing,
+    paidPayrollMissing,
+    paidStockMissing,
+    cancelledMissingReversal,
+    nullAccountIds,
+  ] = await Promise.all([
+    db.execute(sql`
+      SELECT id, payment_number FROM payments
+      WHERE status = 'completed'
+      AND NOT EXISTS (SELECT 1 FROM accounting_entries ae WHERE ae.source_type = 'payment' AND ae.source_id = payments.id)
+      LIMIT 20
+    `),
+    db.execute(sql`
+      SELECT id, voucher_number FROM vouchers
+      WHERE status = 'recorded'
+      AND NOT EXISTS (SELECT 1 FROM accounting_entries ae WHERE ae.source_type = 'voucher' AND ae.source_id = vouchers.id)
+      LIMIT 20
+    `),
+    db.execute(sql`
+      SELECT id, sale_number FROM sales
+      WHERE status = 'completed'
+      AND NOT EXISTS (SELECT 1 FROM accounting_entries ae WHERE ae.source_type = 'sale' AND ae.source_id = sales.id)
+      LIMIT 20
+    `),
+    db.execute(sql`
+      SELECT id, payroll_number FROM payroll
+      WHERE status = 'paid'
+      AND NOT EXISTS (SELECT 1 FROM accounting_entries ae WHERE ae.source_type = 'payroll' AND ae.source_id = payroll.id)
+      LIMIT 20
+    `),
+    db.execute(sql`
+      SELECT id, purchase_number FROM stock_purchases
+      WHERE paid_from_cash = 1
+      AND NOT EXISTS (SELECT 1 FROM accounting_entries ae WHERE ae.source_type = 'stock_purchase' AND ae.source_id = stock_purchases.id)
+      LIMIT 20
+    `),
+    db.execute(sql`
+      SELECT DISTINCT ae.source_type, ae.source_id
+      FROM accounting_entries ae
+      WHERE ae.source_type = 'payment'
+        AND EXISTS (SELECT 1 FROM payments p WHERE p.id = ae.source_id AND p.status = 'cancelled')
+        AND NOT EXISTS (
+          SELECT 1 FROM accounting_entries rev
+          WHERE (rev.source_type = 'payment_reversal' OR rev.source_type = 'payment_correction')
+            AND rev.source_id = ae.source_id
+        )
+      LIMIT 20
+    `),
+    db.execute(sql`SELECT COUNT(*) AS cnt FROM accounting_entries WHERE account_id IS NULL`),
+  ]);
+
+  const issues: AuditIssue[] = [];
+  for (const r of completedPaymentsMissing.rows as any[]) {
+    issues.push({ id: r.id, description: `Payment ${r.payment_number ?? r.id}: no accounting entries`, severity: "error" });
+  }
+  for (const r of recordedVouchersMissing.rows as any[]) {
+    issues.push({ id: r.id, description: `Voucher ${r.voucher_number ?? r.id}: no accounting entries`, severity: "error" });
+  }
+  for (const r of completedSalesMissing.rows as any[]) {
+    issues.push({ id: r.id, description: `Sale ${r.sale_number ?? r.id}: no accounting entries`, severity: "warning" });
+  }
+  for (const r of paidPayrollMissing.rows as any[]) {
+    issues.push({ id: r.id, description: `Payroll ${r.payroll_number ?? r.id}: paid but no accounting entries`, severity: "error" });
+  }
+  for (const r of paidStockMissing.rows as any[]) {
+    issues.push({ id: r.id, description: `Stock purchase ${r.purchase_number ?? r.id}: paid but no accounting entries`, severity: "warning" });
+  }
+  for (const r of cancelledMissingReversal.rows as any[]) {
+    issues.push({ description: `Cancelled ${r.source_type} #${r.source_id}: has accounting entries but missing reversal`, severity: "warning" });
+  }
+  const nullCnt = Number((nullAccountIds.rows[0] as any)?.cnt ?? 0);
+  if (nullCnt > 0) {
+    issues.push({ description: `${nullCnt} accounting entries are unlinked (missing account_id — chart of accounts not matched)`, severity: "warning" });
+  }
+
+  return { name: "Accounting Entries Audit", pass: issues.length === 0, issueCount: issues.length, issues };
+}
+
 async function permissionAudit(): Promise<AuditSection> {
   const users = await db.execute(sql`SELECT id, name, role, permissions FROM users WHERE role != 'admin'`);
   const issues: AuditIssue[] = [];
@@ -291,6 +382,7 @@ router.get("/run", async (_req: Request, res: Response) => {
     payroll,
     memberships,
     currency,
+    accountingEntries,
     permissions,
     dataIntegrity,
     health,
@@ -303,6 +395,7 @@ router.get("/run", async (_req: Request, res: Response) => {
     payrollAudit(),
     membershipAudit(),
     currencyAudit(),
+    accountingEntriesAudit(),
     permissionAudit(),
     dataIntegrityAudit(),
     systemHealth(),
@@ -310,7 +403,7 @@ router.get("/run", async (_req: Request, res: Response) => {
 
   const sections: AuditSection[] = [
     reconciliation, sales, voidedSales, inventoryResult.section,
-    payroll, memberships, currency, permissions, dataIntegrity,
+    payroll, memberships, currency, accountingEntries, permissions, dataIntegrity,
   ];
   const totalIssues = sections.reduce((acc, s) => acc + s.issueCount, 0);
 
