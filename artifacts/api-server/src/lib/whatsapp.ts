@@ -108,28 +108,32 @@ export async function sendDailySummaryNow(): Promise<{ cashIn: number; expenses:
   const dayEnd = new Date(`${lubDateStr}T23:59:59+02:00`);
 
   const [payInRow, payOutRow, vchInRow, vchOutRow] = await Promise.all([
-    db.select({ total: sum(paymentsTable.amountUsd) })
+    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) })
       .from(paymentsTable)
       .where(and(eq(paymentsTable.direction, "in"), gte(paymentsTable.paymentDate, dayStart), lte(paymentsTable.paymentDate, dayEnd))),
-    db.select({ total: sum(paymentsTable.amountUsd) })
+    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) })
       .from(paymentsTable)
       .where(and(eq(paymentsTable.direction, "out"), gte(paymentsTable.paymentDate, dayStart), lte(paymentsTable.paymentDate, dayEnd))),
-    db.select({ total: sum(vouchersTable.amountUsd) })
+    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
       .from(vouchersTable)
       .where(and(eq(vouchersTable.direction, "in"), eq(vouchersTable.status, "recorded"), gte(vouchersTable.voucherDate, dayStart), lte(vouchersTable.voucherDate, dayEnd))),
-    db.select({ total: sum(vouchersTable.amountUsd) })
+    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
       .from(vouchersTable)
       .where(and(eq(vouchersTable.direction, "out"), eq(vouchersTable.status, "recorded"), gte(vouchersTable.voucherDate, dayStart), lte(vouchersTable.voucherDate, dayEnd))),
   ]);
 
-  const cashIn   = Number(payInRow[0]?.total ?? 0)  + Number(vchInRow[0]?.total ?? 0);
-  const expenses = Number(payOutRow[0]?.total ?? 0) + Number(vchOutRow[0]?.total ?? 0);
-  const remaining = cashIn - expenses;
+  const n = (v: unknown) => Number(v ?? 0);
+  const cashIn      = n(payInRow[0]?.usd)  + n(vchInRow[0]?.usd);
+  const cashInCdf   = n(payInRow[0]?.cdf)  + n(vchInRow[0]?.cdf);
+  const expenses    = n(payOutRow[0]?.usd) + n(vchOutRow[0]?.usd);
+  const expensesCdf = n(payOutRow[0]?.cdf) + n(vchOutRow[0]?.cdf);
+  const remaining    = cashIn - expenses;
+  const remainingCdf = cashInCdf - expensesCdf;
 
   const [year, month, day] = lubDateStr.split("-");
   const friendlyDate = `${day}/${month}/${year}`;
 
-  const message = formatDailySummaryMessage({ date: friendlyDate, cashIn, expenses, remaining });
+  const message = formatDailySummaryMessage({ date: friendlyDate, cashIn, cashInCdf, expenses, expensesCdf, remaining, remainingCdf });
   await sendToAllChats(instanceId, token, message);
 
   logger.info({ cashIn, expenses, remaining }, "Daily cash summary sent");
@@ -139,19 +143,32 @@ export async function sendDailySummaryNow(): Promise<{ cashIn: number; expenses:
 export function formatDailySummaryMessage(opts: {
   date: string;
   cashIn: number;
+  cashInCdf: number;
   expenses: number;
+  expensesCdf: number;
   remaining: number;
+  remainingCdf: number;
 }): string {
-  const { date, cashIn, expenses, remaining } = opts;
-  const fmt = (n: number) =>
+  const { date, cashIn, cashInCdf, expenses, expensesCdf, remaining, remainingCdf } = opts;
+  const usd = (n: number) =>
     n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const cdf = (n: number) =>
+    Math.round(n).toLocaleString("fr-FR");
   const remainEmoji = remaining >= 0 ? "✅" : "🔴";
   return [
     `📊 *Résumé de la journée — ${date}*`,
     ``,
-    `💵 Total encaissé du jour : *${fmt(cashIn)} USD*`,
-    `💸 Total dépenses du jour : *${fmt(expenses)} USD*`,
-    `${remainEmoji} Solde net du jour : *${fmt(remaining)} USD*`,
+    `💵 *Encaissé du jour :*`,
+    `   USD : *$${usd(cashIn)}*`,
+    `   CDF : *FC ${cdf(cashInCdf)}*`,
+    ``,
+    `💸 *Dépenses du jour :*`,
+    `   USD : *$${usd(expenses)}*`,
+    `   CDF : *FC ${cdf(expensesCdf)}*`,
+    ``,
+    `${remainEmoji} *Solde net du jour :*`,
+    `   USD : *$${usd(remaining)}*`,
+    `   CDF : *FC ${cdf(remainingCdf)}*`,
     ``,
     `_OxygenGym — rapport automatique_`,
   ].join("\n");

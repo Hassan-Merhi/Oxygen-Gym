@@ -31,48 +31,56 @@ router.get("/summary", async (req: Request, res: Response) => {
   const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
 
   // Query both payments and vouchers so all cash flows are reflected in KPIs.
+  // Each aggregation row returns both amountUsd and amountCdf sums.
   const [
     payTodayIn, payTodayOut, payAllIn, payAllOut,
     vchTodayIn, vchTodayOut, vchAllIn, vchAllOut,
   ] = await Promise.all([
-    db.select({ total: sum(paymentsTable.amountUsd) })
+    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) })
       .from(paymentsTable)
       .where(and(eq(paymentsTable.direction, "in"), eq(paymentsTable.status, "completed"), gte(paymentsTable.paymentDate, todayStart), lte(paymentsTable.paymentDate, todayEnd))),
-    db.select({ total: sum(paymentsTable.amountUsd) })
+    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) })
       .from(paymentsTable)
       .where(and(eq(paymentsTable.direction, "out"), eq(paymentsTable.status, "completed"), gte(paymentsTable.paymentDate, todayStart), lte(paymentsTable.paymentDate, todayEnd))),
-    db.select({ total: sum(paymentsTable.amountUsd) })
+    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) })
       .from(paymentsTable)
       .where(and(eq(paymentsTable.direction, "in"), eq(paymentsTable.status, "completed"))),
-    db.select({ total: sum(paymentsTable.amountUsd) })
+    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) })
       .from(paymentsTable)
       .where(and(eq(paymentsTable.direction, "out"), eq(paymentsTable.status, "completed"))),
-    // Vouchers (not cancelled, not deleted)
-    db.select({ total: sum(vouchersTable.amountUsd) })
+    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
       .from(vouchersTable)
       .where(and(eq(vouchersTable.direction, "in"), eq(vouchersTable.status, "recorded"), gte(vouchersTable.voucherDate, todayStart), lte(vouchersTable.voucherDate, todayEnd))),
-    db.select({ total: sum(vouchersTable.amountUsd) })
+    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
       .from(vouchersTable)
       .where(and(eq(vouchersTable.direction, "out"), eq(vouchersTable.status, "recorded"), gte(vouchersTable.voucherDate, todayStart), lte(vouchersTable.voucherDate, todayEnd))),
-    db.select({ total: sum(vouchersTable.amountUsd) })
+    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
       .from(vouchersTable)
       .where(and(eq(vouchersTable.direction, "in"), eq(vouchersTable.status, "recorded"))),
-    db.select({ total: sum(vouchersTable.amountUsd) })
+    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
       .from(vouchersTable)
       .where(and(eq(vouchersTable.direction, "out"), eq(vouchersTable.status, "recorded"))),
   ]);
 
-  const cashInToday  = Number(payTodayIn[0]?.total ?? 0)  + Number(vchTodayIn[0]?.total ?? 0);
-  const cashOutToday = Number(payTodayOut[0]?.total ?? 0) + Number(vchTodayOut[0]?.total ?? 0);
-  const totalIn      = Number(payAllIn[0]?.total ?? 0)    + Number(vchAllIn[0]?.total ?? 0);
-  const totalOut     = Number(payAllOut[0]?.total ?? 0)   + Number(vchAllOut[0]?.total ?? 0);
-  const balanceUsd   = totalIn - totalOut;
-  const balanceCdf   = balanceUsd * rate;
+  const n = (v: unknown) => Number(v ?? 0);
+  const cashInToday    = n(payTodayIn[0]?.usd)  + n(vchTodayIn[0]?.usd);
+  const cashOutToday   = n(payTodayOut[0]?.usd) + n(vchTodayOut[0]?.usd);
+  const cashInTodayCdf = n(payTodayIn[0]?.cdf)  + n(vchTodayIn[0]?.cdf);
+  const cashOutTodayCdf= n(payTodayOut[0]?.cdf) + n(vchTodayOut[0]?.cdf);
+  const totalIn        = n(payAllIn[0]?.usd)    + n(vchAllIn[0]?.usd);
+  const totalOut       = n(payAllOut[0]?.usd)   + n(vchAllOut[0]?.usd);
+  const totalInCdf     = n(payAllIn[0]?.cdf)    + n(vchAllIn[0]?.cdf);
+  const totalOutCdf    = n(payAllOut[0]?.cdf)   + n(vchAllOut[0]?.cdf);
+  const balanceUsd     = totalIn - totalOut;
+  const balanceCdf     = totalInCdf - totalOutCdf;
 
   res.json({
     cashInToday,
     cashOutToday,
-    netCashToday: cashInToday - cashOutToday,
+    cashInTodayCdf,
+    cashOutTodayCdf,
+    netCashToday:    cashInToday - cashOutToday,
+    netCashTodayCdf: cashInTodayCdf - cashOutTodayCdf,
     balanceUsd,
     balanceCdf,
     currency,

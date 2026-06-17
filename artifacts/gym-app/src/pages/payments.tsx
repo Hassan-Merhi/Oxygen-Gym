@@ -583,24 +583,28 @@ export default function CashBook() {
         <KpiCard
           label="Cash In Today"
           value={`$${fmtAmt(summary?.cashInToday)}`}
+          sub={`FC ${fmtAmt(summary?.cashInTodayCdf)}`}
           icon={<ArrowDownCircle className="w-4 h-4" />}
           trend="up"
         />
         <KpiCard
           label="Cash Out Today"
           value={`$${fmtAmt(summary?.cashOutToday)}`}
+          sub={`FC ${fmtAmt(summary?.cashOutTodayCdf)}`}
           icon={<ArrowUpCircle className="w-4 h-4" />}
           trend="down"
         />
         <KpiCard
           label="Net Today"
           value={`$${fmtAmt(summary?.netCashToday)}`}
+          sub={`FC ${fmtAmt(summary?.netCashTodayCdf)}`}
           icon={<TrendingUp className="w-4 h-4" />}
           trend="neutral"
         />
         <KpiCard
           label="Cash Balance"
           value={`$${fmtAmt(summary?.balanceUsd)}`}
+          sub={`FC ${fmtAmt(summary?.balanceCdf)}`}
           icon={<DollarSign className="w-4 h-4" />}
           trend="balance"
         />
@@ -656,19 +660,21 @@ export default function CashBook() {
                 <SelectItem value="out">Money Out</SelectItem>
               </SelectContent>
             </Select>
-            <Select
-              value={curFilter}
-              onValueChange={(v) => { setCurFilter(v); setPage(1); }}
-            >
-              <SelectTrigger className="h-8 w-24 text-sm">
-                <SelectValue placeholder="Currency" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="USD">USD</SelectItem>
-                <SelectItem value="CDF">CDF</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex rounded-lg border border-border overflow-hidden text-xs font-semibold">
+              {(["all", "USD", "CDF"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => { setCurFilter(v); setPage(1); }}
+                  className={`px-3 h-8 transition-colors ${
+                    curFilter === v
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:bg-muted"
+                  } ${v !== "all" ? "border-l border-border" : ""}`}
+                >
+                  {v === "all" ? "All" : v}
+                </button>
+              ))}
+            </div>
             <Input
               type="date"
               className="h-8 w-36 text-sm"
@@ -1384,11 +1390,13 @@ function DirBadge({ dir, t }: { dir: string; t: (k: string) => string }) {
 function KpiCard({
   label,
   value,
+  sub,
   icon,
   trend,
 }: {
   label: string;
   value: string;
+  sub?: string;
   icon: React.ReactNode;
   trend: "up" | "down" | "neutral" | "balance";
 }) {
@@ -1415,6 +1423,7 @@ function KpiCard({
         </span>
       </div>
       <p className="text-xl font-bold">{value}</p>
+      {sub && <p className="text-xs font-medium opacity-60 mt-0.5">{sub}</p>}
     </div>
   );
 }

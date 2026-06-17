@@ -1212,7 +1212,10 @@ export const GetMemberCheckinsResponse = zod.array(GetMemberCheckinsResponseItem
 export const GetPaymentSummaryResponse = zod.object({
   "cashInToday": zod.number(),
   "cashOutToday": zod.number(),
+  "cashInTodayCdf": zod.number(),
+  "cashOutTodayCdf": zod.number(),
   "netCashToday": zod.number(),
+  "netCashTodayCdf": zod.number(),
   "balanceUsd": zod.number(),
   "balanceCdf": zod.number(),
   "currency": zod.string()

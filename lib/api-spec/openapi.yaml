@@ -2699,11 +2699,14 @@ components:
       properties:
         cashInToday: { type: number }
         cashOutToday: { type: number }
+        cashInTodayCdf: { type: number }
+        cashOutTodayCdf: { type: number }
         netCashToday: { type: number }
+        netCashTodayCdf: { type: number }
         balanceUsd: { type: number }
         balanceCdf: { type: number }
         currency: { type: string }
-      required: [cashInToday, cashOutToday, netCashToday, balanceUsd, balanceCdf, currency]
+      required: [cashInToday, cashOutToday, cashInTodayCdf, cashOutTodayCdf, netCashToday, netCashTodayCdf, balanceUsd, balanceCdf, currency]
 
     VoucherRecord:
       type: object

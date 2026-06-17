@@ -644,7 +644,10 @@ export interface PaymentsPage {
 export interface PaymentSummary {
   cashInToday: number;
   cashOutToday: number;
+  cashInTodayCdf: number;
+  cashOutTodayCdf: number;
   netCashToday: number;
+  netCashTodayCdf: number;
   balanceUsd: number;
   balanceCdf: number;
   currency: string;
