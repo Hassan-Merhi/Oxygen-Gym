@@ -1,4 +1,5 @@
 import { useI18n } from "@/lib/i18n";
+import { useFmtDate } from "@/lib/useFmtDate";
 import { useGetMe, useGetDashboardKpis } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/ui/page-header";
@@ -137,13 +138,14 @@ function AlertPanel({ title, icon: Icon, iconClass, empty, children }: {
 
 export default function Dashboard() {
   const { t } = useI18n();
+  const { locale } = useFmtDate();
   const { data: me, isLoading: meLoading } = useGetMe();
   const { data: kpis, isLoading: loading } = useGetDashboardKpis();
 
   const canViewProfit = me?.permissions?.viewProfit ?? me?.role === "admin";
 
   const now = new Date();
-  const dateStr = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const dateStr = now.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
   // Combined revenue vs expenses data
   const combinedChart = (kpis?.revenueChart ?? []).map((r, i) => ({

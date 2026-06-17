@@ -53,7 +53,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { fmtDate } from "@/lib/date";
+import { useFmtDate } from "@/lib/useFmtDate";
 
 import {
   ArrowDownCircle,
@@ -141,6 +141,7 @@ const emptyVchForm = (): VchForm => ({
 // ─── Main component ────────────────────────────────────────────────────────
 export default function CashBook() {
   const { t } = useI18n();
+  const { fmtDate } = useFmtDate();
   const me = useGetMe();
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);

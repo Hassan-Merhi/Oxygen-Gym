@@ -46,7 +46,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { fmtDate } from "@/lib/date";
+import { useFmtDate } from "@/lib/useFmtDate";
 import { Textarea } from "@/components/ui/textarea";
 
 type AccountType = "asset" | "liability" | "income" | "expense" | "equity";
@@ -130,6 +130,7 @@ async function apiFetch(path: string, options?: RequestInit) {
 }
 
 export default function AccountsPage() {
+  const { fmtDate } = useFmtDate();
   const me = useGetMe();
   const canView = me?.role === "admin" || me?.permissions?.viewAccounting;
   const canManage = me?.role === "admin";

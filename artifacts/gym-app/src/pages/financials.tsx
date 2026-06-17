@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useI18n } from "@/lib/i18n";
+import { useFmtDate } from "@/lib/useFmtDate";
 import { useGetMe } from "@/hooks/use-me";
 import { TOKEN_KEY } from "@/lib/auth-context";
 import {
@@ -128,6 +129,7 @@ interface DetailRow {
 }
 
 function ProfitLossTab({ t }: { t: (k: string) => string }) {
+  const { locale } = useFmtDate();
   const [period, setPeriod] = useState<Period>("month");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -355,7 +357,7 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
                                       {rows.map((r) => (
                                         <tr key={r.id} className="border-t border-border/20 hover:bg-muted/20">
                                           <td className="px-8 py-2 tabular-nums text-muted-foreground">
-                                            {new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+                                            {new Date(r.date).toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" })}
                                           </td>
                                           <td className="px-4 py-2 max-w-[200px] truncate">{r.description ?? "—"}</td>
                                           <td className="px-4 py-2 text-muted-foreground">{r.party ?? "—"}</td>

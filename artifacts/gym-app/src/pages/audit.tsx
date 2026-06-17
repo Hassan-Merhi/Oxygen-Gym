@@ -22,7 +22,7 @@ import {
   Users, Receipt, Wallet, Wrench, Clock, AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fmtDateTime } from "@/lib/date";
+import { useFmtDate } from "@/lib/useFmtDate";
 
 function fmt$(n: number) {
   return `$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -177,6 +177,7 @@ function FixTool({ label, running, done, onRun, warning }: {
 
 export default function AuditPage() {
   const { t } = useI18n();
+  const { fmtDateTime } = useFmtDate();
   const me = useGetMe();
   const isAdmin = me?.role === "admin";
 

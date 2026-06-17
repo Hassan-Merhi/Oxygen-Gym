@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-import { fmtDate, fmtDateTime } from "@/lib/date";
+import { useFmtDate } from "@/lib/useFmtDate";
 
 function fmtCurrency(amount: number | null | undefined, currency: string): string {
   if (amount == null) return "—";
@@ -150,6 +150,7 @@ function StatCard({ icon: Icon, label, value, color }: {
 
 export default function MemberProfile({ id }: { id: number }) {
   const { t } = useI18n();
+  const { fmtDate, fmtDateTime, locale } = useFmtDate();
   const [, navigate] = useLocation();
   const me = useGetMe();
   const canViewAccounting = me?.role === "admin" || me?.permissions?.viewAccounting;
@@ -426,7 +427,7 @@ export default function MemberProfile({ id }: { id: number }) {
               <div className="flex flex-wrap gap-1.5">
                 {last30Days.map((day) => {
                   const attended = attendedSet.has(day);
-                  const label = new Date(day + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+                  const label = new Date(day + "T12:00:00").toLocaleDateString(locale, { day: "numeric", month: "short" });
                   return (
                     <div
                       key={day}

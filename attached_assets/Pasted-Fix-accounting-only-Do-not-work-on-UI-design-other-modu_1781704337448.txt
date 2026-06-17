@@ -1,0 +1,139 @@
+Fix accounting only. Do not work on UI/design/other modules except where accounting data is created.
+
+I need the accounting to be correct and consistent across payments, vouchers, sales, members, payroll, stock purchases, cash ledger, and chart of accounts.
+
+Main problems found:
+
+1. Chart of Accounts mapping is weak/wrong
+
+* `chart_of_accounts` exists, but transaction tables store `account` as a text string like `"cash"` or normalized name.
+* There is no real `accountId` foreign key.
+* `/accounts/chart/:id/statement` only reads from `vouchers`, so payments, sales, payroll, stock purchases, and membership payments do not appear in the account statement.
+* Fix: add/use proper `accountId` mapping for accounting transactions, or create a proper accounting entries table with debit/credit rows linked to chart accounts.
+
+2. Payments + vouchers are being mixed incorrectly
+
+* Member enrollment/renewal creates a `payment` and sometimes also creates a `voucher`.
+* The cash ledger is written from payment, but account statement is written from voucher.
+* This creates split truth: cash ledger sees payments, chart account statement sees vouchers.
+* Fix: one accounting source of truth. Either:
+  A) every money movement creates a normalized accounting entry, or
+  B) cash ledger and account statements both read from the same normalized transaction table.
+
+3. Account statements are incomplete
+
+* Current account statement only shows vouchers.
+* Fix account statement to include all accounting movements mapped to that account:
+
+  * membership payments
+  * product sales
+  * manual vouchers
+  * expenses
+  * payroll
+  * stock purchases paid from cash
+  * reversals/cancellations/voids/corrections
+
+4. Sales currency storage is wrong
+
+* In `sales.ts`, if sale currency is CDF, the created payment stores:
+
+  * `amount = totalAmountUsd`
+  * `currency = "USD"`
+* This loses original sale currency and makes reports confusing.
+* Fix: payment should store original sale currency in `amount`/`currency`, and store conversions separately in `amountUsd`/`amountCdf`.
+
+5. Payroll currency storage is wrong
+
+* In payroll pay route, payment stores `amount = netPayUsd`, `currency = "USD"` even if payroll was CDF.
+* Fix: store original payroll currency/amount, plus USD/CDF converted fields.
+
+6. Ledger corrections are incomplete
+
+* Payment/voucher update correction only checks amount/direction.
+* If currency or exchangeRate changes, ledger is not corrected.
+* Fix: correction must trigger when amount, direction, currency, or exchangeRate changes.
+
+7. Ledger writes are not transaction-safe
+
+* `appendLedgerEntry()` reads last balance then inserts.
+* This can break under two simultaneous requests.
+* Also some ledger entries are written outside the main transaction, like sales.
+* Fix: ledger/accounting entries must be written inside the same DB transaction as the source record. Lock or avoid stored running balance; calculate from immutable entries when possible.
+
+8. Cash ledger balance meaning is unclear
+
+* `amountUsd` and `amountCdf` are treated as equivalents, not separate real USD and CDF cash balances.
+* If the gym keeps both USD cash and CDF cash separately, then USD transactions should affect USD balance only, and CDF transactions should affect CDF balance only.
+* If CDF is only a converted reporting value, rename/report it clearly as equivalent.
+* Decide one accounting rule and apply everywhere.
+
+9. Chart account delete is unsafe
+
+* `/accounts/chart/:id` deletes accounts directly.
+* It should not delete if transactions exist.
+* Prefer soft deactivate `isActive=false`.
+
+10. Audit is not enough for accounting mapping
+    Add accounting audit checks:
+
+* completed payments missing accounting entry
+* recorded vouchers missing accounting entry
+* completed sales missing accounting entry/payment link
+* paid payroll missing payment/accounting entry
+* stock purchase paid from cash missing accounting entry
+* cancelled/voided records missing reversal entry
+* accounting entries with invalid/missing accountId
+* sum of accounting entries must match cash ledger/report totals
+
+Required fix:
+Create a clean accounting posting system.
+
+Preferred implementation:
+
+* Add `accounting_entries` table:
+
+  * id
+  * entryDate
+  * sourceType
+  * sourceId
+  * sourceNumber
+  * accountId
+  * accountNameSnapshot
+  * debitUsd
+  * creditUsd
+  * debitCdf
+  * creditCdf
+  * currency
+  * amount
+  * exchangeRate
+  * description
+  * createdBy
+  * createdAt
+* Every financial action posts balanced entries.
+* Examples:
+
+  * Membership payment: Debit Cash/Bank, Credit Membership Revenue
+  * Product sale: Debit Cash, Credit Sales Revenue; optionally Debit COGS, Credit Inventory
+  * Expense voucher/payment: Debit Expense, Credit Cash
+  * Payroll paid: Debit Payroll Expense, Credit Cash
+  * Stock purchase paid cash: Debit Inventory, Credit Cash
+  * Void/cancel: post exact reverse entries, never delete history
+* Reports and chart account statements must read from `accounting_entries`, not mixed payments/vouchers.
+
+Also add migration/backfill:
+
+* Backfill historical payments, vouchers, sales, payroll, stock purchases into accounting_entries without duplicating.
+* Use sourceType + sourceId uniqueness/idempotency.
+* For old records where account mapping is missing, default to Cash account and correct revenue/expense account based on category.
+* Make this safe to run multiple times.
+
+Acceptance tests:
+
+* Create member payment with selected cash account → appears in cash ledger, accounting entries, and selected account statement exactly once.
+* Create manual cash receipt/payment voucher → account statement and cash balance correct.
+* Create CDF sale → payment keeps CDF amount and USD/CDF converted fields correct.
+* Pay CDF payroll → payment keeps CDF amount and converted fields correct.
+* Edit payment amount/currency/rate → old accounting impact reverses and new impact posts.
+* Cancel payment/voucher/payroll or void sale → exact reversal posts.
+* `/accounts/summary`, `/accounts/profit-loss`, `/accounts/chart/:id/statement`, and `/ledger/balance` agree.
+* No double counting between payments and vouchers.

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useI18n } from "@/lib/i18n";
+import { useFmtDate } from "@/lib/useFmtDate";
 import { useGetMe } from "@/hooks/use-me";
 import {
   useListSales,
@@ -315,6 +316,7 @@ function SaleDetailDialog({
 }) {
   const { data: sale } = useGetSale(saleId ?? 0, { query: { enabled: !!saleId && open, queryKey: ["getSale", saleId] } });
   const { toast } = useToast();
+  const { locale } = useFmtDate();
 
   if (!sale) return null;
   const saleData = sale as unknown as Record<string, unknown>;
@@ -336,7 +338,7 @@ function SaleDetailDialog({
         <div className="space-y-4">
           {/* Meta */}
           <div className="grid grid-cols-2 gap-2 text-sm">
-            <div><span className="text-muted-foreground">{t("sales.history.date")}:</span> {new Date(saleData.saleDate as string).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</div>
+            <div><span className="text-muted-foreground">{t("sales.history.date")}:</span> {new Date(saleData.saleDate as string).toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" })}</div>
             <div><span className="text-muted-foreground">{t("sales.receipt.cashier")}:</span> {saleData.createdBy as string ?? "—"}</div>
             <div><span className="text-muted-foreground">{t("sales.currency")}:</span> {currency}</div>
             <div>
@@ -614,6 +616,7 @@ function SaleEditDialog({
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function Sales() {
   const { t } = useI18n();
+  const { locale } = useFmtDate();
   const me = useGetMe();
   const { data: settingsData } = useGetSettings();
   const settings = settingsData as unknown as Record<string, unknown> | null;
@@ -1158,7 +1161,7 @@ export default function Sales() {
               return (
                 <div key={sale.id as number} className={`flex items-center gap-3 px-3 py-3 ${sale.status === "voided" ? "opacity-60" : ""}`}>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-muted-foreground">#{sale.id as number} · {new Date(sale.saleDate as string).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
+                    <p className="text-xs text-muted-foreground">#{sale.id as number} · {new Date(sale.saleDate as string).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" })}</p>
                     <p className="font-bold text-sm tabular-nums">{fmtS(sale.totalAmount as number)}</p>
                     <p className="text-xs text-muted-foreground">Paid: {fmtS(sale.paymentAmount as number)}</p>
                   </div>
@@ -1219,7 +1222,7 @@ export default function Sales() {
                   const fmtS = (n: number) => `${curSym} ${(n as number).toFixed(2)}`;
                   return (
                     <TableRow key={sale.id as number} className={sale.status === "voided" ? "opacity-60" : ""}>
-                      <TableCell className="text-sm">{new Date(sale.saleDate as string).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</TableCell>
+                      <TableCell className="text-sm">{new Date(sale.saleDate as string).toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" })}</TableCell>
                       <TableCell className="text-right font-semibold">{fmtS(sale.totalAmount as number)}</TableCell>
                       <TableCell><Badge variant="outline">{cur}</Badge></TableCell>
                       <TableCell className="text-right">{fmtS(sale.paymentAmount as number)}</TableCell>

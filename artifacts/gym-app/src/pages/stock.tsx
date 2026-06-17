@@ -63,7 +63,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { fmtDate, fmtDateTime } from "@/lib/date";
+import { useFmtDate } from "@/lib/useFmtDate";
 
 type ProductStatus = "active" | "archived" | "deleted" | "all";
 
@@ -75,6 +75,7 @@ function fmtMoney(n: number, cur: string = "USD"): string {
 
 export default function Stock() {
   const { t } = useI18n();
+  const { fmtDate, fmtDateTime } = useFmtDate();
   const me = useGetMe();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -767,6 +768,7 @@ function HistoryModal({
   canViewCost: boolean;
   t: (k: string) => string;
 }) {
+  const { fmtDate, fmtDateTime } = useFmtDate();
   const historyQ = useGetProductHistory(product.id, { query: { enabled: open, queryKey: ["getProductHistory", product.id] } });
   const purchasesQ = useListProductPurchases(product.id, { query: { enabled: open, queryKey: ["listProductPurchases", product.id] } });
 

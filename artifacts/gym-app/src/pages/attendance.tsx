@@ -31,7 +31,7 @@ import {
   Trophy, Filter, X, Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fmtDate, fmtDateTime, fmtTime } from "@/lib/date";
+import { useFmtDate } from "@/lib/useFmtDate";
 
 function StatCard({ icon: Icon, label, value, color, loading }: {
   icon: React.ElementType; label: string; value?: string | number;
@@ -60,6 +60,7 @@ const CHART_COLOR = "#6366f1";
 
 export default function Attendance() {
   const { t } = useI18n();
+  const { fmtDate, fmtDateTime, fmtTime } = useFmtDate();
 
   const { data: summary, isLoading: sumLoading } = useGetAttendanceSummary();
   const { data: daily = [], isLoading: dailyLoading } = useGetAttendanceDaily();
@@ -262,6 +263,7 @@ export default function Attendance() {
 
 function AttendanceReports() {
   const { t } = useI18n();
+  const { fmtDate, fmtDateTime, fmtTime } = useFmtDate();
   const today = new Date().toISOString().slice(0, 10);
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
 

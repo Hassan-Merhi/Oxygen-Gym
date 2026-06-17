@@ -6,7 +6,7 @@ import { z } from "zod";
 import { useI18n } from "@/lib/i18n";
 import { useGetMe } from "@/hooks/use-me";
 import { useQuery } from "@tanstack/react-query";
-import { fmtDate } from "@/lib/date";
+import { useFmtDate } from "@/lib/useFmtDate";
 import {
   useListMembers,
   useCreateMember,
@@ -249,6 +249,7 @@ type FreezeFormValues = z.infer<typeof freezeSchema>;
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function MembersPage() {
   const { t } = useI18n();
+  const { fmtDate } = useFmtDate();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
