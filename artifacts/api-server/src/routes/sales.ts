@@ -293,7 +293,9 @@ router.patch("/:id", async (req: Request, res: Response) => {
     return;
   }
 
-  const rate = existing.exchangeRate ?? 1;
+  // Always use the current settings rate — not the stale rate stored on the old record
+  const editSettings = await getSettings();
+  const rate = editSettings.usdToCdfRate ?? 2800;
   const existingItems = (existing.items ?? []) as SaleItem[];
 
   // Recalculate items when prices/discounts are edited
@@ -320,10 +322,9 @@ router.patch("/:id", async (req: Request, res: Response) => {
     newTotalProfit = newTotalAmount - newTotalCost;
     newTotalAmountUsd = targetCur === "CDF" ? newTotalAmount / rate : newTotalAmount;
   } else if (currency && currency !== existing.currency) {
-    // Currency-only change: convert existing total
-    const usd = existing.totalAmountUsd ?? existing.totalAmount ?? 0;
-    newTotalAmount = currency === "CDF" ? usd * rate : usd;
-    newTotalAmountUsd = usd;
+    // Currency-only change: keep the same number, reinterpret currency
+    newTotalAmount = existing.totalAmount ?? 0;
+    newTotalAmountUsd = currency === "CDF" ? newTotalAmount / rate : newTotalAmount;
   }
 
   // Payment amount correction

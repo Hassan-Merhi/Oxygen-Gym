@@ -73,6 +73,43 @@ async function runStartupMigrations() {
       CREATE INDEX IF NOT EXISTS idx_cash_ledger_source_id   ON cash_ledger(source_id)
     `);
 
+    // ── Repair CDF records stored with wrong exchange_rate = 1 ────────────────
+    // Any payment or sale in CDF with exchange_rate < 10 was recorded before the
+    // rate was properly wired, causing amountUsd = raw_CDF_amount instead of
+    // amount ÷ rate. Recompute using the current settings rate.
+    const repairResult = await db.execute(sql`
+      WITH rate AS (
+        SELECT COALESCE(usd_to_cdf_rate, 2800) AS r FROM settings LIMIT 1
+      )
+      UPDATE payments
+      SET
+        amount_usd    = amount / (SELECT r FROM rate),
+        exchange_rate = (SELECT r FROM rate)
+      WHERE currency = 'CDF'
+        AND exchange_rate < 10
+    `);
+    const repaired = (repairResult as unknown as { rowCount?: number }).rowCount ?? 0;
+    if (repaired > 0) {
+      logger.info({ repaired }, "Repaired CDF payment records with wrong exchange_rate");
+    }
+
+    const salesRepairResult = await db.execute(sql`
+      WITH rate AS (
+        SELECT COALESCE(usd_to_cdf_rate, 2800) AS r FROM settings LIMIT 1
+      )
+      UPDATE sales
+      SET
+        total_amount_usd  = total_amount  / (SELECT r FROM rate),
+        total_profit_usd  = total_profit  / (SELECT r FROM rate),
+        exchange_rate     = (SELECT r FROM rate)
+      WHERE currency = 'CDF'
+        AND exchange_rate < 10
+    `);
+    const repairedSales = (salesRepairResult as unknown as { rowCount?: number }).rowCount ?? 0;
+    if (repairedSales > 0) {
+      logger.info({ repairedSales }, "Repaired CDF sale records with wrong exchange_rate");
+    }
+
     logger.info("Startup migrations complete");
   } catch (err) {
     logger.error({ err }, "Startup migration failed");
