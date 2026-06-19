@@ -271,7 +271,7 @@ export function formatDailySummaryMessage(opts: {
   ];
 
   // ── Ventes boutique (per product) ─────────────────────────────────────────
-  lines.push(`🛒 *Ventes boutique :*`);
+  lines.push(`🛒 *Ventes produits :*`);
   if (productLines.length === 0) {
     lines.push(`   Aucune vente aujourd'hui`);
   } else {
