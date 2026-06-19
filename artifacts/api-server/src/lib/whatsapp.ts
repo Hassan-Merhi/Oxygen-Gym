@@ -223,9 +223,9 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const sales    = productLines.filter(p => p.currency === "USD").reduce((a, p) => a + p.total, 0);
   const salesCdf = productLines.filter(p => p.currency === "CDF").reduce((a, p) => a + p.total, 0);
 
-  // ── Remaining ──────────────────────────────────────────────────────────────
-  const remaining    = memberships + sales - expenses;
-  const remainingCdf = membershipsCdf + salesCdf - expensesCdf;
+  // ── Remaining (Net Today = cash in memberships minus cash out expenses only)
+  const remaining    = memberships - expenses;
+  const remainingCdf = membershipsCdf - expensesCdf;
 
   const [year, month, day] = lubDateStr.split("-");
   const friendlyDate = `${day}/${month}/${year}`;
