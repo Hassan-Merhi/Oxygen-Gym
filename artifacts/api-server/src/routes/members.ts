@@ -220,34 +220,6 @@ router.post("/", async (req: Request, res: Response) => {
     }
   }
 
-  if (amountPaid > 0 && body.cashAccountId) {
-    let accountName = "cash";
-    const [acct] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, body.cashAccountId));
-    if (acct) accountName = acct.name.toLowerCase().replace(/ /g, "_");
-    const voucherNumber = await getNextNumber("VCH");
-    const rate = await getExchangeRate();
-    const { amountUsd, amountCdf } = toUsdCdf(amountPaid, member.currency, rate);
-    await db.insert(vouchersTable).values({
-      voucherNumber,
-      voucherType: "cash_receipt",
-      direction: "in",
-      receivedFrom: member.name,
-      linkedEntity: "member",
-      linkedEntityId: member.id,
-      linkedEntityName: member.name,
-      amount: amountPaid,
-      currency: member.currency,
-      exchangeRate: rate,
-      amountUsd,
-      amountCdf,
-      account: accountName,
-      category: "membership",
-      description: `Membership payment — ${planName ?? ""}`,
-      voucherDate: body.startDate ? new Date(body.startDate) : new Date(),
-      status: "recorded",
-    });
-  }
-
   // Auto-commission: if coach assigned and amount > 0
   if (amountPaid > 0 && member.coachId && (member.commissionAmount ?? 0) > 0) {
     await db.insert(commissionsTable).values({
@@ -532,32 +504,6 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
   // Write to cash ledger
   if (body.amountPaid > 0) {
     await appendLedgerEntry({ sourceType: "payment", sourceNumber: paymentNumber, sourceId: renewPayment.id, direction: "in", amount: body.amountPaid, currency: body.currency, exchangeRate: renewRate, description: `Renewal — ${plan.name} (${existing.name})`, entryDate: renewEntryDate });
-  }
-
-  if ((body.amountPaid ?? 0) > 0 && body.cashAccountId) {
-    let accountName = "cash";
-    const [acct] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, body.cashAccountId));
-    if (acct) accountName = acct.name.toLowerCase().replace(/ /g, "_");
-    const voucherNumber = await getNextNumber("VCH");
-    await db.insert(vouchersTable).values({
-      voucherNumber,
-      voucherType: "cash_receipt",
-      direction: "in",
-      receivedFrom: existing.name,
-      linkedEntity: "member",
-      linkedEntityId: id,
-      linkedEntityName: existing.name,
-      amount: body.amountPaid,
-      currency: body.currency,
-      exchangeRate: renewRate,
-      amountUsd: renewUsd,
-      amountCdf: renewCdf,
-      account: accountName,
-      category: "membership",
-      description: `Membership renewal — ${plan.name}`,
-      voucherDate: renewEntryDate,
-      status: "recorded",
-    });
   }
 
   // Auto-commission on renewal
