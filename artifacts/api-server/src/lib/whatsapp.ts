@@ -92,6 +92,9 @@ export function formatExpiryReminderMessage(member: {
   return lines.join("\n");
 }
 
+interface ProductLine { name: string; qty: number; total: number; currency: string }
+interface ExpenseLine { desc: string; amount: number; currency: string }
+
 export async function sendDailySummaryNow(): Promise<{ memberships: number; expenses: number; sales: number; remaining: number }> {
   const settings = await db.query.settingsTable.findFirst();
   if (!settings?.greenApiInstanceId || !settings?.greenApiToken) {
@@ -105,17 +108,16 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const lubDateStr = lubNow.toISOString().slice(0, 10);
 
   const dayStart = new Date(`${lubDateStr}T00:00:00+02:00`);
-  const dayEnd = new Date(`${lubDateStr}T23:59:59+02:00`);
+  const dayEnd   = new Date(`${lubDateStr}T23:59:59+02:00`);
 
   const [
     membershipRow,
     membershipCdfRow,
-    payOutRow,
-    vchOutRow,
-    salesUsdRow,
-    salesCdfRow,
+    expPayments,
+    expVouchers,
+    todaySales,
   ] = await Promise.all([
-    // Today: membership payments in (completed, exclude product_sale)
+    // Membership in (USD)
     db.select({ usd: sum(paymentsTable.amountUsd) })
       .from(paymentsTable)
       .where(and(
@@ -125,6 +127,7 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
         gte(paymentsTable.paymentDate, dayStart),
         lte(paymentsTable.paymentDate, dayEnd),
       )),
+    // Membership in (CDF)
     db.select({ cdf: sum(paymentsTable.amountCdf) })
       .from(paymentsTable)
       .where(and(
@@ -134,8 +137,14 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
         gte(paymentsTable.paymentDate, dayStart),
         lte(paymentsTable.paymentDate, dayEnd),
       )),
-    // Today: expenses — payments out (completed)
-    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) })
+    // Expense payments (with description)
+    db.select({
+      notes:     paymentsTable.notes,
+      amount:    paymentsTable.amount,
+      currency:  paymentsTable.currency,
+      amountUsd: paymentsTable.amountUsd,
+      amountCdf: paymentsTable.amountCdf,
+    })
       .from(paymentsTable)
       .where(and(
         eq(paymentsTable.direction, "out"),
@@ -143,8 +152,15 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
         gte(paymentsTable.paymentDate, dayStart),
         lte(paymentsTable.paymentDate, dayEnd),
       )),
-    // Today: expenses — vouchers out (recorded)
-    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
+    // Expense vouchers (with description)
+    db.select({
+      description: vouchersTable.description,
+      paidTo:      vouchersTable.paidTo,
+      amount:      vouchersTable.amount,
+      currency:    vouchersTable.currency,
+      amountUsd:   vouchersTable.amountUsd,
+      amountCdf:   vouchersTable.amountCdf,
+    })
       .from(vouchersTable)
       .where(and(
         eq(vouchersTable.direction, "out"),
@@ -152,42 +168,73 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
         gte(vouchersTable.voucherDate, dayStart),
         lte(vouchersTable.voucherDate, dayEnd),
       )),
-    // Today: stock/POS sales in USD (currency='USD' only — avoids CDF-converted amounts bleeding into USD)
-    db.select({ usd: sum(salesTable.totalAmountUsd) })
+    // Full sale rows with JSONB items
+    db.select({ items: salesTable.items, currency: salesTable.currency })
       .from(salesTable)
       .where(and(
         eq(salesTable.status, "completed"),
-        eq(salesTable.currency, "USD"),
-        gte(salesTable.saleDate, dayStart),
-        lte(salesTable.saleDate, dayEnd),
-      )),
-    // Today: stock/POS sales in CDF (currency='CDF' only)
-    db.select({ cdf: sum(salesTable.totalAmount) })
-      .from(salesTable)
-      .where(and(
-        eq(salesTable.status, "completed"),
-        eq(salesTable.currency, "CDF"),
         gte(salesTable.saleDate, dayStart),
         lte(salesTable.saleDate, dayEnd),
       )),
   ]);
 
   const n = (v: unknown) => Number(v ?? 0);
+
+  // ── Memberships ────────────────────────────────────────────────────────────
   const memberships    = n(membershipRow[0]?.usd);
   const membershipsCdf = n(membershipCdfRow[0]?.cdf);
-  const expenses       = n(payOutRow[0]?.usd) + n(vchOutRow[0]?.usd);
-  const expensesCdf    = n(payOutRow[0]?.cdf) + n(vchOutRow[0]?.cdf);
-  const sales          = n(salesUsdRow[0]?.usd);   // USD sales only
-  const salesCdf       = n(salesCdfRow[0]?.cdf);   // CDF sales only
 
-  // Caisse restante = today's net (memberships + sales − expenses)
+  // ── Expenses (per-item detail) ─────────────────────────────────────────────
+  const expenseLines: ExpenseLine[] = [
+    ...expPayments.map(p => ({
+      desc: p.notes?.trim() || "Dépense",
+      amount: p.amount ?? 0,
+      currency: p.currency ?? "USD",
+    })),
+    ...expVouchers.map(v => ({
+      desc: v.description?.trim() || v.paidTo?.trim() || "Dépense",
+      amount: v.amount ?? 0,
+      currency: v.currency ?? "USD",
+    })),
+  ];
+  const expenses    = expPayments.reduce((a, p) => a + n(p.amountUsd), 0)
+                    + expVouchers.reduce((a, v) => a + n(v.amountUsd), 0);
+  const expensesCdf = expPayments.reduce((a, p) => a + n(p.amountCdf), 0)
+                    + expVouchers.reduce((a, v) => a + n(v.amountCdf), 0);
+
+  // ── Sales (aggregate products across all today's sales) ────────────────────
+  const productMap = new Map<string, ProductLine>();
+  for (const sale of todaySales) {
+    for (const item of sale.items ?? []) {
+      const key = `${item.productName}::${item.currency ?? sale.currency}`;
+      const cur = item.currency ?? sale.currency ?? "USD";
+      const existing = productMap.get(key);
+      if (existing) {
+        existing.qty   += item.quantity;
+        existing.total += item.lineTotal;
+      } else {
+        productMap.set(key, { name: item.productName, qty: item.quantity, total: item.lineTotal, currency: cur });
+      }
+    }
+  }
+  const productLines = [...productMap.values()];
+  const sales    = productLines.filter(p => p.currency === "USD").reduce((a, p) => a + p.total, 0);
+  const salesCdf = productLines.filter(p => p.currency === "CDF").reduce((a, p) => a + p.total, 0);
+
+  // ── Remaining ──────────────────────────────────────────────────────────────
   const remaining    = memberships + sales - expenses;
   const remainingCdf = membershipsCdf + salesCdf - expensesCdf;
 
   const [year, month, day] = lubDateStr.split("-");
   const friendlyDate = `${day}/${month}/${year}`;
 
-  const message = formatDailySummaryMessage({ date: friendlyDate, memberships, membershipsCdf, expenses, expensesCdf, sales, salesCdf, remaining, remainingCdf });
+  const message = formatDailySummaryMessage({
+    date: friendlyDate,
+    memberships, membershipsCdf,
+    expenses, expensesCdf, expenseLines,
+    sales, salesCdf, productLines,
+    remaining, remainingCdf,
+  });
   await sendToAllChats(instanceId, token, message);
 
   logger.info({ memberships, expenses, sales, remaining }, "Daily cash summary sent");
@@ -200,36 +247,81 @@ export function formatDailySummaryMessage(opts: {
   membershipsCdf: number;
   expenses: number;
   expensesCdf: number;
+  expenseLines: ExpenseLine[];
   sales: number;
   salesCdf: number;
+  productLines: ProductLine[];
   remaining: number;
   remainingCdf: number;
 }): string {
-  const { date, memberships, membershipsCdf, expenses, expensesCdf, sales, salesCdf, remaining, remainingCdf } = opts;
-  const usd = (n: number) =>
-    n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const cdf = (n: number) =>
-    Math.round(n).toLocaleString("fr-FR");
-  const remainEmoji = remaining >= 0 ? "✅" : "🔴";
-  return [
+  const { date, memberships, membershipsCdf, expenseLines, productLines, remaining, remainingCdf } = opts;
+
+  const fmtUsd = (n: number) => n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtCdf = (n: number) => Math.round(n).toLocaleString("fr-FR");
+  const fmtAmt = (amount: number, currency: string) =>
+    currency === "CDF" ? `FC ${fmtCdf(amount)}` : `$${fmtUsd(amount)}`;
+
+  const lines: string[] = [
     `📊 *Résumé de la journée — ${date}*`,
     ``,
     `🏋️ *Abonnements salle :*`,
-    `   USD : *$${usd(memberships)}*`,
-    `   CDF : *FC ${cdf(membershipsCdf)}*`,
+    `   USD : *$${fmtUsd(memberships)}*`,
+    `   CDF : *FC ${fmtCdf(membershipsCdf)}*`,
     ``,
-    `💸 *Dépenses du jour :*`,
-    `   USD : *$${usd(expenses)}*`,
-    `   CDF : *FC ${cdf(expensesCdf)}*`,
-    ``,
-    `🛒 *Ventes boutique :*`,
-    `   USD : *$${usd(sales)}*`,
-    `   CDF : *FC ${cdf(salesCdf)}*`,
-    ``,
-    `${remainEmoji} *Caisse restante :*`,
-    `   USD : *$${usd(remaining)}*`,
-    `   CDF : *FC ${cdf(remainingCdf)}*`,
-    ``,
-    `_OxygenGym — rapport automatique_`,
-  ].join("\n");
+  ];
+
+  // ── Ventes boutique (per product) ─────────────────────────────────────────
+  lines.push(`🛒 *Ventes boutique :*`);
+  if (productLines.length === 0) {
+    lines.push(`   Aucune vente aujourd'hui`);
+  } else {
+    for (const p of productLines) {
+      lines.push(`   • ${p.name} x${p.qty} — ${fmtAmt(p.total, p.currency)}`);
+    }
+    // Totals
+    const usdProducts = productLines.filter(p => p.currency === "USD");
+    const cdfProducts = productLines.filter(p => p.currency === "CDF");
+    lines.push(`   ─────────────────`);
+    if (usdProducts.length > 0) {
+      const total = usdProducts.reduce((a, p) => a + p.total, 0);
+      lines.push(`   Total USD : *$${fmtUsd(total)}*`);
+    }
+    if (cdfProducts.length > 0) {
+      const total = cdfProducts.reduce((a, p) => a + p.total, 0);
+      lines.push(`   Total CDF : *FC ${fmtCdf(total)}*`);
+    }
+  }
+  lines.push(``);
+
+  // ── Dépenses du jour (per expense) ────────────────────────────────────────
+  lines.push(`💸 *Dépenses du jour :*`);
+  if (expenseLines.length === 0) {
+    lines.push(`   Aucune dépense aujourd'hui`);
+  } else {
+    for (const e of expenseLines) {
+      lines.push(`   • ${e.desc} — ${fmtAmt(e.amount, e.currency)}`);
+    }
+    const usdExp = expenseLines.filter(e => e.currency === "USD");
+    const cdfExp = expenseLines.filter(e => e.currency === "CDF");
+    lines.push(`   ─────────────────`);
+    if (usdExp.length > 0) {
+      const total = usdExp.reduce((a, e) => a + e.amount, 0);
+      lines.push(`   Total USD : *$${fmtUsd(total)}*`);
+    }
+    if (cdfExp.length > 0) {
+      const total = cdfExp.reduce((a, e) => a + e.amount, 0);
+      lines.push(`   Total CDF : *FC ${fmtCdf(total)}*`);
+    }
+  }
+  lines.push(``);
+
+  // ── Caisse restante ────────────────────────────────────────────────────────
+  const remainEmoji = remaining >= 0 ? "✅" : "🔴";
+  lines.push(`${remainEmoji} *Caisse restante :*`);
+  lines.push(`   USD : *$${fmtUsd(remaining)}*`);
+  lines.push(`   CDF : *FC ${fmtCdf(remainingCdf)}*`);
+  lines.push(``);
+  lines.push(`_OxygenGym — rapport automatique_`);
+
+  return lines.join("\n");
 }
