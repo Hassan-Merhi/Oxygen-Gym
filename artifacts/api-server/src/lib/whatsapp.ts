@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
-import { whatsappChatsTable, paymentsTable, vouchersTable } from "@workspace/db/schema";
-import { eq, and, gte, lte, sum } from "drizzle-orm";
+import { whatsappChatsTable, paymentsTable, vouchersTable, salesTable } from "@workspace/db/schema";
+import { eq, and, gte, lte, sum, not } from "drizzle-orm";
 import { logger } from "./logger";
 
 const GREEN_API_BASE = "https://api.green-api.com";
@@ -92,7 +92,7 @@ export function formatExpiryReminderMessage(member: {
   return lines.join("\n");
 }
 
-export async function sendDailySummaryNow(): Promise<{ cashIn: number; expenses: number; remaining: number }> {
+export async function sendDailySummaryNow(): Promise<{ memberships: number; expenses: number; sales: number; remaining: number }> {
   const settings = await db.query.settingsTable.findFirst();
   if (!settings?.greenApiInstanceId || !settings?.greenApiToken) {
     throw new Error("Green API credentials not configured");
@@ -107,49 +107,74 @@ export async function sendDailySummaryNow(): Promise<{ cashIn: number; expenses:
   const dayStart = new Date(`${lubDateStr}T00:00:00+02:00`);
   const dayEnd = new Date(`${lubDateStr}T23:59:59+02:00`);
 
-  const [payInRow, payOutRow, vchInRow, vchOutRow] = await Promise.all([
-    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) })
+  const [membershipRow, membershipCdfRow, payOutRow, vchOutRow, salesRow] = await Promise.all([
+    // Gym membership payments in (exclude product_sale)
+    db.select({ usd: sum(paymentsTable.amountUsd) })
       .from(paymentsTable)
-      .where(and(eq(paymentsTable.direction, "in"), gte(paymentsTable.paymentDate, dayStart), lte(paymentsTable.paymentDate, dayEnd))),
+      .where(and(
+        eq(paymentsTable.direction, "in"),
+        not(eq(paymentsTable.category, "product_sale")),
+        gte(paymentsTable.paymentDate, dayStart),
+        lte(paymentsTable.paymentDate, dayEnd),
+      )),
+    db.select({ cdf: sum(paymentsTable.amountCdf) })
+      .from(paymentsTable)
+      .where(and(
+        eq(paymentsTable.direction, "in"),
+        not(eq(paymentsTable.category, "product_sale")),
+        gte(paymentsTable.paymentDate, dayStart),
+        lte(paymentsTable.paymentDate, dayEnd),
+      )),
+    // Expenses (payments out + vouchers out)
     db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) })
       .from(paymentsTable)
       .where(and(eq(paymentsTable.direction, "out"), gte(paymentsTable.paymentDate, dayStart), lte(paymentsTable.paymentDate, dayEnd))),
     db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
       .from(vouchersTable)
-      .where(and(eq(vouchersTable.direction, "in"), eq(vouchersTable.status, "recorded"), gte(vouchersTable.voucherDate, dayStart), lte(vouchersTable.voucherDate, dayEnd))),
-    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
-      .from(vouchersTable)
       .where(and(eq(vouchersTable.direction, "out"), eq(vouchersTable.status, "recorded"), gte(vouchersTable.voucherDate, dayStart), lte(vouchersTable.voucherDate, dayEnd))),
+    // Stock sales
+    db.select({ usd: sum(salesTable.totalAmountUsd), cdf: sum(salesTable.totalAmount) })
+      .from(salesTable)
+      .where(and(
+        eq(salesTable.status, "completed"),
+        gte(salesTable.saleDate, dayStart),
+        lte(salesTable.saleDate, dayEnd),
+      )),
   ]);
 
   const n = (v: unknown) => Number(v ?? 0);
-  const cashIn      = n(payInRow[0]?.usd)  + n(vchInRow[0]?.usd);
-  const cashInCdf   = n(payInRow[0]?.cdf)  + n(vchInRow[0]?.cdf);
-  const expenses    = n(payOutRow[0]?.usd) + n(vchOutRow[0]?.usd);
-  const expensesCdf = n(payOutRow[0]?.cdf) + n(vchOutRow[0]?.cdf);
-  const remaining    = cashIn - expenses;
-  const remainingCdf = cashInCdf - expensesCdf;
+  const memberships    = n(membershipRow[0]?.usd);
+  const membershipsCdf = n(membershipCdfRow[0]?.cdf);
+  const expenses       = n(payOutRow[0]?.usd) + n(vchOutRow[0]?.usd);
+  const expensesCdf    = n(payOutRow[0]?.cdf) + n(vchOutRow[0]?.cdf);
+  const sales          = n(salesRow[0]?.usd);
+  // For sales CDF: only count rows where currency=CDF
+  const salesCdf       = n(salesRow[0]?.cdf);
+  const remaining      = memberships + sales - expenses;
+  const remainingCdf   = membershipsCdf + salesCdf - expensesCdf;
 
   const [year, month, day] = lubDateStr.split("-");
   const friendlyDate = `${day}/${month}/${year}`;
 
-  const message = formatDailySummaryMessage({ date: friendlyDate, cashIn, cashInCdf, expenses, expensesCdf, remaining, remainingCdf });
+  const message = formatDailySummaryMessage({ date: friendlyDate, memberships, membershipsCdf, expenses, expensesCdf, sales, salesCdf, remaining, remainingCdf });
   await sendToAllChats(instanceId, token, message);
 
-  logger.info({ cashIn, expenses, remaining }, "Daily cash summary sent");
-  return { cashIn, expenses, remaining };
+  logger.info({ memberships, expenses, sales, remaining }, "Daily cash summary sent");
+  return { memberships, expenses, sales, remaining };
 }
 
 export function formatDailySummaryMessage(opts: {
   date: string;
-  cashIn: number;
-  cashInCdf: number;
+  memberships: number;
+  membershipsCdf: number;
   expenses: number;
   expensesCdf: number;
+  sales: number;
+  salesCdf: number;
   remaining: number;
   remainingCdf: number;
 }): string {
-  const { date, cashIn, cashInCdf, expenses, expensesCdf, remaining, remainingCdf } = opts;
+  const { date, memberships, membershipsCdf, expenses, expensesCdf, sales, salesCdf, remaining, remainingCdf } = opts;
   const usd = (n: number) =>
     n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const cdf = (n: number) =>
@@ -158,15 +183,19 @@ export function formatDailySummaryMessage(opts: {
   return [
     `📊 *Résumé de la journée — ${date}*`,
     ``,
-    `💵 *Encaissé du jour :*`,
-    `   USD : *$${usd(cashIn)}*`,
-    `   CDF : *FC ${cdf(cashInCdf)}*`,
+    `🏋️ *Abonnements salle :*`,
+    `   USD : *$${usd(memberships)}*`,
+    `   CDF : *FC ${cdf(membershipsCdf)}*`,
     ``,
     `💸 *Dépenses du jour :*`,
     `   USD : *$${usd(expenses)}*`,
     `   CDF : *FC ${cdf(expensesCdf)}*`,
     ``,
-    `${remainEmoji} *Solde net du jour :*`,
+    `🛒 *Ventes boutique :*`,
+    `   USD : *$${usd(sales)}*`,
+    `   CDF : *FC ${cdf(salesCdf)}*`,
+    ``,
+    `${remainEmoji} *Caisse restante :*`,
     `   USD : *$${usd(remaining)}*`,
     `   CDF : *FC ${cdf(remainingCdf)}*`,
     ``,

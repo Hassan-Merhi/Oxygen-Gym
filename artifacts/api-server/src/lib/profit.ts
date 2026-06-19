@@ -103,8 +103,10 @@ export async function calculateProfit(from: Date, to: Date): Promise<ProfitBreak
     0,
   );
 
-  const totalRevenue = membershipRevenue + salesRevenue;
-  const profit = totalRevenue - cogs - expenses - payrollTotal;
+  // Sales are tracked separately but NOT included in profit
+  // (stock sales are shop items, not gym revenue)
+  const totalRevenue = membershipRevenue;
+  const profit = totalRevenue - expenses - payrollTotal;
 
   return {
     totalRevenue,
