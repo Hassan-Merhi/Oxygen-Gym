@@ -151,6 +151,17 @@ export default function CashBook() {
   const [dateFrom, setDateFrom] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [dateTo, setDateTo] = useState("");
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const yesterdayStr = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
+  const isTodayActive = dateFrom === todayStr && dateTo === todayStr;
+  const isYesterdayActive = dateFrom === yesterdayStr && dateTo === yesterdayStr;
+  const setQuickDate = (d: string) => {
+    const already = dateFrom === d && dateTo === d;
+    setDateFrom(already ? "" : d);
+    setDateTo(already ? "" : d);
+    setPage(1);
+  };
   const [page, setPage] = useState(1);
 
   // ── Modal state ──
@@ -662,6 +673,21 @@ export default function CashBook() {
                 </button>
               ))}
             </div>
+            <div className="flex rounded-lg border border-border overflow-hidden text-xs font-semibold">
+              {([["Today", todayStr, isTodayActive], ["Yesterday", yesterdayStr, isYesterdayActive]] as const).map(([label, d, active]) => (
+                <button
+                  key={label}
+                  onClick={() => setQuickDate(d)}
+                  className={`px-3 h-8 transition-colors ${
+                    active
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:bg-muted"
+                  } ${label === "Yesterday" ? "border-l border-border" : ""}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <Input
               type="date"
               className="h-8 w-36 text-sm"
@@ -707,6 +733,9 @@ export default function CashBook() {
                         {isIn ? <ArrowDownCircle className="w-3 h-3" /> : <ArrowUpCircle className="w-3 h-3" />}
                         {t(`vch.type.${(entry as VchEntry).voucherType}`)}
                       </Badge>
+                    )}
+                    {entry._kind === "payment" && (entry as PayEntry).category === "membership" && (entry as PayEntry).planName && (
+                      <span className="text-xs text-muted-foreground">— {(entry as PayEntry).planName}</span>
                     )}
                   </div>
                   {party && <p className="text-sm font-medium truncate">{party}</p>}
@@ -813,6 +842,9 @@ export default function CashBook() {
                                 <span className="text-xs font-semibold text-foreground/80">
                                   {t(`vch.type.${(entry as VchEntry).voucherType}`)}
                                 </span>
+                              )}
+                              {entry._kind === "payment" && (entry as PayEntry).category === "membership" && (entry as PayEntry).planName && (
+                                <span className="text-xs text-muted-foreground">— {(entry as PayEntry).planName}</span>
                               )}
                             </div>
                             {party && <p className="text-sm font-medium truncate max-w-xs">{party}</p>}
