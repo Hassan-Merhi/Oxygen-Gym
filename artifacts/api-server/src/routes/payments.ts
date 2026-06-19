@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
 import { paymentsTable, settingsTable, cashLedgerTable, membersTable, commissionsTable, vouchersTable } from "@workspace/db/schema";
-import { eq, and, ilike, or, gte, lte, count, sum, desc, asc } from "drizzle-orm";
+import { eq, and, ilike, or, gte, lte, count, sum, desc, asc, not } from "drizzle-orm";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 import { appendLedgerEntry, getCurrentBalance } from "../lib/ledger";
@@ -98,7 +98,10 @@ router.get("/", async (req: Request, res: Response) => {
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
   const offset = (pageNum - 1) * limitNum;
 
-  const conditions: ReturnType<typeof eq>[] = [];
+  const conditions: ReturnType<typeof eq>[] = [
+    // Product sales are tracked in the Sales module — exclude from Cash Book
+    not(eq(paymentsTable.category, "product_sale")),
+  ];
 
   if (search) {
     conditions.push(
