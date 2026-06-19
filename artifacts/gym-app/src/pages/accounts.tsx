@@ -348,12 +348,6 @@ export default function AccountsPage() {
               <div key={row.id} className="px-3 py-3 flex items-start gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className={cn(
-                      "inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium shrink-0",
-                      incoming ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700",
-                    )}>
-                      {sourceTypeLabel(row.sourceType)}
-                    </span>
                     <span className="text-xs text-muted-foreground">{fmtDate(row.date)}</span>
                   </div>
                   {row.description && <p className="text-xs text-muted-foreground mt-0.5 truncate">{row.description}</p>}
@@ -388,7 +382,6 @@ export default function AccountsPage() {
               <thead>
                 <tr className="border-b border-border bg-muted/30">
                   <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Date</th>
-                  <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Type</th>
                   <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Description</th>
                   <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Party</th>
                   <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">In</th>
@@ -416,14 +409,6 @@ export default function AccountsPage() {
                   return (
                     <tr key={row.id} className="hover:bg-muted/20 transition-colors">
                       <td className="px-5 py-3.5 whitespace-nowrap tabular-nums text-sm font-medium">{fmtDate(row.date)}</td>
-                      <td className="px-5 py-3.5">
-                        <span className={cn(
-                          "inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium",
-                          incoming ? "bg-emerald-100 text-emerald-700 border border-emerald-200/60" : "bg-rose-100 text-rose-700 border border-rose-200/60",
-                        )}>
-                          {sourceTypeLabel(row.sourceType)}
-                        </span>
-                      </td>
                       <td className="px-5 py-3.5 max-w-[200px]">
                         <p className="text-sm truncate">{row.description || "—"}</p>
                       </td>
