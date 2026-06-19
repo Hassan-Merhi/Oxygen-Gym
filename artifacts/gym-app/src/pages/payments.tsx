@@ -827,17 +827,13 @@ export default function CashBook() {
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap mb-0.5">
                               {entry._kind === "payment" ? (
-                                <>
-                                  <DirBadge dir={(entry as PayEntry).direction} t={t} />
-                                  <span className="text-xs bg-muted/60 text-muted-foreground px-2 py-0.5 rounded-full font-medium">
-                                    {t(`pay.cat.${(entry as PayEntry).category}`)}
-                                  </span>
-                                </>
+                                <span className="text-xs font-semibold text-foreground/80">
+                                  {t(`pay.cat.${(entry as PayEntry).category}`)}
+                                </span>
                               ) : (
-                                <Badge className={`${isIn ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"} border-0 gap-1 text-xs`}>
-                                  {isIn ? <ArrowDownCircle className="w-3 h-3" /> : <ArrowUpCircle className="w-3 h-3" />}
+                                <span className="text-xs font-semibold text-foreground/80">
                                   {t(`vch.type.${(entry as VchEntry).voucherType}`)}
-                                </Badge>
+                                </span>
                               )}
                             </div>
                             {party && <p className="text-sm font-medium truncate max-w-xs">{party}</p>}
