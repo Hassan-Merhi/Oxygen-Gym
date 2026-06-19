@@ -112,7 +112,8 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
     membershipCdfRow,
     payOutRow,
     vchOutRow,
-    salesRow,
+    salesUsdRow,
+    salesCdfRow,
   ] = await Promise.all([
     // Today: membership payments in (completed, exclude product_sale)
     db.select({ usd: sum(paymentsTable.amountUsd) })
@@ -151,11 +152,21 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
         gte(vouchersTable.voucherDate, dayStart),
         lte(vouchersTable.voucherDate, dayEnd),
       )),
-    // Today: stock/POS sales
-    db.select({ usd: sum(salesTable.totalAmountUsd), cdf: sum(salesTable.totalAmount) })
+    // Today: stock/POS sales in USD (currency='USD' only — avoids CDF-converted amounts bleeding into USD)
+    db.select({ usd: sum(salesTable.totalAmountUsd) })
       .from(salesTable)
       .where(and(
         eq(salesTable.status, "completed"),
+        eq(salesTable.currency, "USD"),
+        gte(salesTable.saleDate, dayStart),
+        lte(salesTable.saleDate, dayEnd),
+      )),
+    // Today: stock/POS sales in CDF (currency='CDF' only)
+    db.select({ cdf: sum(salesTable.totalAmount) })
+      .from(salesTable)
+      .where(and(
+        eq(salesTable.status, "completed"),
+        eq(salesTable.currency, "CDF"),
         gte(salesTable.saleDate, dayStart),
         lte(salesTable.saleDate, dayEnd),
       )),
@@ -166,8 +177,8 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const membershipsCdf = n(membershipCdfRow[0]?.cdf);
   const expenses       = n(payOutRow[0]?.usd) + n(vchOutRow[0]?.usd);
   const expensesCdf    = n(payOutRow[0]?.cdf) + n(vchOutRow[0]?.cdf);
-  const sales          = n(salesRow[0]?.usd);
-  const salesCdf       = n(salesRow[0]?.cdf);
+  const sales          = n(salesUsdRow[0]?.usd);   // USD sales only
+  const salesCdf       = n(salesCdfRow[0]?.cdf);   // CDF sales only
 
   // Caisse restante = today's net (memberships + sales − expenses)
   const remaining    = memberships + sales - expenses;
