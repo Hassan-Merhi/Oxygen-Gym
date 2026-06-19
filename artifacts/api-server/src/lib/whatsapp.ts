@@ -203,17 +203,19 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
                     + expVouchers.reduce((a, v) => a + n(v.amountCdf), 0);
 
   // ── Sales (aggregate products across all today's sales) ────────────────────
+  // Always use sale-level currency as the definitive source — per-item currency
+  // can be stale or missing in older JSONB records.
   const productMap = new Map<string, ProductLine>();
   for (const sale of todaySales) {
+    const saleCur = (sale.currency as string) || "USD";
     for (const item of sale.items ?? []) {
-      const key = `${item.productName}::${item.currency ?? sale.currency}`;
-      const cur = item.currency ?? sale.currency ?? "USD";
+      const key = `${item.productName}::${saleCur}`;
       const existing = productMap.get(key);
       if (existing) {
         existing.qty   += item.quantity;
         existing.total += item.lineTotal;
       } else {
-        productMap.set(key, { name: item.productName, qty: item.quantity, total: item.lineTotal, currency: cur });
+        productMap.set(key, { name: item.productName, qty: item.quantity, total: item.lineTotal, currency: saleCur });
       }
     }
   }
