@@ -62,13 +62,18 @@ interface Account {
 
 interface StatementRow {
   id: number;
-  voucherDate: string;
-  type: string;
+  date: string;
   description: string;
-  amountUsd: string;
-  currency: string;
-  receivedFrom: string | null;
-  paidTo: string | null;
+  party: string;
+  sourceType: string;
+  sourceId: number | null;
+  amount: number | null;
+  currency: string | null;
+  debitUsd: number | null;
+  creditUsd: number | null;
+  debitCdf: number | null;
+  creditCdf: number | null;
+  exchangeRate: number | null;
   runningBalance: number;
 }
 
@@ -116,8 +121,15 @@ function voucherTypeLabel(type: string) {
   return map[type] ?? type;
 }
 
-function isIncoming(type: string) {
-  return type === "cash_receipt" || type === "customer_payment";
+function sourceTypeLabel(sourceType: string) {
+  const map: Record<string, string> = {
+    voucher: "Voucher",
+    payment: "Payment",
+    sale: "Sale",
+    membership: "Membership",
+    expense: "Expense",
+  };
+  return map[sourceType] ?? sourceType;
 }
 
 async function apiFetch(path: string, options?: RequestInit) {
@@ -235,8 +247,9 @@ export default function AccountsPage() {
   if (selected) {
     const conf = TYPE_CONF[selected.type];
     const rows = statement?.rows ?? [];
-    const totalIn  = rows.filter((r) =>  isIncoming(r.type)).reduce((s, r) => s + Number(r.amountUsd), 0);
-    const totalOut = rows.filter((r) => !isIncoming(r.type)).reduce((s, r) => s + Number(r.amountUsd), 0);
+    const isDebitNormal = selected.type === "asset" || selected.type === "expense";
+    const totalIn  = rows.reduce((s, r) => s + (isDebitNormal ? (r.debitUsd ?? 0) : (r.creditUsd ?? 0)), 0);
+    const totalOut = rows.reduce((s, r) => s + (isDebitNormal ? (r.creditUsd ?? 0) : (r.debitUsd ?? 0)), 0);
     const balance  = rows.at(-1)?.runningBalance ?? 0;
 
     return (
@@ -327,8 +340,10 @@ export default function AccountsPage() {
               <p className="text-sm text-muted-foreground">No transactions yet</p>
             </div>
           ) : rows.map((row) => {
-            const incoming = isIncoming(row.type);
-            const amt = Number(row.amountUsd);
+            const inAmt  = isDebitNormal ? (row.debitUsd ?? 0) : (row.creditUsd ?? 0);
+            const outAmt = isDebitNormal ? (row.creditUsd ?? 0) : (row.debitUsd ?? 0);
+            const incoming = inAmt > 0;
+            const amt = incoming ? inAmt : outAmt;
             return (
               <div key={row.id} className="px-3 py-3 flex items-start gap-3">
                 <div className="flex-1 min-w-0">
@@ -337,16 +352,16 @@ export default function AccountsPage() {
                       "inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium shrink-0",
                       incoming ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700",
                     )}>
-                      {voucherTypeLabel(row.type)}
+                      {sourceTypeLabel(row.sourceType)}
                     </span>
-                    <span className="text-xs text-muted-foreground">{fmtDate(row.voucherDate)}</span>
+                    <span className="text-xs text-muted-foreground">{fmtDate(row.date)}</span>
                   </div>
                   {row.description && <p className="text-xs text-muted-foreground mt-0.5 truncate">{row.description}</p>}
-                  {(row.receivedFrom ?? row.paidTo) && <p className="text-xs text-muted-foreground/70 truncate">{row.receivedFrom ?? row.paidTo}</p>}
+                  {row.party && <p className="text-xs text-muted-foreground/70 truncate">{row.party}</p>}
                 </div>
                 <div className="text-right shrink-0">
                   <p className={`font-bold tabular-nums text-sm ${incoming ? "text-emerald-600" : "text-rose-600"}`}>
-                    {incoming ? "+" : "−"}{fmt(amt)}
+                    {incoming ? "" : "−"}{fmt(amt)}
                   </p>
                   <p className={cn("text-xs tabular-nums", row.runningBalance >= 0 ? "text-muted-foreground" : "text-rose-600")}>
                     Bal: {fmt(row.runningBalance)}
@@ -395,30 +410,31 @@ export default function AccountsPage() {
                   </tr>
                 )}
                 {!stmtLoading && rows.map((row) => {
-                  const incoming = isIncoming(row.type);
-                  const amt = Number(row.amountUsd);
+                  const inAmt  = isDebitNormal ? (row.debitUsd ?? 0) : (row.creditUsd ?? 0);
+                  const outAmt = isDebitNormal ? (row.creditUsd ?? 0) : (row.debitUsd ?? 0);
+                  const incoming = inAmt > 0;
                   return (
                     <tr key={row.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-5 py-3.5 whitespace-nowrap tabular-nums text-sm font-medium">{fmtDate(row.voucherDate)}</td>
+                      <td className="px-5 py-3.5 whitespace-nowrap tabular-nums text-sm font-medium">{fmtDate(row.date)}</td>
                       <td className="px-5 py-3.5">
                         <span className={cn(
                           "inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium",
                           incoming ? "bg-emerald-100 text-emerald-700 border border-emerald-200/60" : "bg-rose-100 text-rose-700 border border-rose-200/60",
                         )}>
-                          {voucherTypeLabel(row.type)}
+                          {sourceTypeLabel(row.sourceType)}
                         </span>
                       </td>
                       <td className="px-5 py-3.5 max-w-[200px]">
                         <p className="text-sm truncate">{row.description || "—"}</p>
                       </td>
                       <td className="px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
-                        {row.receivedFrom ?? row.paidTo ?? "—"}
+                        {row.party || "—"}
                       </td>
                       <td className="px-5 py-3.5 text-right tabular-nums">
-                        {incoming ? <span className="font-semibold text-emerald-600">{fmt(amt)}</span> : <span className="text-muted-foreground/40">—</span>}
+                        {inAmt > 0 ? <span className="font-semibold text-emerald-600">{fmt(inAmt)}</span> : <span className="text-muted-foreground/40">—</span>}
                       </td>
                       <td className="px-5 py-3.5 text-right tabular-nums">
-                        {!incoming ? <span className="font-semibold text-rose-600">{fmt(amt)}</span> : <span className="text-muted-foreground/40">—</span>}
+                        {outAmt > 0 ? <span className="font-semibold text-rose-600">{fmt(outAmt)}</span> : <span className="text-muted-foreground/40">—</span>}
                       </td>
                       <td className={cn(
                         "px-5 py-3.5 text-right tabular-nums font-bold text-sm",
