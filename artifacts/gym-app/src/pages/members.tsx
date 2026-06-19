@@ -82,12 +82,17 @@ import {
   Play,
   UserMinus,
   Archive,
+  Trash2,
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
   Users,
   SlidersHorizontal,
   Printer,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Clock,
 } from "lucide-react";
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -263,8 +268,8 @@ export default function MembersPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [planFilter, setPlanFilter] = useState("all");
   const [expiryWindow, setExpiryWindow] = useState("all");
-  const [sortBy, setSortBy] = useState("name");
-  const [sortOrder] = useState("asc");
+  const [sortBy, setSortBy] = useState("joinDate");
+  const [sortOrder, setSortOrder] = useState("desc");
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const LIMIT = 20;
@@ -320,6 +325,11 @@ export default function MembersPage() {
     sortOrder,
   });
   const { data: plans = [] } = useListPlans();
+  // Fetch count of active members expiring within 7 days
+  const { data: expiringData } = useListMembers({ page: 1, limit: 1, status: "active", expiryWindow: 7 } as any, {
+    query: { queryKey: ["members-expiring-7", "active", 7], refetchInterval: 60000 }
+  });
+  const expiringCount = expiringData?.total ?? 0;
 
   const items = membersData?.items ?? [];
   const total = membersData?.total ?? 0;
@@ -572,6 +582,22 @@ export default function MembersPage() {
         }
       />
 
+      {/* Expiry alert banner */}
+      {expiringCount > 0 && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300">
+          <Clock className="h-4 w-4 shrink-0" />
+          <span className="text-sm font-medium">
+            {expiringCount} member{expiringCount > 1 ? "s" : ""} expiring within 7 days
+          </span>
+          <button
+            className="ml-auto text-xs underline underline-offset-2 opacity-70 hover:opacity-100"
+            onClick={() => { setExpiryWindow("7"); setStatusFilter("active"); setPage(1); }}
+          >
+            View
+          </button>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="space-y-2">
         <div className="flex items-center gap-2">
@@ -642,6 +668,15 @@ export default function MembersPage() {
               <SelectItem value="expiryDate">{t("members.sort.expiryDate")}</SelectItem>
             </SelectContent>
           </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 w-9 p-0 shrink-0"
+            onClick={() => setSortOrder(o => o === "asc" ? "desc" : "asc")}
+            title={sortOrder === "desc" ? "Newest first" : "Oldest first"}
+          >
+            {sortOrder === "desc" ? <ArrowDown className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
+          </Button>
         </div>
       </div>
 
@@ -722,7 +757,7 @@ export default function MembersPage() {
                             className="text-red-600 focus:text-red-600"
                             onClick={() => setArchiveId(m.id)}
                           >
-                            <Archive className="h-4 w-4 mr-2" />{t("members.actions.archive")}
+                            <Trash2 className="h-4 w-4 mr-2" />{t("members.actions.delete") || "Delete"}
                           </DropdownMenuItem>
                         </>
                       )}
@@ -873,7 +908,7 @@ export default function MembersPage() {
                               className="text-red-600 focus:text-red-600"
                               onClick={() => setArchiveId(m.id)}
                             >
-                              <Archive className="h-4 w-4 mr-2" />{t("members.actions.archive")}
+                              <Trash2 className="h-4 w-4 mr-2" />{t("members.actions.delete") || "Delete"}
                             </DropdownMenuItem>
                           </>
                         )}
@@ -1355,8 +1390,8 @@ export default function MembersPage() {
       <AlertDialog open={!!archiveId} onOpenChange={(o) => { if (!o) setArchiveId(null); }}>
         <AlertDialogContent className="w-[95vw] max-w-sm">
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("members.actions.archive")}?</AlertDialogTitle>
-            <AlertDialogDescription>{t("members.archive.confirm") || "This member will be archived and hidden from active lists."}</AlertDialogDescription>
+            <AlertDialogTitle>{t("members.actions.delete") || "Delete Member"}?</AlertDialogTitle>
+            <AlertDialogDescription>{t("members.delete.confirm") || "This member will be removed from active lists. This action cannot be undone."}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
@@ -1364,7 +1399,7 @@ export default function MembersPage() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => { if (archiveId) deleteMutation.mutate({ id: archiveId }); setArchiveId(null); }}
             >
-              {t("members.actions.archive")}
+              {t("members.actions.delete") || "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
