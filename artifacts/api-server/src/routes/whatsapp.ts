@@ -94,7 +94,7 @@ router.delete("/chats/:id", async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/whatsapp/contacts — fetch chats from Green API so user can pick
+// GET /api/whatsapp/contacts — fetch chats + contacts from Green API so user can pick
 router.get("/contacts", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
   try {
@@ -103,21 +103,59 @@ router.get("/contacts", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Green API credentials not configured" });
       return;
     }
-    const url = `https://api.green-api.com/waInstance${settings.greenApiInstanceId}/getChats/${settings.greenApiToken}`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      req.log.error({ status: response.status, text }, "Green API getChats failed");
-      res.status(502).json({ error: `Green API error ${response.status}` });
+    const base = `https://api.green-api.com/waInstance${settings.greenApiInstanceId}`;
+    const token = settings.greenApiToken;
+
+    // Fetch chats (existing conversations) and contacts (phone book) in parallel
+    const [chatsRes, contactsRes] = await Promise.allSettled([
+      fetch(`${base}/getChats/${token}`),
+      fetch(`${base}/getContacts/${token}`),
+    ]);
+
+    // If both failed, return an error from the chats call
+    if (chatsRes.status === "rejected" && contactsRes.status === "rejected") {
+      req.log.error({ err: chatsRes.reason }, "Both Green API calls failed");
+      res.status(502).json({ error: "Could not reach Green API" });
       return;
     }
-    const raw = await response.json() as Array<{ id: string; name?: string; type?: string }>;
-    const contacts = raw.map((c) => ({
-      id: c.id,
-      name: c.name ?? c.id,
-      type: c.type ?? "contact",
-    }));
-    res.json(contacts);
+
+    const merged = new Map<string, { id: string; name: string; type: string }>();
+
+    // Parse chats
+    if (chatsRes.status === "fulfilled" && chatsRes.value.ok) {
+      const raw = await chatsRes.value.json() as Array<{ id: string; name?: string; type?: string }>;
+      for (const c of raw) {
+        if (c.id) merged.set(c.id, { id: c.id, name: c.name ?? c.id, type: c.type ?? "contact" });
+      }
+    } else if (chatsRes.status === "fulfilled") {
+      req.log.warn({ status: chatsRes.value.status }, "Green API getChats returned non-ok");
+    }
+
+    // Parse contacts (phone book) — overwrite with better name if available
+    if (contactsRes.status === "fulfilled" && contactsRes.value.ok) {
+      const raw = await contactsRes.value.json() as Array<{ id: string; name?: string; type?: string; contactName?: string }>;
+      for (const c of raw) {
+        if (!c.id) continue;
+        const name = c.name ?? c.contactName ?? c.id;
+        if (merged.has(c.id)) {
+          // Keep existing entry but update name if better
+          merged.get(c.id)!.name = name;
+        } else {
+          merged.set(c.id, { id: c.id, name, type: c.type ?? "contact" });
+        }
+      }
+    } else if (contactsRes.status === "fulfilled") {
+      req.log.warn({ status: contactsRes.value.status }, "Green API getContacts returned non-ok");
+    }
+
+    if (merged.size === 0) {
+      // Return a helpful error if we got no data at all
+      const status = chatsRes.status === "fulfilled" ? chatsRes.value.status : 502;
+      res.status(502).json({ error: `Green API error ${status} — check your Instance ID and Token` });
+      return;
+    }
+
+    res.json(Array.from(merged.values()));
   } catch (err) {
     req.log.error({ err }, "Failed to fetch Green API contacts");
     res.status(500).json({ error: "Internal server error" });

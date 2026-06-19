@@ -135,12 +135,22 @@ function WhatsAppTab() {
   const [contactSearch, setContactSearch] = useState("");
   const [contacts, setContacts] = useState<{ id: string; name: string; type: string }[]>([]);
   const [contactsFetching, setContactsFetching] = useState(false);
+  const [contactsError, setContactsError] = useState<string | null>(null);
 
   const refetchContacts = async () => {
     setContactsFetching(true);
+    setContactsError(null);
     try {
       const res = await fetch(`${BASE}api/whatsapp/contacts`);
-      if (res.ok) setContacts(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setContacts(Array.isArray(data) ? data : []);
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setContactsError(body?.error ?? `Server error ${res.status}`);
+      }
+    } catch (err) {
+      setContactsError("Network error — could not reach the server");
     } finally {
       setContactsFetching(false);
     }
@@ -454,9 +464,17 @@ function WhatsAppTab() {
                   <div className="flex justify-center py-10">
                     <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                   </div>
+                ) : contactsError ? (
+                  <div className="flex flex-col items-center gap-3 py-10 px-4 text-center">
+                    <p className="text-sm font-medium text-destructive">{contactsError}</p>
+                    <p className="text-xs text-muted-foreground">Check that your Green API Instance ID and Token are saved correctly in settings.</p>
+                    <Button size="sm" variant="outline" onClick={refetchContacts}>Retry</Button>
+                  </div>
                 ) : contacts.length === 0 ? (
-                  <div className="text-center py-10 text-sm text-muted-foreground">
-                    {t("settings.noContactsFound")}
+                  <div className="flex flex-col items-center gap-3 py-10 px-4 text-center">
+                    <p className="text-sm text-muted-foreground">{t("settings.noContactsFound")}</p>
+                    <p className="text-xs text-muted-foreground">Make sure your WhatsApp is connected in Green API and has existing chats.</p>
+                    <Button size="sm" variant="outline" onClick={refetchContacts}>Retry</Button>
                   </div>
                 ) : (() => {
                   const filtered = contacts.filter((c) => {
