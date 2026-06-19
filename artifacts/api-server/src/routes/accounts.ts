@@ -424,6 +424,24 @@ router.get("/chart/:id/statement", async (req: Request, res: Response) => {
     .where(and(...conditions))
     .orderBy(asc(accountingEntriesTable.entryDate), asc(accountingEntriesTable.id));
 
+  // Enrich descriptions: pull actual notes from source payments and vouchers
+  const paymentIds = [...new Set(rows.filter(r => (r.sourceType === "payment" || r.sourceType === "payment_correction") && r.sourceId).map(r => r.sourceId as number))];
+  const voucherIds  = [...new Set(rows.filter(r => r.sourceType === "voucher" && r.sourceId).map(r => r.sourceId as number))];
+
+  const [sourcePays, sourceVchs] = await Promise.all([
+    paymentIds.length > 0
+      ? db.select({ id: paymentsTable.id, notes: paymentsTable.notes, linkedEntityName: paymentsTable.linkedEntityName, memberName: paymentsTable.memberName })
+          .from(paymentsTable).where(inArray(paymentsTable.id, paymentIds))
+      : Promise.resolve([]),
+    voucherIds.length > 0
+      ? db.select({ id: vouchersTable.id, description: vouchersTable.description, paidTo: vouchersTable.paidTo })
+          .from(vouchersTable).where(inArray(vouchersTable.id, voucherIds))
+      : Promise.resolve([]),
+  ]);
+
+  const payMap = new Map(sourcePays.map(p => [p.id, p]));
+  const vchMap = new Map(sourceVchs.map(v => [v.id, v]));
+
   // Running balance: asset/expense accounts are debit-normal; income/liability/equity are credit-normal
   const isCredit = ["income", "liability", "equity"].includes(account.type);
   let runningBalance = 0;
@@ -432,11 +450,29 @@ router.get("/chart/:id/statement", async (req: Request, res: Response) => {
     const credit = r.creditUsd ?? 0;
     const delta = isCredit ? credit - debit : debit - credit;
     runningBalance += delta;
+
+    // Prefer actual user-entered notes over auto-generated description
+    let description = r.description ?? "";
+    let party = r.sourceNumber ?? "";
+    if ((r.sourceType === "payment" || r.sourceType === "payment_correction") && r.sourceId) {
+      const p = payMap.get(r.sourceId);
+      if (p) {
+        if (p.notes?.trim()) description = p.notes.trim();
+        if (!party) party = p.linkedEntityName ?? p.memberName ?? "";
+      }
+    } else if (r.sourceType === "voucher" && r.sourceId) {
+      const v = vchMap.get(r.sourceId);
+      if (v) {
+        if (v.description?.trim()) description = v.description.trim();
+        if (!party) party = v.paidTo ?? "";
+      }
+    }
+
     return {
       id: r.id,
       date: r.entryDate,
-      description: r.description ?? "",
-      party: r.sourceNumber ?? "",
+      description,
+      party,
       sourceType: r.sourceType,
       sourceId: r.sourceId,
       amount: r.amount,

@@ -391,11 +391,11 @@ export default function AccountsPage() {
               </thead>
               <tbody className="divide-y divide-border/50">
                 {stmtLoading && (
-                  <tr><td colSpan={7} className="text-center py-14 text-muted-foreground">Loading…</td></tr>
+                  <tr><td colSpan={6} className="text-center py-14 text-muted-foreground">Loading…</td></tr>
                 )}
                 {!stmtLoading && rows.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="text-center py-20">
+                    <td colSpan={6} className="text-center py-20">
                       <FileText className="w-9 h-9 mx-auto text-muted-foreground/30 mb-2" />
                       <p className="text-muted-foreground font-medium">No transactions yet</p>
                       <p className="text-xs text-muted-foreground/60 mt-0.5">Vouchers linked to this account will appear here</p>
