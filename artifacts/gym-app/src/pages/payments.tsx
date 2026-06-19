@@ -227,18 +227,23 @@ export default function CashBook() {
     });
   }, [allEntries, dirFilter, curFilter, dateFrom, dateTo, searchD]);
 
-  // ── Sort newest first ──
+  // ── Sort: newest day first; within same day payments before vouchers ──
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
-      const da =
-        a._kind === "payment"
-          ? (a as PayEntry).paymentDate ?? ""
-          : (a as VchEntry).voucherDate ?? "";
-      const db =
-        b._kind === "payment"
-          ? (b as PayEntry).paymentDate ?? ""
-          : (b as VchEntry).voucherDate ?? "";
-      return db.localeCompare(da);
+      const dateA =
+        a._kind === "payment" ? (a as PayEntry).paymentDate ?? "" : (a as VchEntry).voucherDate ?? "";
+      const dateB =
+        b._kind === "payment" ? (b as PayEntry).paymentDate ?? "" : (b as VchEntry).voucherDate ?? "";
+      // Compare day portion only (first 10 chars of ISO string)
+      const dayA = dateA.slice(0, 10);
+      const dayB = dateB.slice(0, 10);
+      if (dayA !== dayB) return dayB.localeCompare(dayA); // newest day first
+      // Same day: payments (0) before vouchers (1)
+      const kindA = a._kind === "payment" ? 0 : 1;
+      const kindB = b._kind === "payment" ? 0 : 1;
+      if (kindA !== kindB) return kindA - kindB;
+      // Same kind: newest time first
+      return dateB.localeCompare(dateA);
     });
   }, [filtered]);
 
@@ -949,10 +954,6 @@ export default function CashBook() {
           </div>
           <table>
             <tbody>
-              <tr>
-                <td>Voucher #</td>
-                <td>{printVoucher.voucherNumber ?? "—"}</td>
-              </tr>
               <tr>
                 <td>Date</td>
                 <td>{fmtDate(printVoucher.voucherDate)}</td>
