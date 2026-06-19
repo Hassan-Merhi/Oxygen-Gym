@@ -113,10 +113,6 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
     payOutRow,
     vchOutRow,
     salesRow,
-    totalPayInRow,
-    totalPayOutRow,
-    totalVchInRow,
-    totalVchOutRow,
   ] = await Promise.all([
     // Today: membership payments in (completed, exclude product_sale)
     db.select({ usd: sum(paymentsTable.amountUsd) })
@@ -163,22 +159,6 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
         gte(salesTable.saleDate, dayStart),
         lte(salesTable.saleDate, dayEnd),
       )),
-    // All-time: payments in (completed) — for running balance
-    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) })
-      .from(paymentsTable)
-      .where(and(eq(paymentsTable.direction, "in"), eq(paymentsTable.status, "completed"))),
-    // All-time: payments out (completed)
-    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) })
-      .from(paymentsTable)
-      .where(and(eq(paymentsTable.direction, "out"), eq(paymentsTable.status, "completed"))),
-    // All-time: vouchers in (recorded)
-    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
-      .from(vouchersTable)
-      .where(and(eq(vouchersTable.direction, "in"), eq(vouchersTable.status, "recorded"))),
-    // All-time: vouchers out (recorded)
-    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
-      .from(vouchersTable)
-      .where(and(eq(vouchersTable.direction, "out"), eq(vouchersTable.status, "recorded"))),
   ]);
 
   const n = (v: unknown) => Number(v ?? 0);
@@ -189,9 +169,9 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const sales          = n(salesRow[0]?.usd);
   const salesCdf       = n(salesRow[0]?.cdf);
 
-  // Caisse restante = actual total running cash balance (matches Cash Book balance card)
-  const remaining    = n(totalPayInRow[0]?.usd) + n(totalVchInRow[0]?.usd) - n(totalPayOutRow[0]?.usd) - n(totalVchOutRow[0]?.usd);
-  const remainingCdf = n(totalPayInRow[0]?.cdf) + n(totalVchInRow[0]?.cdf) - n(totalPayOutRow[0]?.cdf) - n(totalVchOutRow[0]?.cdf);
+  // Caisse restante = today's net (memberships + sales − expenses)
+  const remaining    = memberships + sales - expenses;
+  const remainingCdf = membershipsCdf + salesCdf - expensesCdf;
 
   const [year, month, day] = lubDateStr.split("-");
   const friendlyDate = `${day}/${month}/${year}`;
