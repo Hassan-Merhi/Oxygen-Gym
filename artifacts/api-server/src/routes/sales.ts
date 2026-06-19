@@ -6,13 +6,11 @@ import {
   productsTable,
   salesTable,
   settingsTable,
-  paymentsTable,
 } from "@workspace/db/schema";
 import { eq, and, ilike, or, desc, count, gte, lte } from "drizzle-orm";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
-import { appendLedgerEntry } from "../lib/ledger";
-import { postDoubleEntry, reverseEntries } from "../lib/accounting";
+import { reverseEntries } from "../lib/accounting";
 import type { SaleItem } from "@workspace/db/schema";
 
 const router = Router();
@@ -189,7 +187,7 @@ router.post("/", async (req: Request, res: Response) => {
   const paymentNumber = await getNextNumber("PAY");
   const creator = callerName(req);
 
-  const { sale, payment } = await db.transaction(async (tx) => {
+  const { sale } = await db.transaction(async (tx) => {
     // 1. Create sale record
     const [sale] = await tx.insert(salesTable).values({
       saleNumber,
@@ -219,60 +217,7 @@ router.post("/", async (req: Request, res: Response) => {
         .where(eq(productsTable.id, item.productId));
     }
 
-    // 3. Create payment record — use original currency/amount (not USD-converted)
-    const [payment] = await tx.insert(paymentsTable).values({
-      paymentNumber,
-      direction: "in",
-      category: "product_sale",
-      type: "product_sale",
-      amount: totalAmount,
-      currency,
-      exchangeRate: rate,
-      amountUsd: totalAmountUsd,
-      amountCdf,
-      account: "cash",
-      notes: `Sale ${saleNumber}`,
-      createdBy: creator,
-      status: "completed",
-    }).returning();
-
-    // 4. Link payment to sale
-    await tx.update(salesTable).set({ paymentId: payment.id }).where(eq(salesTable.id, sale.id));
-
-    // 5. Cash ledger entry (inside transaction) — use original currency/amount
-    await appendLedgerEntry({
-      sourceType: "sale",
-      sourceNumber: saleNumber,
-      sourceId: sale.id,
-      direction: "in",
-      amount: totalAmount,
-      currency,
-      exchangeRate: rate,
-      description: `Product sale ${saleNumber}`,
-      createdBy: creator,
-    }, tx);
-
-    // 6. Double-entry accounting (inside transaction)
-    try {
-      await postDoubleEntry({
-        sourceType: "sale",
-        sourceId: sale.id,
-        sourceNumber: saleNumber,
-        debitName: "Cash",
-        debitType: "asset",
-        creditName: "Sales Revenue",
-        creditType: "income",
-        amount: totalAmount,
-        amountUsd: totalAmountUsd,
-        amountCdf,
-        currency,
-        exchangeRate: rate,
-        description: `Product sale ${saleNumber}`,
-        createdBy: creator,
-      }, tx);
-    } catch { /* non-fatal — don't rollback the sale */ }
-
-    return { sale, payment };
+    return { sale };
   });
 
   await logActivity(req, "sale_created", "sale", sale.id, {
@@ -282,7 +227,7 @@ router.post("/", async (req: Request, res: Response) => {
     itemCount: items.length,
   });
 
-  res.status(201).json({ ...sale, paymentId: payment.id });
+  res.status(201).json(sale);
 });
 
 // ── Patch sale (admin: edit currency, date, notes, item prices) ───────────────
@@ -362,32 +307,6 @@ router.patch("/:id", async (req: Request, res: Response) => {
     .where(eq(salesTable.id, id))
     .returning();
 
-  if (existing.paymentId) {
-    const newAmountCdf = (updated.currency === "CDF") ? newTotalAmount : newTotalAmount * rate;
-    await db.update(paymentsTable).set({
-      amount: newTotalAmountUsd,
-      amountUsd: newTotalAmountUsd,
-      amountCdf: newAmountCdf,
-      ...(saleDate !== undefined && { paymentDate: new Date(saleDate as string) }),
-    }).where(eq(paymentsTable.id, existing.paymentId));
-  }
-
-  const oldUsd = existing.totalAmountUsd ?? existing.totalAmount ?? 0;
-  const delta = newTotalAmountUsd - oldUsd;
-  if (Math.abs(delta) > 0.0001) {
-    await appendLedgerEntry({
-      sourceType: "sale_correction",
-      sourceNumber: existing.saleNumber ?? `SALE-${id}`,
-      sourceId: id,
-      direction: delta > 0 ? "in" : "out",
-      amount: Math.abs(delta),
-      currency: "USD",
-      exchangeRate: rate,
-      description: `Correction for sale ${existing.saleNumber ?? id}`,
-      createdBy: callerName(req),
-    });
-  }
-
   await logActivity(req, "sale_updated", "sale", id, {
     updatedBy: callerName(req),
   });
@@ -440,28 +359,7 @@ router.patch("/:id/void", async (req: Request, res: Response) => {
     .where(eq(salesTable.id, id))
     .returning();
 
-  // 3. Cancel the linked payment record
-  if (sale.paymentId) {
-    await db.update(paymentsTable).set({ status: "cancelled" }).where(eq(paymentsTable.id, sale.paymentId));
-  }
-
-  // 4. Reverse cash ledger entry using original currency/amount
-  const voidAmount = sale.currency === "CDF" ? sale.totalAmount : (sale.totalAmountUsd ?? sale.totalAmount);
-  const voidCurrency = sale.currency ?? "USD";
-
-  await appendLedgerEntry({
-    sourceType: "void_sale",
-    sourceNumber: sale.saleNumber ?? undefined,
-    sourceId: sale.id,
-    direction: "out",
-    amount: voidAmount,
-    currency: voidCurrency,
-    exchangeRate: sale.exchangeRate ?? rate,
-    description: `Void sale ${sale.saleNumber ?? id} — ${reason}`,
-    createdBy: creator,
-  });
-
-  // 5. Reverse accounting entries
+  // 3. Reverse accounting entries
   try {
     await reverseEntries("sale", sale.id, "void_sale", creator);
   } catch { /* non-fatal */ }
