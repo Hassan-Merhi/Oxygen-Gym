@@ -169,15 +169,15 @@ export default function Stock() {
       />
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <SummaryCard icon={<Package className="w-5 h-5 text-indigo-500" />} label={t("stock.card.total")} value={summary?.totalProducts ?? 0} color="indigo" />
-        <SummaryCard icon={<PackageCheck className="w-5 h-5 text-emerald-500" />} label={t("stock.card.active")} value={summary?.activeProducts ?? 0} color="emerald" />
-        <SummaryCard icon={<AlertTriangle className="w-5 h-5 text-amber-500" />} label={t("stock.card.lowStock")} value={summary?.lowStockCount ?? 0} color="amber" danger={Boolean(summary?.lowStockCount && summary.lowStockCount > 0)} />
-        <SummaryCard icon={<Layers className="w-5 h-5 text-blue-500" />} label={t("stock.card.qty")} value={summary?.totalQuantity ?? 0} color="blue" />
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
+        <SummaryCard icon={<Package className="w-4 h-4" />} label={t("stock.card.total")} value={summary?.totalProducts ?? 0} color="indigo" />
+        <SummaryCard icon={<PackageCheck className="w-4 h-4" />} label={t("stock.card.active")} value={summary?.activeProducts ?? 0} color="emerald" />
+        <SummaryCard icon={<AlertTriangle className="w-4 h-4" />} label={t("stock.card.lowStock")} value={summary?.lowStockCount ?? 0} color="amber" danger={Boolean(summary?.lowStockCount && summary.lowStockCount > 0)} />
+        <SummaryCard icon={<Layers className="w-4 h-4" />} label={t("stock.card.qty")} value={summary?.totalQuantity ?? 0} color="blue" />
         {canViewCost ? (
-          <SummaryCard icon={<DollarSign className="w-5 h-5 text-violet-500" />} label={t("stock.card.value")} value={`$${(summary?.totalValueUsd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} color="purple" />
+          <SummaryCard icon={<DollarSign className="w-4 h-4" />} label={t("stock.card.value")} value={`$${(summary?.totalValueUsd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} color="purple" />
         ) : (
-          <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 flex items-center justify-center text-xs text-muted-foreground text-center">{t("acc.restricted")}</div>
+          <div className="rounded-xl border border-dashed border-border bg-muted/20 p-3 flex items-center justify-center text-xs text-muted-foreground text-center">{t("acc.restricted")}</div>
         )}
       </div>
 
@@ -850,21 +850,22 @@ function SummaryCard({ icon, label, value, color, danger }: {
   color: "indigo" | "emerald" | "amber" | "blue" | "purple";
   danger?: boolean;
 }) {
-  const styles = {
-    indigo:  { wrap: "bg-white border-slate-200 shadow-sm", iconWrap: "bg-indigo-50", text: "text-foreground" },
-    emerald: { wrap: "bg-white border-slate-200 shadow-sm", iconWrap: "bg-emerald-50", text: "text-foreground" },
-    amber:   { wrap: danger ? "bg-amber-50 border-amber-200 shadow-sm" : "bg-white border-slate-200 shadow-sm", iconWrap: danger ? "bg-amber-100" : "bg-amber-50", text: danger ? "text-amber-700" : "text-foreground" },
-    blue:    { wrap: "bg-white border-slate-200 shadow-sm", iconWrap: "bg-blue-50", text: "text-foreground" },
-    purple:  { wrap: "bg-white border-slate-200 shadow-sm", iconWrap: "bg-violet-50", text: "text-foreground" },
+  const palette = {
+    indigo:  { bar: "bg-indigo-500",  icon: "bg-indigo-500/10 text-indigo-500",  val: "text-indigo-600 dark:text-indigo-400" },
+    emerald: { bar: "bg-emerald-500", icon: "bg-emerald-500/10 text-emerald-500", val: "text-emerald-600 dark:text-emerald-400" },
+    amber:   { bar: danger ? "bg-amber-500" : "bg-amber-400", icon: danger ? "bg-amber-500/15 text-amber-600" : "bg-amber-400/10 text-amber-500", val: danger ? "text-amber-600 dark:text-amber-400" : "text-amber-500 dark:text-amber-400" },
+    blue:    { bar: "bg-blue-500",    icon: "bg-blue-500/10 text-blue-500",    val: "text-blue-600 dark:text-blue-400" },
+    purple:  { bar: "bg-violet-500",  icon: "bg-violet-500/10 text-violet-500",  val: "text-violet-600 dark:text-violet-400" },
   }[color];
 
   return (
-    <div className={`rounded-xl border p-4 ${styles.wrap}`}>
-      <div className="flex items-center justify-between mb-3">
-        <div className={`p-2 rounded-lg ${styles.iconWrap}`}>{icon}</div>
+    <div className={`relative rounded-xl border overflow-hidden flex items-center gap-3 px-3 py-2.5 bg-card shadow-sm ${danger ? "border-amber-300 dark:border-amber-700 bg-amber-50/40 dark:bg-amber-900/10" : ""}`}>
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${palette.bar}`} />
+      <div className={`shrink-0 p-1.5 rounded-lg ${palette.icon}`}>{icon}</div>
+      <div className="min-w-0 flex-1">
+        <p className={`text-lg font-bold tabular-nums leading-tight ${palette.val}`}>{value}</p>
+        <p className="text-[11px] text-muted-foreground font-medium truncate">{label}</p>
       </div>
-      <p className={`text-2xl font-bold tabular-nums ${styles.text}`}>{value}</p>
-      <p className="text-xs text-muted-foreground mt-1 font-medium">{label}</p>
     </div>
   );
 }
