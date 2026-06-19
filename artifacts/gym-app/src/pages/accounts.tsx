@@ -82,14 +82,17 @@ const TYPE_CONF: Record<AccountType, {
   plural: string;
   icon: React.ReactNode;
   iconBg: string;
+  iconColor: string;
   accent: string;
   badge: string;
+  pillActive: string;
+  sectionBorder: string;
 }> = {
-  asset:     { label: "Asset",     plural: "Assets",      icon: <Wallet className="w-4 h-4" />,    iconBg: "bg-blue-50",   accent: "border-l-blue-400",   badge: "bg-blue-100 text-blue-700 border border-blue-200/60" },
-  income:    { label: "Income",    plural: "Income",      icon: <TrendingUp className="w-4 h-4" />, iconBg: "bg-emerald-50", accent: "border-l-emerald-400", badge: "bg-emerald-100 text-emerald-700 border border-emerald-200/60" },
-  expense:   { label: "Expense",   plural: "Expenses",    icon: <Receipt className="w-4 h-4" />,   iconBg: "bg-rose-50",   accent: "border-l-rose-400",   badge: "bg-rose-100 text-rose-700 border border-rose-200/60" },
-  liability: { label: "Liability", plural: "Liabilities", icon: <AlertCircle className="w-4 h-4" />, iconBg: "bg-amber-50", accent: "border-l-amber-400",  badge: "bg-amber-100 text-amber-700 border border-amber-200/60" },
-  equity:    { label: "Equity",    plural: "Equity",      icon: <Scale className="w-4 h-4" />,     iconBg: "bg-violet-50", accent: "border-l-violet-400", badge: "bg-violet-100 text-violet-700 border border-violet-200/60" },
+  asset:     { label: "Asset",     plural: "Assets",      icon: <Wallet className="w-4 h-4" />,       iconBg: "bg-blue-500/10 dark:bg-blue-500/20",      iconColor: "text-blue-600 dark:text-blue-400",    accent: "ring-blue-200 dark:ring-blue-800",     badge: "bg-blue-100 text-blue-700 border border-blue-200/60 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700/40",   pillActive: "bg-blue-600 text-white shadow-sm",    sectionBorder: "border-blue-200/60 dark:border-blue-800/60" },
+  income:    { label: "Income",    plural: "Income",      icon: <TrendingUp className="w-4 h-4" />,    iconBg: "bg-emerald-500/10 dark:bg-emerald-500/20", iconColor: "text-emerald-600 dark:text-emerald-400", accent: "ring-emerald-200 dark:ring-emerald-800", badge: "bg-emerald-100 text-emerald-700 border border-emerald-200/60 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700/40", pillActive: "bg-emerald-600 text-white shadow-sm", sectionBorder: "border-emerald-200/60 dark:border-emerald-800/60" },
+  expense:   { label: "Expense",   plural: "Expenses",    icon: <Receipt className="w-4 h-4" />,       iconBg: "bg-rose-500/10 dark:bg-rose-500/20",       iconColor: "text-rose-600 dark:text-rose-400",    accent: "ring-rose-200 dark:ring-rose-800",     badge: "bg-rose-100 text-rose-700 border border-rose-200/60 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700/40",     pillActive: "bg-rose-600 text-white shadow-sm",    sectionBorder: "border-rose-200/60 dark:border-rose-800/60" },
+  liability: { label: "Liability", plural: "Liabilities", icon: <AlertCircle className="w-4 h-4" />,  iconBg: "bg-amber-500/10 dark:bg-amber-500/20",     iconColor: "text-amber-600 dark:text-amber-400",  accent: "ring-amber-200 dark:ring-amber-800",   badge: "bg-amber-100 text-amber-700 border border-amber-200/60 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/40",  pillActive: "bg-amber-600 text-white shadow-sm",   sectionBorder: "border-amber-200/60 dark:border-amber-800/60" },
+  equity:    { label: "Equity",    plural: "Equity",      icon: <Scale className="w-4 h-4" />,         iconBg: "bg-violet-500/10 dark:bg-violet-500/20",   iconColor: "text-violet-600 dark:text-violet-400", accent: "ring-violet-200 dark:ring-violet-800", badge: "bg-violet-100 text-violet-700 border border-violet-200/60 dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-700/40", pillActive: "bg-violet-600 text-white shadow-sm",  sectionBorder: "border-violet-200/60 dark:border-violet-800/60" },
 };
 
 const TYPE_ORDER: AccountType[] = ["asset", "income", "expense", "liability", "equity"];
@@ -148,6 +151,7 @@ export default function AccountsPage() {
   const [form, setForm] = useState({ name: "", type: "asset" as AccountType, description: "" });
   const [saving, setSaving] = useState(false);
   const [deleteAccountId, setDeleteAccountId] = useState<number | null>(null);
+  const [filterType, setFilterType] = useState<AccountType | "all">("all");
 
   async function loadAccounts() {
     setLoading(true);
@@ -463,18 +467,39 @@ export default function AccountsPage() {
         ) : undefined}
       />
 
-      {/* Type summary pills */}
+      {/* Type filter pills */}
       {!loading && totalActive > 0 && (
         <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setFilterType("all")}
+            className={cn(
+              "inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium transition-all",
+              filterType === "all"
+                ? "bg-foreground text-background shadow-sm"
+                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60"
+            )}
+          >
+            All · {totalActive}
+          </button>
           {TYPE_ORDER.map((type) => {
             const count = grouped[type]?.length ?? 0;
             if (!count) return null;
             const conf = TYPE_CONF[type];
+            const active = filterType === type;
             return (
-              <div key={type} className={cn("inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium", conf.badge)}>
-                <span className={ICON_COLOR[type]}>{conf.icon}</span>
+              <button
+                key={type}
+                onClick={() => setFilterType(active ? "all" : type)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium transition-all",
+                  active
+                    ? conf.pillActive
+                    : cn(conf.badge, "hover:opacity-90 hover:shadow-sm"),
+                )}
+              >
+                <span className={active ? "opacity-90" : ICON_COLOR[type]}>{conf.icon}</span>
                 {count} {conf.plural}
-              </div>
+              </button>
             );
           })}
         </div>
@@ -492,43 +517,50 @@ export default function AccountsPage() {
       {!loading && TYPE_ORDER.map((type) => {
         const items = grouped[type];
         if (!items || items.length === 0) return null;
+        if (filterType !== "all" && filterType !== type) return null;
         const conf = TYPE_CONF[type];
         return (
-          <div key={type} className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className={cn("flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest", ICON_COLOR[type])}>
-                {conf.icon}
-                {conf.plural}
-              </span>
-              <span className="text-xs text-muted-foreground font-normal">({items.length})</span>
+          <div key={type} className="space-y-3">
+            {/* Section header */}
+            <div className="flex items-center gap-3">
+              <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0", conf.iconBg)}>
+                <span className={conf.iconColor}>{conf.icon}</span>
+              </div>
+              <h3 className={cn("text-sm font-semibold tracking-wide", conf.iconColor)}>{conf.plural}</h3>
+              <div className="flex-1 h-px bg-border/50" />
+              <span className={cn("text-xs px-2 py-0.5 rounded-full font-semibold", conf.badge)}>{items.length}</span>
             </div>
-            <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-              {items.map((acc, i) => (
+
+            {/* Account cards */}
+            <div className="grid gap-2">
+              {items.map((acc) => (
                 <div
                   key={acc.id}
-                  className={cn(
-                    "flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-muted/30 transition-colors group border-l-4",
-                    conf.accent,
-                    i < items.length - 1 && "border-b border-border/60",
-                  )}
+                  className="group relative flex items-center gap-3 px-4 py-3.5 rounded-xl border border-border/70 bg-card hover:border-border hover:shadow-md hover:shadow-black/5 dark:hover:shadow-black/20 transition-all cursor-pointer"
                   onClick={() => setSelected(acc)}
                 >
-                  <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0", conf.iconBg)}>
-                    <span className={ICON_COLOR[type]}>{conf.icon}</span>
+                  {/* Icon */}
+                  <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105", conf.iconBg)}>
+                    <span className={conf.iconColor}>{conf.icon}</span>
                   </div>
+
+                  {/* Name + description */}
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-foreground">{acc.name}</p>
+                    <p className="font-semibold text-sm text-foreground leading-tight">{acc.name}</p>
                     {acc.description && (
                       <p className="text-xs text-muted-foreground truncate mt-0.5">{acc.description}</p>
                     )}
                   </div>
-                  <span className={cn("text-xs px-2.5 py-1 rounded-full font-medium hidden sm:inline-flex", conf.badge)}>
-                    {conf.label}
-                  </span>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground group-hover:text-foreground transition-colors">
-                    <span className="hidden md:block">View ledger</span>
-                    <ChevronRight className="w-4 h-4" />
+
+                  {/* Ledger link — appears on hover */}
+                  <div className={cn(
+                    "flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg transition-all",
+                    "opacity-0 group-hover:opacity-100 bg-muted text-muted-foreground group-hover:text-foreground",
+                  )}>
+                    Ledger <ChevronRight className="w-3.5 h-3.5" />
                   </div>
+
+                  {/* Delete button */}
                   {canManage && (
                     <Button
                       variant="ghost"
