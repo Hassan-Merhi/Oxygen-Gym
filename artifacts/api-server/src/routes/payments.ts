@@ -101,6 +101,8 @@ router.get("/", async (req: Request, res: Response) => {
   const conditions: ReturnType<typeof eq>[] = [
     // Product sales are tracked in the Sales module — exclude from Cash Book
     not(eq(paymentsTable.category, "product_sale")),
+    // Cancelled (deleted) payments are hidden from the list
+    not(eq(paymentsTable.status, "cancelled")),
   ];
 
   if (search) {
