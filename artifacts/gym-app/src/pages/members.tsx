@@ -313,6 +313,7 @@ export default function MembersPage() {
     },
   });
   const cashAccounts = chartAccounts.filter((a) => a.isActive && a.type !== "expense" && a.type !== "liability");
+  const cashAccount  = cashAccounts.find((a) => a.name.toLowerCase() === "cash") ?? cashAccounts[0] ?? null;
 
   // ── Queries
   const { data: membersData, isLoading } = useListMembers({
@@ -380,7 +381,7 @@ export default function MembersPage() {
 
   function openAdd() {
     const today = new Date().toISOString().split("T")[0];
-    const defaultAccount = cashAccounts.length === 1 ? String(cashAccounts[0].id) : "";
+    const defaultAccount = cashAccount ? String(cashAccount.id) : "";
     form.reset({ status: "active", currency: "USD", amountPaid: 0, discount: 0, startDate: today, cashAccountId: defaultAccount });
     setPlanPrice(0);
     setAddOpen(true);
@@ -392,7 +393,7 @@ export default function MembersPage() {
       startDate: toDateInput(m.startDate), expiryDate: toDateInput(m.expiryDate),
       status: m.status, amountPaid: m.amountPaid ?? 0, discount: m.discount ?? 0,
       currency: (m.currency as "USD" | "CDF") ?? "USD",
-      cashAccountId: m.cashAccountId ? String(m.cashAccountId) : "",
+      cashAccountId: m.cashAccountId ? String(m.cashAccountId) : (cashAccount ? String(cashAccount.id) : ""),
       notes: m.notes ?? "", fingerprintId: m.fingerprintId ?? "", qrCodeId: m.qrCodeId ?? "",
       coachId: m.coachId ? String(m.coachId) : "",
       commissionAmount: (m as any).commissionAmount ?? 0,
@@ -414,18 +415,13 @@ export default function MembersPage() {
   const discount = form.watch("discount") ?? 0;
   const balance = planPrice - discount - amountPaid;
 
-  // Auto-select when only one account exists (fires on load and when amount changes)
+  // Always pin to the Cash account
   useEffect(() => {
-    if (cashAccounts.length === 1 && !form.getValues("cashAccountId")) {
-      form.setValue("cashAccountId", String(cashAccounts[0].id));
-    }
-  }, [cashAccounts]);
+    if (cashAccount) form.setValue("cashAccountId", String(cashAccount.id));
+  }, [cashAccount?.id]);
 
   useEffect(() => {
-    const paid = Number(amountPaid);
-    if (paid > 0 && cashAccounts.length > 0 && !form.getValues("cashAccountId")) {
-      form.setValue("cashAccountId", String(cashAccounts[0].id));
-    }
+    if (cashAccount) form.setValue("cashAccountId", String(cashAccount.id));
   }, [amountPaid]);
 
   async function onSubmit(values: MemberFormValues) {
@@ -470,23 +466,18 @@ export default function MembersPage() {
   const renewDiscount = renewForm.watch("discount") ?? 0;
   const renewBalance = renewPlanPrice - renewDiscount - renewAmountPaid;
 
-  // Auto-select when only one account exists on renew form
+  // Always pin renew form to the Cash account
   useEffect(() => {
-    if (cashAccounts.length === 1 && !renewForm.getValues("cashAccountId")) {
-      renewForm.setValue("cashAccountId", String(cashAccounts[0].id));
-    }
-  }, [cashAccounts]);
+    if (cashAccount) renewForm.setValue("cashAccountId", String(cashAccount.id));
+  }, [cashAccount?.id]);
 
   useEffect(() => {
-    const paid = Number(renewAmountPaid);
-    if (paid > 0 && cashAccounts.length > 0 && !renewForm.getValues("cashAccountId")) {
-      renewForm.setValue("cashAccountId", String(cashAccounts[0].id));
-    }
+    if (cashAccount) renewForm.setValue("cashAccountId", String(cashAccount.id));
   }, [renewAmountPaid]);
 
   function openRenew(m: Member) {
     const today = new Date().toISOString().split("T")[0];
-    const defaultAccount = cashAccounts.length === 1 ? String(cashAccounts[0].id) : "";
+    const defaultAccount = cashAccount ? String(cashAccount.id) : "";
     renewForm.reset({ startDate: today, currency: (m.currency as "USD" | "CDF") ?? "USD", amountPaid: 0, discount: 0, cashAccountId: defaultAccount });
     setRenewPlanPrice(0);
     setRenewMember(m);
@@ -1062,15 +1053,9 @@ export default function MembersPage() {
                 )}
                 <div className="col-span-2 border-l-4 border-primary pl-3 py-0.5 rounded-r-md">
                   <Label className="text-primary font-semibold">{t("members.form.cashAccount")}</Label>
-                  <Select value={form.watch("cashAccountId") ?? ""} onValueChange={(v) => form.setValue("cashAccountId", v)}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder={t("members.form.selectCashAccount")} /></SelectTrigger>
-                    <SelectContent>
-                      {cashAccounts.map((a) => (
-                        <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground mt-1">{t("members.form.cashAccountHint")}</p>
+                  <div className="mt-1 h-9 flex items-center px-3 rounded-md border border-input bg-muted/40 text-sm text-muted-foreground cursor-not-allowed select-none">
+                    {cashAccount?.name ?? "Cash"}
+                  </div>
                 </div>
                 {planPrice > 0 && (
                   <div>
@@ -1189,14 +1174,9 @@ export default function MembersPage() {
               {(renewAmountPaid > 0) && (
                 <div className="col-span-2">
                   <Label>{t("members.form.cashAccount")}</Label>
-                  <Select value={renewForm.watch("cashAccountId") ?? ""} onValueChange={(v) => renewForm.setValue("cashAccountId", v)}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder={t("members.form.selectCashAccount")} /></SelectTrigger>
-                    <SelectContent>
-                      {cashAccounts.map((a) => (
-                        <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="mt-1 h-9 flex items-center px-3 rounded-md border border-input bg-muted/40 text-sm text-muted-foreground cursor-not-allowed select-none">
+                    {cashAccount?.name ?? "Cash"}
+                  </div>
                 </div>
               )}
               {renewPlanPrice > 0 && (
