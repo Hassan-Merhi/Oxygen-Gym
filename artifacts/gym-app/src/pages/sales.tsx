@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useI18n } from "@/lib/i18n";
 import { useFmtDate } from "@/lib/useFmtDate";
 import { useGetMe } from "@/hooks/use-me";
@@ -651,6 +651,9 @@ export default function Sales() {
   const [historyPage, setHistoryPage] = useState(1);
   const [historySearch, setHistorySearch] = useState("");
   const [historyStatus, setHistoryStatus] = useState("");
+  const [historyCurrency, setHistoryCurrency] = useState("");
+  const [historyDateFrom, setHistoryDateFrom] = useState("");
+  const [historyDateTo, setHistoryDateTo] = useState("");
 
   // Modals
   const [viewSaleId, setViewSaleId] = useState<number | null>(null);
@@ -664,9 +667,12 @@ export default function Sales() {
   // Queries
   const { data: historyData } = useListSales({
     page: String(historyPage),
-    limit: "15",
+    limit: "100",
     search: historySearch || undefined,
     status: historyStatus || undefined,
+    currency: historyCurrency || undefined,
+    dateFrom: historyDateFrom || undefined,
+    dateTo: historyDateTo || undefined,
   });
 
   // Mutations
@@ -907,7 +913,20 @@ export default function Sales() {
   }
 
   const historyItems = (historyData as unknown as { items: Record<string, unknown>[]; total: number; page: number; limit: number } | undefined);
-  const totalHistoryPages = historyItems ? Math.max(1, Math.ceil(historyItems.total / 15)) : 1;
+  const totalHistoryPages = historyItems ? Math.max(1, Math.ceil(historyItems.total / 100)) : 1;
+
+  // Group sales by calendar day, then by currency within each day
+  const groupedByDay = useMemo(() => {
+    const items = historyItems?.items ?? [];
+    const byDay: Record<string, { usd: typeof items; cdf: typeof items }> = {};
+    for (const sale of items) {
+      const day = new Date(sale.saleDate as string).toISOString().split("T")[0];
+      if (!byDay[day]) byDay[day] = { usd: [], cdf: [] };
+      if ((sale.currency as string) === "USD") byDay[day].usd.push(sale);
+      else byDay[day].cdf.push(sale);
+    }
+    return Object.entries(byDay).sort(([a], [b]) => b.localeCompare(a));
+  }, [historyItems]);
 
   return (
     <div className="flex flex-col h-full gap-4">
@@ -1117,8 +1136,9 @@ export default function Sales() {
 
         {/* ── History Tab ───────────────────────────────────────────────── */}
         <TabsContent value="history" className="flex-1 flex flex-col gap-4 mt-4">
+          {/* Filter bar */}
           <div className="flex flex-wrap gap-2">
-            <div className="relative flex-1 min-w-0">
+            <div className="relative flex-1 min-w-[180px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 className="pl-9"
@@ -1127,149 +1147,146 @@ export default function Sales() {
                 onChange={(e) => { setHistorySearch(e.target.value); setHistoryPage(1); }}
               />
             </div>
+
+            {/* Currency pills */}
+            <div className="flex rounded-md border overflow-hidden shrink-0">
+              {(["", "USD", "CDF"] as const).map((cur) => (
+                <button
+                  key={cur || "all"}
+                  className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                    historyCurrency === cur
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted text-muted-foreground"
+                  }`}
+                  onClick={() => { setHistoryCurrency(cur); setHistoryPage(1); }}
+                >
+                  {cur === "" ? "All" : cur}
+                </button>
+              ))}
+            </div>
+
+            {/* Status */}
             <Select value={historyStatus || "all"} onValueChange={(v) => { setHistoryStatus(v === "all" ? "" : v); setHistoryPage(1); }}>
-              <SelectTrigger className="w-40 shrink-0"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-36 shrink-0"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="completed">{t("sales.status.completed")}</SelectItem>
                 <SelectItem value="voided">{t("sales.status.voided")}</SelectItem>
               </SelectContent>
             </Select>
+
+            {/* Date range */}
+            <input
+              type="date"
+              value={historyDateFrom}
+              onChange={(e) => { setHistoryDateFrom(e.target.value); setHistoryPage(1); }}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground shrink-0"
+            />
+            <input
+              type="date"
+              value={historyDateTo}
+              onChange={(e) => { setHistoryDateTo(e.target.value); setHistoryPage(1); }}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground shrink-0"
+            />
           </div>
 
-          {/* Mobile sale cards */}
-          <div className="md:hidden rounded-lg border overflow-hidden bg-card divide-y divide-border/50">
-            {!historyItems || historyItems.items.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground">
-                <ReceiptText className="h-10 w-10 opacity-30" />
-                <p className="text-sm">{t("sales.empty")}</p>
-              </div>
-            ) : historyItems.items.map((sale) => {
-              const cur = sale.currency as string;
-              const curSym = cur === "USD" ? "$" : cur;
-              const fmtS = (n: number) => `${curSym} ${(n as number).toFixed(2)}`;
-              return (
-                <div key={sale.id as number} className={`flex items-center gap-3 px-3 py-3 ${sale.status === "voided" ? "opacity-60" : ""}`}>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-muted-foreground">#{sale.id as number} · {new Date(sale.saleDate as string).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" })}</p>
-                    <p className="font-bold text-sm tabular-nums">{fmtS(sale.totalAmount as number)}</p>
-                    <p className="text-xs text-muted-foreground">Paid: {fmtS(sale.paymentAmount as number)}</p>
-                  </div>
-                  <Badge variant={sale.status === "voided" ? "destructive" : "default"} className="text-xs shrink-0">
-                    {t(`sales.status.${sale.status as string}`)}
-                  </Badge>
-                  <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setViewSaleId(sale.id as number)}>
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { if (settings) printReceipt(sale, settings, t); }}>
-                      <Printer className="h-4 w-4" />
-                    </Button>
-                    {isAdmin && sale.status !== "voided" && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditSaleId(sale.id as number)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    )}
-                    {sale.status !== "voided" && canManage && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => { setVoidSaleId(sale.id as number); setVoidingSale(sale); }}>
-                        <Ban className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          {/* Grouped sales list */}
+          {!historyItems || historyItems.items.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground rounded-lg border">
+              <ReceiptText className="h-10 w-10 opacity-30" />
+              <p>{t("sales.empty")}</p>
+              <p className="text-sm">{t("sales.emptyHint")}</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {groupedByDay.map(([dayKey, { usd, cdf }]) => {
+                const dayLabel = new Date(dayKey + "T12:00:00").toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+                const showBothCurrencies = historyCurrency === "" && usd.length > 0 && cdf.length > 0;
 
-          {/* Desktop table */}
-          <div className="hidden md:block rounded-lg border overflow-x-auto flex-1">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("sales.history.date")}</TableHead>
-                  <TableHead className="text-right">{t("sales.history.total")}</TableHead>
-                  <TableHead>{t("sales.history.currency")}</TableHead>
-                  <TableHead className="text-right">{t("sales.history.payment")}</TableHead>
-                  <TableHead className="text-right">{t("sales.history.change")}</TableHead>
-                  <TableHead>{t("sales.history.status")}</TableHead>
-                  <TableHead>{t("sales.history.actions")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {!historyItems || historyItems.items.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                      <div className="flex flex-col items-center gap-2">
-                        <ReceiptText className="h-10 w-10 opacity-30" />
-                        <p>{t("sales.empty")}</p>
-                        <p className="text-sm">{t("sales.emptyHint")}</p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : historyItems.items.map((sale) => {
+                const renderSaleRow = (sale: Record<string, unknown>) => {
                   const cur = sale.currency as string;
-                  const curSym = cur === "USD" ? "$" : cur;
-                  const fmtS = (n: number) => `${curSym} ${(n as number).toFixed(2)}`;
+                  const curSym = cur === "USD" ? "$" : "FC";
+                  const fmtS = (n: number) => `${curSym} ${Number(n).toFixed(2)}`;
                   return (
-                    <TableRow key={sale.id as number} className={sale.status === "voided" ? "opacity-60" : ""}>
-                      <TableCell className="text-sm">{new Date(sale.saleDate as string).toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" })}</TableCell>
-                      <TableCell className="text-right font-semibold">{fmtS(sale.totalAmount as number)}</TableCell>
-                      <TableCell><Badge variant="outline">{cur}</Badge></TableCell>
-                      <TableCell className="text-right">{fmtS(sale.paymentAmount as number)}</TableCell>
-                      <TableCell className="text-right">{fmtS(sale.changeDue as number)}</TableCell>
-                      <TableCell>
-                        <Badge variant={sale.status === "voided" ? "destructive" : "default"}>
-                          {t(`sales.status.${sale.status as string}`)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost" size="icon" className="h-7 w-7"
-                            title={t("sales.viewSale")}
-                            onClick={() => setViewSaleId(sale.id as number)}
-                          >
-                            <Eye className="h-4 w-4" />
+                    <div key={sale.id as number} className={`flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40 transition-colors ${sale.status === "voided" ? "opacity-50" : ""}`}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-muted-foreground">#{sale.id as number}</p>
+                        <p className="font-semibold tabular-nums text-sm">{fmtS(sale.totalAmount as number)}</p>
+                      </div>
+                      <div className="hidden sm:flex flex-col items-end text-xs text-muted-foreground">
+                        <span>Paid: {fmtS(sale.paymentAmount as number)}</span>
+                        <span>Change: {fmtS(sale.changeDue as number)}</span>
+                      </div>
+                      <Badge variant={sale.status === "voided" ? "destructive" : "default"} className="text-xs shrink-0">
+                        {t(`sales.status.${sale.status as string}`)}
+                      </Badge>
+                      <div className="flex gap-0.5 shrink-0">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setViewSaleId(sale.id as number)}>
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { if (settings) printReceipt(sale, settings, t); toast({ title: t("sales.toast.printed") }); }}>
+                          <Printer className="h-3.5 w-3.5" />
+                        </Button>
+                        {isAdmin && sale.status !== "voided" && (
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditSaleId(sale.id as number)}>
+                            <Pencil className="h-3.5 w-3.5" />
                           </Button>
-                          <Button
-                            variant="ghost" size="icon" className="h-7 w-7"
-                            title={t("sales.printReceipt")}
-                            onClick={() => {
-                              if (settings) printReceipt(sale, settings, t);
-                              toast({ title: t("sales.toast.printed") });
-                            }}
-                          >
-                            <Printer className="h-4 w-4" />
+                        )}
+                        {sale.status !== "voided" && canManage && (
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => { setVoidSaleId(sale.id as number); setVoidingSale(sale); }}>
+                            <Ban className="h-3.5 w-3.5" />
                           </Button>
-                          {isAdmin && sale.status !== "voided" && (
-                            <Button
-                              variant="ghost" size="icon" className="h-7 w-7"
-                              title="Edit sale"
-                              onClick={() => setEditSaleId(sale.id as number)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {sale.status !== "voided" && canManage && (
-                            <Button
-                              variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
-                              title={t("sales.void")}
-                              onClick={() => { setVoidSaleId(sale.id as number); setVoidingSale(sale); }}
-                            >
-                              <Ban className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                        )}
+                      </div>
+                    </div>
                   );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+                };
+
+                return (
+                  <div key={dayKey} className="rounded-lg border overflow-hidden">
+                    {/* Day header */}
+                    <div className="px-4 py-2 bg-muted/50 border-b flex items-center justify-between">
+                      <span className="font-semibold text-sm">{dayLabel}</span>
+                      <span className="text-xs text-muted-foreground">{usd.length + cdf.length} sales</span>
+                    </div>
+
+                    {/* USD group */}
+                    {usd.length > 0 && (
+                      <>
+                        {showBothCurrencies && (
+                          <div className="px-4 py-1.5 bg-green-500/5 border-b flex items-center gap-2">
+                            <span className="text-xs font-semibold text-green-700 dark:text-green-400">$ USD</span>
+                            <span className="text-xs text-muted-foreground">{usd.length} {usd.length === 1 ? "sale" : "sales"}</span>
+                          </div>
+                        )}
+                        <div className="divide-y divide-border/40">
+                          {usd.map(renderSaleRow)}
+                        </div>
+                      </>
+                    )}
+
+                    {/* CDF group */}
+                    {cdf.length > 0 && (
+                      <>
+                        {showBothCurrencies && (
+                          <div className="px-4 py-1.5 bg-blue-500/5 border-b border-t flex items-center gap-2">
+                            <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">FC CDF</span>
+                            <span className="text-xs text-muted-foreground">{cdf.length} {cdf.length === 1 ? "sale" : "sales"}</span>
+                          </div>
+                        )}
+                        <div className="divide-y divide-border/40">
+                          {cdf.map(renderSaleRow)}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Pagination */}
-          {historyItems && historyItems.total > 15 && (
+          {historyItems && historyItems.total > 100 && (
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>{historyItems.total} total</span>
               <div className="flex items-center gap-2">
