@@ -259,6 +259,7 @@ export default function MembersPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const me = useGetMe();
+  const isAdmin = me?.role === "admin";
   const canManage = me?.role === "admin" || me?.role === "manager" || me?.permissions?.manageMembers;
   const canViewAccounting = me?.role === "admin" || me?.permissions?.viewAccounting;
 
@@ -992,17 +993,19 @@ export default function MembersPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label>{t("members.form.status")}</Label>
-                  <Select value={form.watch("status")} onValueChange={(v) => form.setValue("status", v)}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {["active","expired","frozen","inactive","archived"].map(s => (
-                        <SelectItem key={s} value={s}>{t(`members.status.${s}`)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {isAdmin && (
+                  <div>
+                    <Label>{t("members.form.status")}</Label>
+                    <Select value={form.watch("status")} onValueChange={(v) => form.setValue("status", v)}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {["active","expired","frozen","inactive","archived"].map(s => (
+                          <SelectItem key={s} value={s}>{t(`members.status.${s}`)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="border-l-4 border-primary pl-3 py-0.5 rounded-r-md">
                   <Label className="text-primary font-semibold">{t("members.form.startDate")}</Label>
                   <Input type="date" {...form.register("startDate")} className="mt-1"
@@ -1016,10 +1019,12 @@ export default function MembersPage() {
                     }}
                   />
                 </div>
-                <div className="border-l-4 border-primary pl-3 py-0.5 rounded-r-md">
-                  <Label className="text-primary font-semibold">{t("members.form.expiryDate")}</Label>
-                  <Input type="date" {...form.register("expiryDate")} className="mt-1" />
-                </div>
+                {isAdmin && (
+                  <div className="border-l-4 border-primary pl-3 py-0.5 rounded-r-md">
+                    <Label className="text-primary font-semibold">{t("members.form.expiryDate")}</Label>
+                    <Input type="date" {...form.register("expiryDate")} className="mt-1" />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1037,20 +1042,24 @@ export default function MembersPage() {
                   <Label className="text-primary font-semibold">{t("members.form.amountPaid")}</Label>
                   <Input type="number" step="0.01" min="0" {...form.register("amountPaid")} className="mt-1" />
                 </div>
-                <div>
-                  <Label>{t("members.form.discount")}</Label>
-                  <Input type="number" step="0.01" min="0" {...form.register("discount")} className="mt-1" />
-                </div>
-                <div>
-                  <Label>{t("members.form.currency")}</Label>
-                  <Select value={form.watch("currency")} onValueChange={(v) => form.setValue("currency", v as "USD" | "CDF")}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="USD">USD</SelectItem>
-                      <SelectItem value="CDF">CDF</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {isAdmin && (
+                  <div>
+                    <Label>{t("members.form.discount")}</Label>
+                    <Input type="number" step="0.01" min="0" {...form.register("discount")} className="mt-1" />
+                  </div>
+                )}
+                {isAdmin && (
+                  <div>
+                    <Label>{t("members.form.currency")}</Label>
+                    <Select value={form.watch("currency")} onValueChange={(v) => form.setValue("currency", v as "USD" | "CDF")}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="USD">USD</SelectItem>
+                        <SelectItem value="CDF">CDF</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="col-span-2 border-l-4 border-primary pl-3 py-0.5 rounded-r-md">
                   <Label className="text-primary font-semibold">{t("members.form.cashAccount")}</Label>
                   <Select value={form.watch("cashAccountId") ?? ""} onValueChange={(v) => form.setValue("cashAccountId", v)}>
@@ -1074,8 +1083,8 @@ export default function MembersPage() {
               </div>
             </div>
 
-            {/* Coach & Commission */}
-            {coaches.length > 0 && (
+            {/* Coach & Commission — admin only */}
+            {isAdmin && coaches.length > 0 && (
               <div>
                 <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 pb-2 border-b dark:border-slate-700">Coach & Commission</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
