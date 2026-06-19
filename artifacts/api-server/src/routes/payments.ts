@@ -399,6 +399,12 @@ router.delete("/:id", async (req: Request, res: Response) => {
       await reverseEntries("payment", id, "payment_reversal", callerName(req));
     } catch { /* non-fatal */ }
   }
+  // If this is a membership payment, archive the linked member record
+  if (existing.category === "membership" && existing.memberId) {
+    await db.update(membersTable)
+      .set({ status: "archived", deletedAt: new Date() })
+      .where(eq(membersTable.id, existing.memberId));
+  }
   await logActivity(req, "payment_archived", "payment", id, { number: payment.paymentNumber });
   res.json({ ok: true });
 });
