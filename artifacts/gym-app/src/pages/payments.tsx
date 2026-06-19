@@ -1034,31 +1034,16 @@ export default function CashBook() {
               </div>
             )}
 
-            {/* Name / Person — admin only */}
-            {isAdmin && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Name / Person</Label>
-                  <Input
-                    placeholder="Member, vendor…"
-                    value={payForm.linkedEntityName}
-                    onChange={(e) =>
-                      setPayForm({ ...payForm, linkedEntityName: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Date</Label>
-                  <Input
-                    type="date"
-                    value={payForm.paymentDate}
-                    onChange={(e) =>
-                      setPayForm({ ...payForm, paymentDate: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-            )}
+            <div className="space-y-1.5">
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={payForm.paymentDate}
+                onChange={(e) =>
+                  setPayForm({ ...payForm, paymentDate: e.target.value })
+                }
+              />
+            </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2 space-y-1.5">
