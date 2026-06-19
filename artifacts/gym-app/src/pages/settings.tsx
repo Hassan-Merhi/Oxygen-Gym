@@ -141,7 +141,10 @@ function WhatsAppTab() {
     setContactsFetching(true);
     setContactsError(null);
     try {
-      const res = await fetch(`${BASE}api/whatsapp/contacts`);
+      const token = localStorage.getItem("gym_token");
+      const res = await fetch(`${BASE}api/whatsapp/contacts`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (res.ok) {
         const data = await res.json();
         setContacts(Array.isArray(data) ? data : []);
