@@ -23,7 +23,6 @@ const NAV_ITEMS = [
   { id: "dashboard",  href: "/dashboard",  icon: LayoutDashboard, labelKey: "nav.dashboard",  permKey: "dashboard"      },
   { id: "members",    href: "/members",    icon: Users,           labelKey: "nav.members",    permKey: "members"        },
   { id: "plans",      href: "/plans",      icon: Dumbbell,        labelKey: "nav.plans",      permKey: "plans"          },
-  { id: "staff",      href: "/staff",      icon: UserCog,         labelKey: "nav.staff",      permKey: "staff"          },
   { id: "payments",   href: "/payments",   icon: CreditCard,      labelKey: "nav.cashbook",   permKey: "payments"       },
   { id: "accounts",   href: "/accounts",   icon: BookOpen,        labelKey: "nav.accounts",   permKey: "accounts"       },
   { id: "financials", href: "/financials", icon: BarChart3,       labelKey: "nav.financials", permKey: "viewAccounting" },
