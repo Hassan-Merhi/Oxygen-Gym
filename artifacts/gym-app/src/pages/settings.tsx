@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LoginUsersTab } from "@/pages/staff";
+import { useGetMe } from "@/hooks/use-me";
+import { AlertTriangle, CheckCircle2, ShieldAlert } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -564,6 +566,42 @@ export default function Settings() {
   const updateSettings = useUpdateSettings();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const me = useGetMe();
+  const isAdmin = me?.role === "admin";
+
+  const [migrationPreview, setMigrationPreview] = useState<{
+    dry_run: boolean;
+    member_vouchers_affected: number;
+    sale_payments_affected: number;
+    member_vouchers_preview: { id: number; name: string | null; amountUsd: number | null }[];
+    sale_payments_preview: { id: number; notes: string | null; amountUsd: number | null }[];
+  } | null>(null);
+  const [migrationLoading, setMigrationLoading] = useState(false);
+  const [migrationDone, setMigrationDone] = useState(false);
+
+  const runMigration = async (dryRun: boolean) => {
+    setMigrationLoading(true);
+    try {
+      const token = localStorage.getItem("gym_token");
+      const method = dryRun ? "GET" : "POST";
+      const res = await fetch(`${BASE}api/payments/admin/cash-cleanup`, {
+        method,
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(!dryRun ? { "Content-Type": "application/json" } : {}),
+        },
+        ...(!dryRun ? { body: JSON.stringify({ dry_run: false }) } : {}),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setMigrationPreview(data);
+      if (!dryRun) setMigrationDone(true);
+    } catch (e: any) {
+      toast({ title: "Migration error", description: e.message, variant: "destructive" });
+    } finally {
+      setMigrationLoading(false);
+    }
+  };
 
   const formSchema = z.object({
     gymName: z.string().min(1, "Gym name is required"),
@@ -776,6 +814,70 @@ export default function Settings() {
           <WhatsAppTab />
         </TabsContent>
       </Tabs>
+
+      {/* ── Admin: One-time Cash Cleanup ─────────────────────────────────────── */}
+      {isAdmin && (
+        <Card className="mt-8 border-destructive/40">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <ShieldAlert className="h-5 w-5" />
+              One-time Cash Cleanup
+            </CardTitle>
+            <CardDescription>
+              Removes <strong>duplicate member vouchers</strong> (member payment recorded twice in Cash Book)
+              and <strong>old product-sale Cash Book entries</strong> (POS sales that also created a manual cash entry).
+              Run Preview first — it shows exactly what will be changed before anything is deleted.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {migrationDone && (
+              <div className="flex items-center gap-2 rounded-md bg-green-500/10 p-3 text-green-600 text-sm font-medium">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                Migration applied successfully. Your Cash Book balance is now corrected.
+              </div>
+            )}
+
+            {migrationPreview && !migrationDone && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-4 space-y-2 text-sm">
+                <div className="flex items-center gap-2 font-semibold text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="h-4 w-4" />
+                  Preview — nothing changed yet
+                </div>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-muted-foreground mt-2">
+                  <span>Duplicate member vouchers to cancel:</span>
+                  <span className="font-medium text-foreground">{migrationPreview.member_vouchers_affected}</span>
+                  <span>Product-sale cash entries to cancel:</span>
+                  <span className="font-medium text-foreground">{migrationPreview.sale_payments_affected}</span>
+                </div>
+                {migrationPreview.member_vouchers_affected === 0 && migrationPreview.sale_payments_affected === 0 && (
+                  <p className="text-muted-foreground text-xs mt-1">Nothing to clean up — your Cash Book looks correct.</p>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => runMigration(true)}
+                disabled={migrationLoading || migrationDone}
+              >
+                {migrationLoading && !migrationPreview ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+                Preview (dry run)
+              </Button>
+              {migrationPreview && !migrationDone && (migrationPreview.member_vouchers_affected > 0 || migrationPreview.sale_payments_affected > 0) && (
+                <Button
+                  variant="destructive"
+                  onClick={() => runMigration(false)}
+                  disabled={migrationLoading}
+                >
+                  {migrationLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <AlertTriangle className="mr-2 h-4 w-4" />}
+                  Apply Migration
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

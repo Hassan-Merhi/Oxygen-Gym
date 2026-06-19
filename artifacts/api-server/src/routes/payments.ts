@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
 import { paymentsTable, settingsTable, cashLedgerTable, membersTable, commissionsTable, vouchersTable } from "@workspace/db/schema";
-import { eq, and, ilike, or, gte, lte, count, sum, desc, asc, not } from "drizzle-orm";
+import { eq, and, ilike, or, gte, lte, count, sum, desc, asc, not, inArray, sql } from "drizzle-orm";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 import { appendLedgerEntry, getCurrentBalance } from "../lib/ledger";
@@ -414,5 +414,86 @@ router.delete("/:id", async (req: Request, res: Response) => {
 // Suppress unused import warning (cashLedgerTable imported in original, keep for compat)
 void cashLedgerTable;
 void getCurrentBalance;
+void sql;
+
+// ─── One-time Cash Cleanup Migration (admin only) ─────────────────────────────
+// GET  /api/payments/admin/cash-cleanup         → dry run (preview counts)
+// POST /api/payments/admin/cash-cleanup         → apply (dry_run=false in body)
+router.all("/admin/cash-cleanup", async (req: Request, res: Response) => {
+  const caller = (req as any).__gymproUser;
+  if (caller?.role !== "admin") {
+    res.status(403).json({ error: "Admin only" });
+    return;
+  }
+
+  const dryRun = req.method === "GET" || (req.body?.dry_run !== false);
+
+  // ── 1. Member duplicate vouchers ─────────────────────────────────────────
+  // When a member is edited with a cash account, a voucher is created on top
+  // of the existing payment record — both appear in the Cash Book (double-count).
+  // Fix: cancel those vouchers; the payment record stays as source of truth.
+  const memberVouchers = await db
+    .select({
+      id: vouchersTable.id,
+      name: vouchersTable.linkedEntityName,
+      amountUsd: vouchersTable.amountUsd,
+      amountCdf: vouchersTable.amountCdf,
+      voucherDate: vouchersTable.voucherDate,
+    })
+    .from(vouchersTable)
+    .where(and(
+      eq(vouchersTable.linkedEntity, "member"),
+      eq(vouchersTable.voucherType, "cash_receipt"),
+      eq(vouchersTable.status, "recorded"),
+      inArray(
+        vouchersTable.linkedEntityId,
+        db.select({ id: paymentsTable.memberId })
+          .from(paymentsTable)
+          .where(and(
+            eq(paymentsTable.type, "membership"),
+            eq(paymentsTable.status, "completed"),
+            not(eq(paymentsTable.memberId, 0)),
+          )) as any,
+      ),
+    ));
+
+  // ── 2. Sales payment entries ──────────────────────────────────────────────
+  // Old POS sales also created payment entries in the Cash Book.
+  // Fix: cancel those payment rows (status → cancelled).
+  const salePayments = await db
+    .select({
+      id: paymentsTable.id,
+      notes: paymentsTable.notes,
+      amountUsd: paymentsTable.amountUsd,
+      amountCdf: paymentsTable.amountCdf,
+      paymentDate: paymentsTable.paymentDate,
+    })
+    .from(paymentsTable)
+    .where(and(
+      eq(paymentsTable.category, "product_sale"),
+      eq(paymentsTable.status, "completed"),
+    ));
+
+  if (!dryRun) {
+    if (memberVouchers.length > 0) {
+      await db.update(vouchersTable)
+        .set({ status: "cancelled" })
+        .where(inArray(vouchersTable.id, memberVouchers.map(v => v.id)));
+    }
+    if (salePayments.length > 0) {
+      await db.update(paymentsTable)
+        .set({ status: "cancelled" })
+        .where(inArray(paymentsTable.id, salePayments.map(p => p.id)));
+    }
+  }
+
+  res.json({
+    dry_run: dryRun,
+    member_vouchers_affected: memberVouchers.length,
+    sale_payments_affected: salePayments.length,
+    member_vouchers_preview: memberVouchers.slice(0, 20),
+    sale_payments_preview: salePayments.slice(0, 20),
+  });
+});
 
 export default router;

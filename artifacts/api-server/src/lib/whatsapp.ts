@@ -107,12 +107,23 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const dayStart = new Date(`${lubDateStr}T00:00:00+02:00`);
   const dayEnd = new Date(`${lubDateStr}T23:59:59+02:00`);
 
-  const [membershipRow, membershipCdfRow, payOutRow, vchOutRow, salesRow] = await Promise.all([
-    // Gym membership payments in (exclude product_sale)
+  const [
+    membershipRow,
+    membershipCdfRow,
+    payOutRow,
+    vchOutRow,
+    salesRow,
+    totalPayInRow,
+    totalPayOutRow,
+    totalVchInRow,
+    totalVchOutRow,
+  ] = await Promise.all([
+    // Today: membership payments in (completed, exclude product_sale)
     db.select({ usd: sum(paymentsTable.amountUsd) })
       .from(paymentsTable)
       .where(and(
         eq(paymentsTable.direction, "in"),
+        eq(paymentsTable.status, "completed"),
         not(eq(paymentsTable.category, "product_sale")),
         gte(paymentsTable.paymentDate, dayStart),
         lte(paymentsTable.paymentDate, dayEnd),
@@ -121,18 +132,30 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
       .from(paymentsTable)
       .where(and(
         eq(paymentsTable.direction, "in"),
+        eq(paymentsTable.status, "completed"),
         not(eq(paymentsTable.category, "product_sale")),
         gte(paymentsTable.paymentDate, dayStart),
         lte(paymentsTable.paymentDate, dayEnd),
       )),
-    // Expenses (payments out + vouchers out)
+    // Today: expenses — payments out (completed)
     db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) })
       .from(paymentsTable)
-      .where(and(eq(paymentsTable.direction, "out"), gte(paymentsTable.paymentDate, dayStart), lte(paymentsTable.paymentDate, dayEnd))),
+      .where(and(
+        eq(paymentsTable.direction, "out"),
+        eq(paymentsTable.status, "completed"),
+        gte(paymentsTable.paymentDate, dayStart),
+        lte(paymentsTable.paymentDate, dayEnd),
+      )),
+    // Today: expenses — vouchers out (recorded)
     db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
       .from(vouchersTable)
-      .where(and(eq(vouchersTable.direction, "out"), eq(vouchersTable.status, "recorded"), gte(vouchersTable.voucherDate, dayStart), lte(vouchersTable.voucherDate, dayEnd))),
-    // Stock sales
+      .where(and(
+        eq(vouchersTable.direction, "out"),
+        eq(vouchersTable.status, "recorded"),
+        gte(vouchersTable.voucherDate, dayStart),
+        lte(vouchersTable.voucherDate, dayEnd),
+      )),
+    // Today: stock/POS sales
     db.select({ usd: sum(salesTable.totalAmountUsd), cdf: sum(salesTable.totalAmount) })
       .from(salesTable)
       .where(and(
@@ -140,6 +163,22 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
         gte(salesTable.saleDate, dayStart),
         lte(salesTable.saleDate, dayEnd),
       )),
+    // All-time: payments in (completed) — for running balance
+    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) })
+      .from(paymentsTable)
+      .where(and(eq(paymentsTable.direction, "in"), eq(paymentsTable.status, "completed"))),
+    // All-time: payments out (completed)
+    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) })
+      .from(paymentsTable)
+      .where(and(eq(paymentsTable.direction, "out"), eq(paymentsTable.status, "completed"))),
+    // All-time: vouchers in (recorded)
+    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
+      .from(vouchersTable)
+      .where(and(eq(vouchersTable.direction, "in"), eq(vouchersTable.status, "recorded"))),
+    // All-time: vouchers out (recorded)
+    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
+      .from(vouchersTable)
+      .where(and(eq(vouchersTable.direction, "out"), eq(vouchersTable.status, "recorded"))),
   ]);
 
   const n = (v: unknown) => Number(v ?? 0);
@@ -148,10 +187,11 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const expenses       = n(payOutRow[0]?.usd) + n(vchOutRow[0]?.usd);
   const expensesCdf    = n(payOutRow[0]?.cdf) + n(vchOutRow[0]?.cdf);
   const sales          = n(salesRow[0]?.usd);
-  // For sales CDF: only count rows where currency=CDF
   const salesCdf       = n(salesRow[0]?.cdf);
-  const remaining      = memberships + sales - expenses;
-  const remainingCdf   = membershipsCdf + salesCdf - expensesCdf;
+
+  // Caisse restante = actual total running cash balance (matches Cash Book balance card)
+  const remaining    = n(totalPayInRow[0]?.usd) + n(totalVchInRow[0]?.usd) - n(totalPayOutRow[0]?.usd) - n(totalVchOutRow[0]?.usd);
+  const remainingCdf = n(totalPayInRow[0]?.cdf) + n(totalVchInRow[0]?.cdf) - n(totalPayOutRow[0]?.cdf) - n(totalVchOutRow[0]?.cdf);
 
   const [year, month, day] = lubDateStr.split("-");
   const friendlyDate = `${day}/${month}/${year}`;
