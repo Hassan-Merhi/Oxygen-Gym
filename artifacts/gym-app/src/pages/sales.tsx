@@ -427,7 +427,7 @@ function SaleEditDialog({
   const sale = saleRaw as unknown as Record<string, unknown> | undefined;
   const originalItems = ((sale?.items ?? []) as SaleItemData[]);
 
-  const [currency, setCurrency] = useState<"USD" | "CDF">("USD");
+  const [currency, setCurrency] = useState<"USD" | "CDF">("CDF");
   const [saleDate, setSaleDate] = useState("");
   const [notes, setNotes] = useState("");
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
