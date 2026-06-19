@@ -573,8 +573,8 @@ export default function Settings() {
     dry_run: boolean;
     member_vouchers_affected: number;
     sale_payments_affected: number;
-    member_vouchers_preview: { id: number; name: string | null; amountUsd: number | null }[];
-    sale_payments_preview: { id: number; notes: string | null; amountUsd: number | null }[];
+    member_vouchers_preview: { id: number; name: string | null; amountUsd: number | null; amountCdf: number | null; voucherDate: string | null }[];
+    sale_payments_preview: { id: number; notes: string | null; amountUsd: number | null; amountCdf: number | null; paymentDate: string | null }[];
   } | null>(null);
   const [migrationLoading, setMigrationLoading] = useState(false);
   const [migrationDone, setMigrationDone] = useState(false);
@@ -838,19 +838,72 @@ export default function Settings() {
             )}
 
             {migrationPreview && !migrationDone && (
-              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-4 space-y-2 text-sm">
+              <div className="space-y-4 text-sm">
                 <div className="flex items-center gap-2 font-semibold text-amber-700 dark:text-amber-400">
-                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
                   Preview — nothing changed yet
                 </div>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-muted-foreground mt-2">
-                  <span>Duplicate member vouchers to cancel:</span>
-                  <span className="font-medium text-foreground">{migrationPreview.member_vouchers_affected}</span>
-                  <span>Product-sale cash entries to cancel:</span>
-                  <span className="font-medium text-foreground">{migrationPreview.sale_payments_affected}</span>
-                </div>
+
                 {migrationPreview.member_vouchers_affected === 0 && migrationPreview.sale_payments_affected === 0 && (
-                  <p className="text-muted-foreground text-xs mt-1">Nothing to clean up — your Cash Book looks correct.</p>
+                  <p className="text-muted-foreground text-xs">Nothing to clean up — your Cash Book looks correct.</p>
+                )}
+
+                {/* Member duplicate vouchers */}
+                {migrationPreview.member_vouchers_affected > 0 && (
+                  <div className="rounded-md border border-border overflow-hidden">
+                    <div className="bg-muted/40 px-3 py-2 flex items-center justify-between">
+                      <span className="font-semibold text-foreground">Duplicate member vouchers</span>
+                      <span className="text-xs bg-amber-500/20 text-amber-700 dark:text-amber-400 font-bold px-2 py-0.5 rounded-full">
+                        {migrationPreview.member_vouchers_affected} to cancel
+                      </span>
+                    </div>
+                    <div className="divide-y divide-border/40 max-h-56 overflow-y-auto">
+                      <div className="grid grid-cols-3 px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/20">
+                        <span>Member</span><span className="text-right">USD</span><span className="text-right">CDF</span>
+                      </div>
+                      {migrationPreview.member_vouchers_preview.map((v) => (
+                        <div key={v.id} className="grid grid-cols-3 px-3 py-1.5 text-xs hover:bg-muted/20">
+                          <span className="truncate font-medium">{v.name ?? "—"}</span>
+                          <span className="text-right tabular-nums text-emerald-600">${(v.amountUsd ?? 0).toFixed(2)}</span>
+                          <span className="text-right tabular-nums text-muted-foreground">FC {Math.round(v.amountCdf ?? 0).toLocaleString()}</span>
+                        </div>
+                      ))}
+                      {migrationPreview.member_vouchers_affected > migrationPreview.member_vouchers_preview.length && (
+                        <div className="px-3 py-1.5 text-xs text-muted-foreground italic">
+                          … and {migrationPreview.member_vouchers_affected - migrationPreview.member_vouchers_preview.length} more
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Product-sale cash entries */}
+                {migrationPreview.sale_payments_affected > 0 && (
+                  <div className="rounded-md border border-border overflow-hidden">
+                    <div className="bg-muted/40 px-3 py-2 flex items-center justify-between">
+                      <span className="font-semibold text-foreground">Product-sale Cash Book entries</span>
+                      <span className="text-xs bg-amber-500/20 text-amber-700 dark:text-amber-400 font-bold px-2 py-0.5 rounded-full">
+                        {migrationPreview.sale_payments_affected} to cancel
+                      </span>
+                    </div>
+                    <div className="divide-y divide-border/40 max-h-56 overflow-y-auto">
+                      <div className="grid grid-cols-3 px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/20">
+                        <span>Notes</span><span className="text-right">USD</span><span className="text-right">CDF</span>
+                      </div>
+                      {migrationPreview.sale_payments_preview.map((p) => (
+                        <div key={p.id} className="grid grid-cols-3 px-3 py-1.5 text-xs hover:bg-muted/20">
+                          <span className="truncate font-medium">{p.notes ?? "—"}</span>
+                          <span className="text-right tabular-nums text-emerald-600">${(p.amountUsd ?? 0).toFixed(2)}</span>
+                          <span className="text-right tabular-nums text-muted-foreground">FC {Math.round(p.amountCdf ?? 0).toLocaleString()}</span>
+                        </div>
+                      ))}
+                      {migrationPreview.sale_payments_affected > migrationPreview.sale_payments_preview.length && (
+                        <div className="px-3 py-1.5 text-xs text-muted-foreground italic">
+                          … and {migrationPreview.sale_payments_affected - migrationPreview.sale_payments_preview.length} more
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             )}
