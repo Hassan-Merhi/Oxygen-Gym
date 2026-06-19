@@ -28,12 +28,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -562,25 +556,10 @@ export default function CashBook() {
               Export PDF
             </Button>
             {canAdd && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button className="gap-2">
-                    <Plus className="w-4 h-4" />
-                    New Entry
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={openPayCreate} className="gap-2 cursor-pointer">
-                    <Banknote className="w-4 h-4" />
-                    New Transaction
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={openVchCreate} className="gap-2 cursor-pointer">
-                    <Receipt className="w-4 h-4" />
-                    New Voucher
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button className="gap-2" onClick={openPayCreate}>
+                <Plus className="w-4 h-4" />
+                New Entry
+              </Button>
             )}
           </>
         }
