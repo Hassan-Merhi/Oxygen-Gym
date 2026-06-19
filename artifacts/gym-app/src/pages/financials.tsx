@@ -308,8 +308,8 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
                   <tr className="border-b border-border bg-muted/40">
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground w-8"></th>
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("acc.col.category")}</th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">USD</th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">CDF</th>
+                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">$</th>
+                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">FC</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -350,7 +350,7 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
                                         <th className="text-left px-4 py-2 font-medium text-muted-foreground">Description</th>
                                         <th className="text-left px-4 py-2 font-medium text-muted-foreground">Party</th>
                                         <th className="text-right px-4 py-2 font-medium text-muted-foreground">Amount</th>
-                                        <th className="text-right px-4 py-2 font-medium text-muted-foreground">USD</th>
+                                        <th className="text-right px-4 py-2 font-medium text-muted-foreground">$</th>
                                       </tr>
                                     </thead>
                                     <tbody>

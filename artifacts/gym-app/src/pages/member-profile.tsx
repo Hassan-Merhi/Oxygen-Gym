@@ -29,7 +29,7 @@ import { useFmtDate } from "@/lib/useFmtDate";
 
 function fmtCurrency(amount: number | null | undefined, currency: string): string {
   if (amount == null) return "—";
-  return `${currency} ${amount.toFixed(2)}`;
+  return currency === "CDF" ? `FC ${Math.round(amount).toLocaleString()}` : `$${amount.toFixed(2)}`;
 }
 
 // ─── Receipt print ────────────────────────────────────────────────────────────

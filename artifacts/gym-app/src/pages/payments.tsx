@@ -735,7 +735,7 @@ export default function CashBook() {
                 </div>
                 <div className="text-right shrink-0">
                   <p className={`font-bold tabular-nums text-sm ${isIn ? "text-emerald-600" : "text-rose-600"}`}>
-                    {isIn ? "+" : "−"}{fmtAmt(entry.amount)} <span className="text-xs font-normal opacity-70">{entry.currency}</span>
+                    {entry.currency === "USD" ? "$" : "FC "}{isIn ? "+" : "−"}{fmtAmt(entry.amount)}
                   </p>
                   <p className={`text-xs tabular-nums mt-0.5 ${bal.usd >= 0 ? "text-muted-foreground" : "text-rose-600"}`}>
                     ${fmtAmt(bal.usd)}
@@ -845,20 +845,17 @@ export default function CashBook() {
                       {/* Amount */}
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <span className={`font-bold tabular-nums text-base ${isIn ? "text-emerald-600" : "text-rose-600"}`}>
-                          {isIn ? "+" : "−"}{fmtAmt(entry.amount)}
-                        </span>
-                        <span className={`ml-1 text-xs font-semibold ${isIn ? "text-emerald-500" : "text-rose-500"} opacity-70`}>
-                          {entry.currency}
+                          {entry.currency === "USD" ? "$" : "FC "}{isIn ? "+" : "−"}{fmtAmt(entry.amount)}
                         </span>
                       </td>
 
                       {/* Running Balance — USD + CDF */}
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <p className={`font-semibold tabular-nums text-sm ${bal.usd >= 0 ? "text-foreground" : "text-rose-600"}`}>
-                          ${fmtAmt(bal.usd)} <span className="text-xs font-normal text-muted-foreground">USD</span>
+                          ${fmtAmt(bal.usd)}
                         </p>
                         <p className={`text-xs tabular-nums mt-0.5 ${bal.cdf >= 0 ? "text-muted-foreground" : "text-rose-500"}`}>
-                          FC {Math.round(bal.cdf).toLocaleString()} <span className="opacity-70">CDF</span>
+                          FC {Math.round(bal.cdf).toLocaleString()}
                         </p>
                       </td>
 

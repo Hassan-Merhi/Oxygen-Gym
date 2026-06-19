@@ -31,7 +31,8 @@ function fmtDate(d: string | null | undefined) {
 }
 
 function fmtMoney(n: number, currency: string) {
-  return `${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${currency}`;
+  const v = n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return currency === "CDF" ? `FC ${v}` : `$${v}`;
 }
 
 export default function Payroll() {
