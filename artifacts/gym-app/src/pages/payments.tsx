@@ -478,7 +478,7 @@ export default function CashBook() {
       const key = `${entry._kind}-${entry.id}`;
       const balObj = runningMap.get(key) ?? { usd: 0, cdf: 0 };
       const isIn = entry.direction === "in";
-      const sign = isIn ? "+" : "−";
+      const sign = isIn ? "" : "−";
       const color = isIn ? "#059669" : "#dc2626";
       const date =
         entry._kind === "payment"
@@ -743,7 +743,7 @@ export default function CashBook() {
                 </div>
                 <div className="text-right shrink-0">
                   <p className={`font-bold tabular-nums text-sm ${isIn ? "text-emerald-600" : "text-rose-600"}`}>
-                    {entry.currency === "USD" ? "$" : "FC "}{isIn ? "+" : "−"}{fmtAmt(entry.amount)}
+                    {entry.currency === "USD" ? "$" : "FC "}{isIn ? "" : "−"}{fmtAmt(entry.amount)}
                   </p>
                   <p className={`text-xs tabular-nums mt-0.5 ${bal.usd >= 0 ? "text-muted-foreground" : "text-rose-600"}`}>
                     ${fmtAmt(bal.usd)}
@@ -856,7 +856,7 @@ export default function CashBook() {
                       {/* Amount */}
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <span className={`font-bold tabular-nums text-base ${isIn ? "text-emerald-600" : "text-rose-600"}`}>
-                          {entry.currency === "USD" ? "$" : "FC "}{isIn ? "+" : "−"}{fmtAmt(entry.amount)}
+                          {entry.currency === "USD" ? "$" : "FC "}{isIn ? "" : "−"}{fmtAmt(entry.amount)}
                         </span>
                       </td>
 
