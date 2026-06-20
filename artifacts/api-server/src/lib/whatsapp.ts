@@ -142,13 +142,11 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const [
     membershipRow,
     membershipCdfRow,
-    productSaleRow,
-    productSaleCdfRow,
     expPayments,
     expVouchers,
     todaySales,
   ] = await Promise.all([
-    // Membership in (USD) — excludes product sales for the breakdown display
+    // Membership in (USD)
     db.select({ usd: sum(paymentsTable.amountUsd) })
       .from(paymentsTable)
       .where(and(
@@ -165,26 +163,6 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
         eq(paymentsTable.direction, "in"),
         eq(paymentsTable.status, "completed"),
         not(eq(paymentsTable.category, "product_sale")),
-        gte(paymentsTable.paymentDate, dayStart),
-        lte(paymentsTable.paymentDate, dayEnd),
-      )),
-    // Product sale cash received (USD) — included in Cash Book "Cash In"
-    db.select({ usd: sum(paymentsTable.amountUsd) })
-      .from(paymentsTable)
-      .where(and(
-        eq(paymentsTable.direction, "in"),
-        eq(paymentsTable.status, "completed"),
-        eq(paymentsTable.category, "product_sale"),
-        gte(paymentsTable.paymentDate, dayStart),
-        lte(paymentsTable.paymentDate, dayEnd),
-      )),
-    // Product sale cash received (CDF)
-    db.select({ cdf: sum(paymentsTable.amountCdf) })
-      .from(paymentsTable)
-      .where(and(
-        eq(paymentsTable.direction, "in"),
-        eq(paymentsTable.status, "completed"),
-        eq(paymentsTable.category, "product_sale"),
         gte(paymentsTable.paymentDate, dayStart),
         lte(paymentsTable.paymentDate, dayEnd),
       )),
