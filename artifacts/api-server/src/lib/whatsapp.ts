@@ -142,11 +142,13 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const [
     membershipRow,
     membershipCdfRow,
+    productSaleRow,
+    productSaleCdfRow,
     expPayments,
     expVouchers,
     todaySales,
   ] = await Promise.all([
-    // Membership in (USD)
+    // Membership in (USD) — excludes product sales for the breakdown display
     db.select({ usd: sum(paymentsTable.amountUsd) })
       .from(paymentsTable)
       .where(and(
@@ -163,6 +165,26 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
         eq(paymentsTable.direction, "in"),
         eq(paymentsTable.status, "completed"),
         not(eq(paymentsTable.category, "product_sale")),
+        gte(paymentsTable.paymentDate, dayStart),
+        lte(paymentsTable.paymentDate, dayEnd),
+      )),
+    // Product sale cash received (USD) — included in Cash Book "Cash In"
+    db.select({ usd: sum(paymentsTable.amountUsd) })
+      .from(paymentsTable)
+      .where(and(
+        eq(paymentsTable.direction, "in"),
+        eq(paymentsTable.status, "completed"),
+        eq(paymentsTable.category, "product_sale"),
+        gte(paymentsTable.paymentDate, dayStart),
+        lte(paymentsTable.paymentDate, dayEnd),
+      )),
+    // Product sale cash received (CDF)
+    db.select({ cdf: sum(paymentsTable.amountCdf) })
+      .from(paymentsTable)
+      .where(and(
+        eq(paymentsTable.direction, "in"),
+        eq(paymentsTable.status, "completed"),
+        eq(paymentsTable.category, "product_sale"),
         gte(paymentsTable.paymentDate, dayStart),
         lte(paymentsTable.paymentDate, dayEnd),
       )),
@@ -213,6 +235,10 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const memberships    = n(membershipRow[0]?.usd);
   const membershipsCdf = n(membershipCdfRow[0]?.cdf);
 
+  // ── Product sale cash received (for net remaining, matches Cash Book "Cash In")
+  const productSaleCashUsd = n(productSaleRow[0]?.usd);
+  const productSaleCashCdf = n(productSaleCdfRow[0]?.cdf);
+
   // ── Expenses (per-item detail) ─────────────────────────────────────────────
   const expenseLines: ExpenseLine[] = [
     ...expPayments.map(p => ({
@@ -252,9 +278,9 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const sales    = productLines.filter(p => p.currency === "USD").reduce((a, p) => a + p.total, 0);
   const salesCdf = productLines.filter(p => p.currency === "CDF").reduce((a, p) => a + p.total, 0);
 
-  // ── Remaining (Net Today = cash in memberships minus cash out expenses only)
-  const remaining    = memberships - expenses;
-  const remainingCdf = membershipsCdf - expensesCdf;
+  // ── Remaining (Net Today = all cash in minus all cash out, matches Cash Book)
+  const remaining    = memberships + productSaleCashUsd - expenses;
+  const remainingCdf = membershipsCdf + productSaleCashCdf - expensesCdf;
 
   const [year, month, day] = lubDateStr.split("-");
   const friendlyDate = `${day}/${month}/${year}`;
