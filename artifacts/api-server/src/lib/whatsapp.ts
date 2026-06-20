@@ -302,7 +302,7 @@ export function formatDailySummaryMessage(opts: {
   const { date, memberships, membershipsCdf, expenseLines, productLines, remaining, remainingCdf } = opts;
 
   const fmtUsd = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const fmtCdf = (n: number) => Math.round(n).toLocaleString("fr-FR");
+  const fmtCdf = (n: number) => Math.round(n).toLocaleString("en-US");
   const fmtAmt = (amount: number, currency: string) =>
     currency === "CDF" ? `FC ${fmtCdf(amount)}` : `$${fmtUsd(amount)}`;
 
