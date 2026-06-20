@@ -409,11 +409,20 @@ export default function MembersPage() {
       coachId: m.coachId ? String(m.coachId) : "",
       commissionAmount: (m as any).commissionAmount ?? 0,
     });
-    const rawPrice = m.planPrice ?? 0;
-    const rawCur   = (m.currency as string) ?? "USD";
-    setPlanBasePrice(rawPrice);
-    setPlanBaseCurrency(rawCur);
-    setPlanPrice(rawPrice);
+    // Use the plan's authoritative price/currency as the base, then convert to the
+    // member's payment currency so the displayed price is always correct.
+    const plan = m.planId ? plans.find((p: Plan) => String(p.id) === String(m.planId)) : null;
+    if (plan) {
+      const baseCur = (plan.currency as string) ?? "USD";
+      const formCur = (m.currency as string) ?? "USD";
+      setPlanBasePrice(plan.price);
+      setPlanBaseCurrency(baseCur);
+      setPlanPrice(convertPrice(plan.price, baseCur, formCur));
+    } else {
+      setPlanBasePrice(m.planPrice ?? 0);
+      setPlanBaseCurrency((m.currency as string) ?? "USD");
+      setPlanPrice(m.planPrice ?? 0);
+    }
     setEditMember(m);
   }
 
@@ -454,7 +463,7 @@ export default function MembersPage() {
       commissionAmount: values.commissionAmount ?? 0,
     };
     if (editMember) {
-      updateMutation.mutate({ id: editMember.id, data: payload });
+      updateMutation.mutate({ id: editMember.id, data: { ...payload, planPrice } });
     } else {
       const selectedPlan = plans.find((p: Plan) => String(p.id) === values.planId);
       const price = planPrice;

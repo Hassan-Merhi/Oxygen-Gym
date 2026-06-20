@@ -901,6 +901,7 @@ export const UpdateMemberBody = zod.object({
   "fingerprintId": zod.string().nullish(),
   "qrCodeId": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "planPrice": zod.number().nullish(),
   "coachId": zod.number().nullish(),
   "commissionAmount": zod.number().nullish()
 })

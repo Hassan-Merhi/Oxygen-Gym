@@ -2551,6 +2551,7 @@ components:
         fingerprintId: { type: string, nullable: true }
         qrCodeId: { type: string, nullable: true }
         notes: { type: string, nullable: true }
+        planPrice: { type: number, nullable: true }
         coachId: { type: integer, nullable: true }
         commissionAmount: { type: number, nullable: true }
 
