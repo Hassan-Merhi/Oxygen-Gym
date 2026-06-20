@@ -882,11 +882,20 @@ export default function MembersPage() {
                   <TableCell className="py-3"><StatusBadge status={m.status} t={t} /></TableCell>
                   <TableCell className="text-sm text-muted-foreground py-3">{fmtDate(m.startDate)}</TableCell>
                   <TableCell className={`text-sm py-3 ${expiryClass}`}>{fmtDate(m.expiryDate)}</TableCell>
-                  {canViewAccounting && (
-                    <TableCell className={`text-sm font-semibold py-3 ${(m.balance ?? 0) > 0 ? "text-red-600" : "text-emerald-600"}`}>
-                      {(m.balance ?? 0) !== 0 ? fmtCurrency(m.balance, m.currency) : "—"}
-                    </TableCell>
-                  )}
+                  {canViewAccounting && (() => {
+                    // Compute balance live from plan's authoritative price so stale DB values
+                    // never show a wrong number (e.g. USD plan price vs CDF amountPaid).
+                    const plan = m.planId ? plans.find((p: Plan) => String(p.id) === String(m.planId)) : null;
+                    const convertedPlanPrice = plan
+                      ? convertPrice(plan.price, (plan.currency as string) ?? "USD", (m.currency as string) ?? "USD")
+                      : (m.planPrice ?? 0);
+                    const liveBalance = convertedPlanPrice - (m.discount ?? 0) - (m.amountPaid ?? 0);
+                    return (
+                      <TableCell className={`text-sm font-semibold py-3 ${liveBalance > 0 ? "text-red-600" : "text-emerald-600"}`}>
+                        {liveBalance !== 0 ? fmtCurrency(liveBalance, m.currency) : "—"}
+                      </TableCell>
+                    );
+                  })()}
                   <TableCell className="py-3">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

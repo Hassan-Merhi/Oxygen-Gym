@@ -269,10 +269,10 @@ router.patch("/:id", async (req: Request, res: Response) => {
   const cashAccountId = body.cashAccountId ? Number(body.cashAccountId) : undefined;
 
   let planName: string | undefined;
-  let planPrice: number | undefined;
+  let planRawPrice: number | undefined;
   if (body.planId !== undefined && body.planId) {
     const [plan] = await db.select().from(plansTable).where(eq(plansTable.id, body.planId as number));
-    if (plan) { planName = plan.name; planPrice = plan.price; }
+    if (plan) { planName = plan.name; planRawPrice = plan.price; }
   }
 
   const [existing] = await db.select().from(membersTable).where(eq(membersTable.id, id));
@@ -280,7 +280,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
   const updateData: Record<string, unknown> = {};
   const dateFields = ["startDate", "expiryDate"];
-  const allowed = ["name","phone","planId","startDate","expiryDate","status","amountPaid","discount","currency","photoUrl","fingerprintId","qrCodeId","notes","coachId","commissionAmount","cashAccountId"];
+  const allowed = ["name","phone","planId","startDate","expiryDate","status","amountPaid","discount","currency","photoUrl","fingerprintId","qrCodeId","notes","coachId","commissionAmount","cashAccountId","planPrice"];
   for (const key of allowed) {
     if (body[key] !== undefined) {
       updateData[key] = dateFields.includes(key) && body[key]
@@ -288,7 +288,11 @@ router.patch("/:id", async (req: Request, res: Response) => {
         : body[key];
     }
   }
-  if (planName) { updateData.planName = planName; updateData.planPrice = planPrice; }
+  // If client sent a converted planPrice, it takes precedence; fall back to raw plan price
+  if (planName) {
+    updateData.planName = planName;
+    if (updateData.planPrice === undefined) updateData.planPrice = planRawPrice;
+  }
 
   const newAp = (updateData.amountPaid ?? existing.amountPaid ?? 0) as number;
   const newDisc = (updateData.discount ?? existing.discount ?? 0) as number;
