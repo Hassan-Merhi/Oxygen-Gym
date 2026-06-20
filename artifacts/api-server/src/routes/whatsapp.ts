@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
-import { whatsappChatsTable, settingsTable, membersTable } from "@workspace/db/schema";
+import { whatsappChatsTable, settingsTable, membersTable, plansTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { sendToAllChats, sendDailySummaryNow, formatMemberInfoMessage } from "../lib/whatsapp";
@@ -196,7 +196,29 @@ router.post("/send-member/:id", async (req: Request, res: Response) => {
     const [member] = await db.select().from(membersTable).where(eq(membersTable.id, id));
     if (!member) { res.status(404).json({ error: "Member not found" }); return; }
 
-    const message = formatMemberInfoMessage(member);
+    // Compute balance using the plan's authoritative price converted to the member's
+    // payment currency — same logic as the frontend list — so stale DB values don't appear.
+    const rate = Number(settings.usdToCdfRate ?? 1);
+    const memberCur = (member.currency as string) ?? "USD";
+    let convertedPlanPrice: number = member.planPrice ?? 0;
+
+    if (member.planId) {
+      const [plan] = await db.select().from(plansTable).where(eq(plansTable.id, member.planId));
+      if (plan) {
+        const planCur = (plan.currency as string) ?? "USD";
+        if (planCur === memberCur) {
+          convertedPlanPrice = plan.price;
+        } else if (planCur === "USD" && memberCur === "CDF") {
+          convertedPlanPrice = plan.price * rate;
+        } else {
+          convertedPlanPrice = plan.price / rate;
+        }
+      }
+    }
+
+    const liveBalance = convertedPlanPrice - (member.discount ?? 0) - (member.amountPaid ?? 0);
+
+    const message = formatMemberInfoMessage({ ...member, balance: liveBalance });
     const sent = await sendToAllChats(settings.greenApiInstanceId, settings.greenApiToken, message);
     res.json({ ok: sent });
   } catch (err) {
