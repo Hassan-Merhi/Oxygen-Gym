@@ -142,11 +142,12 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const [
     membershipRow,
     membershipCdfRow,
+    incomeVouchersRow,
     expPayments,
     expVouchers,
     todaySales,
   ] = await Promise.all([
-    // Membership in (USD)
+    // Membership in (USD) — payment records only
     db.select({ usd: sum(paymentsTable.amountUsd) })
       .from(paymentsTable)
       .where(and(
@@ -165,6 +166,15 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
         not(eq(paymentsTable.category, "product_sale")),
         gte(paymentsTable.paymentDate, dayStart),
         lte(paymentsTable.paymentDate, dayEnd),
+      )),
+    // Income vouchers (Cash Receipts etc.) — counted in Cash Book "Cash In"
+    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
+      .from(vouchersTable)
+      .where(and(
+        eq(vouchersTable.direction, "in"),
+        eq(vouchersTable.status, "recorded"),
+        gte(vouchersTable.voucherDate, dayStart),
+        lte(vouchersTable.voucherDate, dayEnd),
       )),
     // Expense payments (with description)
     db.select({
@@ -213,6 +223,9 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const memberships    = n(membershipRow[0]?.usd);
   const membershipsCdf = n(membershipCdfRow[0]?.cdf);
 
+  // ── Income vouchers (Cash Receipts etc.) — same as Cash Book "Cash In" ────
+  const incomeVouchersUsd = n(incomeVouchersRow[0]?.usd);
+  const incomeVouchersCdf = n(incomeVouchersRow[0]?.cdf);
 
   // ── Expenses (per-item detail) ─────────────────────────────────────────────
   const expenseLines: ExpenseLine[] = [
@@ -253,9 +266,9 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const sales    = productLines.filter(p => p.currency === "USD").reduce((a, p) => a + p.total, 0);
   const salesCdf = productLines.filter(p => p.currency === "CDF").reduce((a, p) => a + p.total, 0);
 
-  // ── Remaining (Net Today = all cash in minus all cash out, matches Cash Book)
-  const remaining    = memberships + productSaleCashUsd - expenses;
-  const remainingCdf = membershipsCdf + productSaleCashCdf - expensesCdf;
+  // ── Remaining (matches Cash Book: all cash in minus all cash out) ──────────
+  const remaining    = memberships + incomeVouchersUsd + sales - expenses;
+  const remainingCdf = membershipsCdf + incomeVouchersCdf + salesCdf - expensesCdf;
 
   const [year, month, day] = lubDateStr.split("-");
   const friendlyDate = `${day}/${month}/${year}`;

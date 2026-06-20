@@ -131,6 +131,29 @@ async function runStartupMigrations() {
       logger.info({ repairedSales }, "Repaired CDF sale records with wrong exchange_rate");
     }
 
+    // ── Cancel duplicate Cash Receipt vouchers per member (keep newest) ────────
+    const dupResult = await db.execute(sql`
+      UPDATE vouchers
+      SET status = 'cancelled', updated_at = NOW()
+      WHERE linked_entity = 'member'
+        AND voucher_type = 'cash_receipt'
+        AND status = 'recorded'
+        AND deleted_at IS NULL
+        AND id NOT IN (
+          SELECT DISTINCT ON (linked_entity_id) id
+          FROM vouchers
+          WHERE linked_entity = 'member'
+            AND voucher_type = 'cash_receipt'
+            AND status = 'recorded'
+            AND deleted_at IS NULL
+          ORDER BY linked_entity_id, id DESC
+        )
+    `);
+    const dupCancelled = (dupResult as unknown as { rowCount?: number }).rowCount ?? 0;
+    if (dupCancelled > 0) {
+      logger.info({ dupCancelled }, "Cancelled duplicate membership Cash Receipt vouchers");
+    }
+
     // ── Seed default chart of accounts (idempotent) ───────────────────────────
     await seedDefaultAccounts();
 

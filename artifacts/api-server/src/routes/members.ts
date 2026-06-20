@@ -307,6 +307,12 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
   // ── Sync payment record when amountPaid or discount changes ───────────────
   const amountChanged = body.amountPaid !== undefined || body.discount !== undefined;
+  // True only when the numeric values actually differ from what's stored — prevents
+  // duplicate vouchers from being created on every edit form save.
+  const amountActuallyChanged =
+    newAp !== Number(existing.amountPaid ?? 0) ||
+    newDisc !== Number(existing.discount ?? 0) ||
+    currency !== ((existing.currency as string) ?? "USD");
   if (amountChanged) {
     // Find the most recent membership payment for this member
     const [existingPayment] = await db
@@ -361,8 +367,8 @@ router.patch("/:id", async (req: Request, res: Response) => {
     }
   }
 
-  // ── Sync voucher only when amount actually changed (not on every edit) ────
-  if (cashAccountId && newAp > 0 && amountChanged) {
+  // ── Sync voucher only when values actually changed (not on every edit) ────
+  if (cashAccountId && newAp > 0 && amountActuallyChanged) {
     let accountName = "cash";
     const [acct] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, cashAccountId));
     if (acct) accountName = acct.name.toLowerCase().replace(/ /g, "_");
