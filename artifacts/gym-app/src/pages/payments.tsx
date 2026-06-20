@@ -66,6 +66,7 @@ import {
   Receipt,
   Banknote,
   ChevronDown,
+  Send,
 } from "lucide-react";
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -142,6 +143,29 @@ export default function CashBook() {
 
   const canAdd = true; // anyone with Cash Book page access can add entries
   const canManage = me?.role === "admin" || me?.permissions?.viewAccounting; // edit/delete restricted
+
+  const [sendingNow, setSendingNow] = useState(false);
+  const sendWhatsAppSummary = async () => {
+    setSendingNow(true);
+    try {
+      const token = localStorage.getItem("gym_token");
+      const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
+      const res = await fetch(`${apiBase}/api/whatsapp/send-daily-summary`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        toast({ title: "Résumé envoyé sur WhatsApp ✓" });
+      } else {
+        const json = await res.json().catch(() => ({}));
+        toast({ title: (json as any).error ?? "Erreur envoi WhatsApp", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Erreur réseau", variant: "destructive" });
+    } finally {
+      setSendingNow(false);
+    }
+  };
 
   // ── Unified filter state ──
   const [search, setSearch] = useState("");
@@ -562,6 +586,12 @@ export default function CashBook() {
         subtitle={t("cashbook.subtitle")}
         actions={
           <>
+            {isAdmin && (
+              <Button variant="outline" size="sm" onClick={sendWhatsAppSummary} disabled={sendingNow} className="gap-2">
+                {sendingNow ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                Envoyer résumé
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={exportPdf} className="gap-2">
               <Printer className="w-4 h-4" />
               Export PDF
