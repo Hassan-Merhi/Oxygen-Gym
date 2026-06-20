@@ -57,12 +57,11 @@ export function formatNewMemberMessage(member: {
   if (member.phone) lines.push(`📞 Tél : ${member.phone}`);
   if (member.planName) lines.push(`🏷️ Abonnement : ${member.planName}`);
   if (member.amountPaid != null) {
-    const rate = member.exchangeRate ?? 1;
-    const amountUsd = member.currency === "CDF"
-      ? member.amountPaid / rate
-      : member.amountPaid;
-    const fmtUsd = amountUsd.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    lines.push(`💰 Montant payé : *${fmtUsd} USD*`);
+    const cur = member.currency ?? "USD";
+    const fmtAmt = cur === "CDF"
+      ? `FC ${Math.round(member.amountPaid).toLocaleString("fr-FR")}`
+      : `$${member.amountPaid.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    lines.push(`💰 Montant payé : *${fmtAmt}*`);
   }
   if (member.expiryDate) {
     const d = new Date(member.expiryDate);

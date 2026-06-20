@@ -375,15 +375,26 @@ export default function MembersPage() {
   const reactivateMutation = useReactivateMember({ mutation: { onSuccess: () => { invalidateMembers(); setReactivateMember(null); toast({ title: t("common.success") }); } } });
   const statusMutation = useSetMemberStatus({ mutation: { onSuccess: () => { invalidateMembers(); toast({ title: t("common.success") }); } } });
 
+  const exchangeRate = (settingsData?.usdToCdfRate as number | undefined) ?? 1;
+
+  function convertPrice(basePrice: number, baseCur: string, targetCur: string) {
+    if (baseCur === targetCur) return basePrice;
+    if (targetCur === "CDF" && baseCur === "USD") return basePrice * exchangeRate;
+    if (targetCur === "USD" && baseCur === "CDF") return basePrice / exchangeRate;
+    return basePrice;
+  }
+
   // ── Add/Edit form
   const form = useForm<MemberFormValues>({ resolver: zodResolver(memberSchema) });
   const [planPrice, setPlanPrice] = useState(0);
+  const [planBasePrice, setPlanBasePrice] = useState(0);
+  const [planBaseCurrency, setPlanBaseCurrency] = useState<string>("USD");
 
   function openAdd() {
     const today = new Date().toISOString().split("T")[0];
     const defaultAccount = cashAccount ? String(cashAccount.id) : "";
     form.reset({ status: "active", currency: "USD", amountPaid: 0, discount: 0, startDate: today, cashAccountId: defaultAccount });
-    setPlanPrice(0);
+    setPlanPrice(0); setPlanBasePrice(0); setPlanBaseCurrency("USD");
     setAddOpen(true);
   }
   function openEdit(m: Member) {
@@ -398,14 +409,22 @@ export default function MembersPage() {
       coachId: m.coachId ? String(m.coachId) : "",
       commissionAmount: (m as any).commissionAmount ?? 0,
     });
-    setPlanPrice(m.planPrice ?? 0);
+    const rawPrice = m.planPrice ?? 0;
+    const rawCur   = (m.currency as string) ?? "USD";
+    setPlanBasePrice(rawPrice);
+    setPlanBaseCurrency(rawCur);
+    setPlanPrice(rawPrice);
     setEditMember(m);
   }
 
   function watchedPlanId(value: string) {
     const plan = plans.find((p: Plan) => String(p.id) === value);
     if (plan) {
-      setPlanPrice(plan.price);
+      const baseCur = (plan.currency as string) ?? "USD";
+      const formCur = form.getValues("currency") || "USD";
+      setPlanBasePrice(plan.price);
+      setPlanBaseCurrency(baseCur);
+      setPlanPrice(convertPrice(plan.price, baseCur, formCur));
       const start = form.getValues("startDate");
       if (start) form.setValue("expiryDate", addDays(start, plan.durationDays));
     }
@@ -462,6 +481,8 @@ export default function MembersPage() {
   // ── Renew form
   const renewForm = useForm<RenewFormValues>({ resolver: zodResolver(renewSchema) });
   const [renewPlanPrice, setRenewPlanPrice] = useState(0);
+  const [renewPlanBasePrice, setRenewPlanBasePrice] = useState(0);
+  const [renewPlanBaseCurrency, setRenewPlanBaseCurrency] = useState<string>("USD");
   const renewAmountPaid = renewForm.watch("amountPaid") ?? 0;
   const renewDiscount = renewForm.watch("discount") ?? 0;
   const renewBalance = renewPlanPrice - renewDiscount - renewAmountPaid;
@@ -479,14 +500,18 @@ export default function MembersPage() {
     const today = new Date().toISOString().split("T")[0];
     const defaultAccount = cashAccount ? String(cashAccount.id) : "";
     renewForm.reset({ startDate: today, currency: (m.currency as "USD" | "CDF") ?? "USD", amountPaid: 0, discount: 0, cashAccountId: defaultAccount });
-    setRenewPlanPrice(0);
+    setRenewPlanPrice(0); setRenewPlanBasePrice(0); setRenewPlanBaseCurrency("USD");
     setRenewMember(m);
   }
 
   function watchRenewPlan(value: string) {
     const plan = plans.find((p: Plan) => String(p.id) === value);
     if (plan) {
-      setRenewPlanPrice(plan.price);
+      const baseCur = (plan.currency as string) ?? "USD";
+      const formCur = renewForm.getValues("currency") || "USD";
+      setRenewPlanBasePrice(plan.price);
+      setRenewPlanBaseCurrency(baseCur);
+      setRenewPlanPrice(convertPrice(plan.price, baseCur, formCur));
       const start = renewForm.getValues("startDate");
       if (start) renewForm.setValue("expiryDate", addDays(start, plan.durationDays));
     }
@@ -1039,18 +1064,22 @@ export default function MembersPage() {
                     <Input type="number" step="0.01" min="0" {...form.register("discount")} className="mt-1" />
                   </div>
                 )}
-                {isAdmin && (
-                  <div>
-                    <Label>{t("members.form.currency")}</Label>
-                    <Select value={form.watch("currency")} onValueChange={(v) => form.setValue("currency", v as "USD" | "CDF")}>
-                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="USD">USD</SelectItem>
-                        <SelectItem value="CDF">CDF</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+                <div>
+                  <Label>{t("members.form.currency")}</Label>
+                  <Select
+                    value={form.watch("currency")}
+                    onValueChange={(v) => {
+                      form.setValue("currency", v as "USD" | "CDF");
+                      if (planBasePrice > 0) setPlanPrice(convertPrice(planBasePrice, planBaseCurrency, v));
+                    }}
+                  >
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="USD">USD</SelectItem>
+                      <SelectItem value="CDF">CDF</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="col-span-2 border-l-4 border-primary pl-3 py-0.5 rounded-r-md">
                   <Label className="text-primary font-semibold">{t("members.form.cashAccount")}</Label>
                   <div className="mt-1 h-9 flex items-center px-3 rounded-md border border-input bg-muted/40 text-sm text-muted-foreground cursor-not-allowed select-none">
@@ -1163,7 +1192,13 @@ export default function MembersPage() {
               </div>
               <div>
                 <Label>{t("members.renew.currency")}</Label>
-                <Select value={renewForm.watch("currency")} onValueChange={(v) => renewForm.setValue("currency", v as "USD" | "CDF")}>
+                <Select
+                  value={renewForm.watch("currency")}
+                  onValueChange={(v) => {
+                    renewForm.setValue("currency", v as "USD" | "CDF");
+                    if (renewPlanBasePrice > 0) setRenewPlanPrice(convertPrice(renewPlanBasePrice, renewPlanBaseCurrency, v));
+                  }}
+                >
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="USD">USD</SelectItem>
