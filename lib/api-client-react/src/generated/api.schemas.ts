@@ -1328,6 +1328,10 @@ export type TestWhatsappConnection200 = {
   ok: boolean;
 };
 
+export type SendMemberWhatsapp200 = {
+  ok: boolean;
+};
+
 export type SendDailySummary200 = {
   ok: boolean;
   cashIn: number;

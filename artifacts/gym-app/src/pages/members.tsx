@@ -19,6 +19,7 @@ import {
   useSetMemberStatus,
   useListPlans,
   useGetSettings,
+  useSendMemberWhatsapp,
 } from "@workspace/api-client-react";
 import type { Member, Plan } from "@workspace/api-client-react";
 import { useListStaffEmployees, getListStaffEmployeesQueryKey } from "@workspace/api-client-react";
@@ -93,6 +94,7 @@ import {
   ArrowUp,
   ArrowDown,
   Clock,
+  MessageCircle,
 } from "lucide-react";
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -351,6 +353,10 @@ export default function MembersPage() {
   }}});
   const updateMutation = useUpdateMember({ mutation: { onSuccess: () => { invalidateMembers(); setEditMember(null); toast({ title: t("common.success") }); } } });
   const deleteMutation = useDeleteMember({ mutation: { onSuccess: () => { invalidateMembers(); toast({ title: t("common.success") }); } } });
+  const sendWhatsappMutation = useSendMemberWhatsapp({ mutation: {
+    onSuccess: () => toast({ title: "WhatsApp envoyé ✓" }),
+    onError: () => toast({ title: "Échec WhatsApp", variant: "destructive" }),
+  } });
   const checkInMutation = useCheckInMember({ mutation: {
     onSuccess: (data) => {
       if (!data.success && data.alreadyCheckedIn) {
@@ -778,6 +784,14 @@ export default function MembersPage() {
                               <Play className="h-4 w-4 mr-2" />{t("members.actions.reactivate")}
                             </DropdownMenuItem>
                           )}
+                          {isAdmin && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => sendWhatsappMutation.mutate({ id: m.id })}>
+                                <MessageCircle className="h-4 w-4 mr-2 text-green-600" />Envoyer WhatsApp
+                              </DropdownMenuItem>
+                            </>
+                          )}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-red-600 focus:text-red-600"
@@ -937,6 +951,11 @@ export default function MembersPage() {
                             {m.status !== "inactive" && (
                               <DropdownMenuItem onClick={() => statusMutation.mutate({ id: m.id, data: { status: "inactive" } })}>
                                 <UserMinus className="h-4 w-4 mr-2" />{t("members.actions.markInactive")}
+                              </DropdownMenuItem>
+                            )}
+                            {isAdmin && (
+                              <DropdownMenuItem onClick={() => sendWhatsappMutation.mutate({ id: m.id })}>
+                                <MessageCircle className="h-4 w-4 mr-2 text-green-600" />Envoyer WhatsApp
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem

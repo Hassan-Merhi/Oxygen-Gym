@@ -70,6 +70,36 @@ export function formatNewMemberMessage(member: {
   return lines.join("\n");
 }
 
+export function formatMemberInfoMessage(member: {
+  name: string;
+  phone?: string | null;
+  planName?: string | null;
+  amountPaid?: number | null;
+  discount?: number | null;
+  planPrice?: number | null;
+  currency?: string | null;
+  expiryDate?: Date | string | null;
+  balance?: number | null;
+}): string {
+  const cur = member.currency ?? "USD";
+  const isCdf = cur === "CDF";
+  const fmtAmt = (n: number) => isCdf
+    ? `FC ${Math.round(n).toLocaleString("fr-FR")}`
+    : `$${n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const lines = [`👤 *${member.name}*`];
+  if (member.phone) lines.push(`📞 Tél : ${member.phone}`);
+  if (member.planName) lines.push(`🏷️ Abonnement : ${member.planName}`);
+  if (member.amountPaid != null) lines.push(`💰 Montant payé : *${fmtAmt(member.amountPaid)}*`);
+  if (member.balance != null && member.balance !== 0)
+    lines.push(`💳 Reste à payer : *${fmtAmt(member.balance)}*`);
+  if (member.expiryDate) {
+    const d = new Date(member.expiryDate);
+    lines.push(`📅 Expire le : ${d.toLocaleDateString("fr-FR")}`);
+  }
+  return lines.join("\n");
+}
+
 export function formatExpiryReminderMessage(member: {
   name: string;
   phone?: string | null;

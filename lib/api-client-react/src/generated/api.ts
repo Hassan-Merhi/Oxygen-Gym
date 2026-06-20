@@ -105,6 +105,7 @@ import type {
   SaleRecord,
   SalesPage,
   SendDailySummary200,
+  SendMemberWhatsapp200,
   Settings,
   SettingsUpdate,
   StaffEmployee,
@@ -1526,6 +1527,76 @@ export const useTestWhatsappConnection = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getTestWhatsappConnectionMutationOptions(options));
+    }
+
+export const getSendMemberWhatsappUrl = (id: number,) => {
+
+
+
+
+  return `/api/whatsapp/send-member/${id}`
+}
+
+/**
+ * @summary Send a WhatsApp notification for a specific member
+ */
+export const sendMemberWhatsapp = async (id: number, options?: RequestInit): Promise<SendMemberWhatsapp200> => {
+
+  return customFetch<SendMemberWhatsapp200>(getSendMemberWhatsappUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSendMemberWhatsappMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendMemberWhatsapp>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendMemberWhatsapp>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['sendMemberWhatsapp'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendMemberWhatsapp>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  sendMemberWhatsapp(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendMemberWhatsappMutationResult = NonNullable<Awaited<ReturnType<typeof sendMemberWhatsapp>>>
+
+    export type SendMemberWhatsappMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Send a WhatsApp notification for a specific member
+ */
+export const useSendMemberWhatsapp = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendMemberWhatsapp>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendMemberWhatsapp>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getSendMemberWhatsappMutationOptions(options));
     }
 
 export const getSendDailySummaryUrl = () => {

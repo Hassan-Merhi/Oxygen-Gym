@@ -1,9 +1,9 @@
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
-import { whatsappChatsTable, settingsTable } from "@workspace/db/schema";
+import { whatsappChatsTable, settingsTable, membersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
-import { sendToAllChats, sendDailySummaryNow } from "../lib/whatsapp";
+import { sendToAllChats, sendDailySummaryNow, formatMemberInfoMessage } from "../lib/whatsapp";
 
 const router = Router();
 router.use(requireAuth());
@@ -180,6 +180,28 @@ router.post("/test", async (req: Request, res: Response) => {
   } catch (err) {
     req.log.error({ err }, "WhatsApp test failed");
     res.status(500).json({ error: "Test failed" });
+  }
+});
+
+// POST /api/whatsapp/send-member/:id — send a per-member notification
+router.post("/send-member/:id", async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
+  const id = Number(req.params.id);
+  try {
+    const settings = await db.query.settingsTable.findFirst();
+    if (!settings?.greenApiInstanceId || !settings?.greenApiToken) {
+      res.status(400).json({ error: "Green API credentials not configured" });
+      return;
+    }
+    const [member] = await db.select().from(membersTable).where(eq(membersTable.id, id));
+    if (!member) { res.status(404).json({ error: "Member not found" }); return; }
+
+    const message = formatMemberInfoMessage(member);
+    const sent = await sendToAllChats(settings.greenApiInstanceId, settings.greenApiToken, message);
+    res.json({ ok: sent });
+  } catch (err) {
+    req.log.error({ err }, "Send member WhatsApp failed");
+    res.status(500).json({ error: "Failed" });
   }
 });
 

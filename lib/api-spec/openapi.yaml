@@ -384,6 +384,27 @@ paths:
                   ok: { type: boolean }
                 required: [ok]
 
+  /whatsapp/send-member/{id}:
+    post:
+      operationId: sendMemberWhatsapp
+      tags: [settings]
+      summary: Send a WhatsApp notification for a specific member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                required: [ok]
+
   /whatsapp/send-daily-summary:
     post:
       operationId: sendDailySummary

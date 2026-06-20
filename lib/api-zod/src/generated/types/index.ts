@@ -135,6 +135,7 @@ export * from './saleRecord';
 export * from './salesEntry';
 export * from './salesPage';
 export * from './sendDailySummary200';
+export * from './sendMemberWhatsapp200';
 export * from './settings';
 export * from './settingsDefaultCurrency';
 export * from './settingsLanguage';

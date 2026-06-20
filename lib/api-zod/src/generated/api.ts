@@ -478,6 +478,18 @@ export const TestWhatsappConnectionResponse = zod.object({
 
 
 /**
+ * @summary Send a WhatsApp notification for a specific member
+ */
+export const SendMemberWhatsappParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const SendMemberWhatsappResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
  * @summary Send today's cash summary report via WhatsApp now
  */
 export const SendDailySummaryResponse = zod.object({
