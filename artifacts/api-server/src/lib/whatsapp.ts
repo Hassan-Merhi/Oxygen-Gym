@@ -235,9 +235,6 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const memberships    = n(membershipRow[0]?.usd);
   const membershipsCdf = n(membershipCdfRow[0]?.cdf);
 
-  // ── Product sale cash received (for net remaining, matches Cash Book "Cash In")
-  const productSaleCashUsd = n(productSaleRow[0]?.usd);
-  const productSaleCashCdf = n(productSaleCdfRow[0]?.cdf);
 
   // ── Expenses (per-item detail) ─────────────────────────────────────────────
   const expenseLines: ExpenseLine[] = [
