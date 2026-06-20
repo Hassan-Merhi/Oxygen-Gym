@@ -301,7 +301,7 @@ export function formatDailySummaryMessage(opts: {
 }): string {
   const { date, memberships, membershipsCdf, expenseLines, productLines, remaining, remainingCdf } = opts;
 
-  const fmtUsd = (n: number) => n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtUsd = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtCdf = (n: number) => Math.round(n).toLocaleString("fr-FR");
   const fmtAmt = (amount: number, currency: string) =>
     currency === "CDF" ? `FC ${fmtCdf(amount)}` : `$${fmtUsd(amount)}`;
@@ -321,9 +321,8 @@ export function formatDailySummaryMessage(opts: {
     lines.push(`   Aucune vente aujourd'hui`);
   } else {
     for (const p of productLines) {
-      lines.push(`   • ${p.name} x${p.qty} — ${fmtAmt(p.total, p.currency)}`);
+      lines.push(`   ${p.name} x${p.qty} — ${fmtAmt(p.total, p.currency)}`);
     }
-    // Totals
     const usdProducts = productLines.filter(p => p.currency === "USD");
     const cdfProducts = productLines.filter(p => p.currency === "CDF");
     lines.push(`   ─────────────────`);
@@ -344,7 +343,7 @@ export function formatDailySummaryMessage(opts: {
     lines.push(`   Aucune dépense aujourd'hui`);
   } else {
     for (const e of expenseLines) {
-      lines.push(`   • ${e.desc} — ${fmtAmt(e.amount, e.currency)}`);
+      lines.push(`   ${e.desc} — ${fmtAmt(e.amount, e.currency)}`);
     }
     const usdExp = expenseLines.filter(e => e.currency === "USD");
     const cdfExp = expenseLines.filter(e => e.currency === "CDF");
