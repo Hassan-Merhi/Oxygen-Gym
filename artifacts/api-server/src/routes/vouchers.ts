@@ -32,7 +32,10 @@ router.get("/", async (req: Request, res: Response) => {
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
   const offset = (pageNum - 1) * limitNum;
 
-  const conditions: ReturnType<typeof eq>[] = [isNull(vouchersTable.deletedAt) as ReturnType<typeof eq>];
+  const conditions: ReturnType<typeof eq>[] = [
+    isNull(vouchersTable.deletedAt) as ReturnType<typeof eq>,
+    eq(vouchersTable.status, "recorded"),
+  ];
 
   if (search) {
     conditions.push(
