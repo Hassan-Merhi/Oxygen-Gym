@@ -131,6 +131,33 @@ async function runStartupMigrations() {
       logger.info({ repairedSales }, "Repaired CDF sale records with wrong exchange_rate");
     }
 
+    // ── One-time flag table for data wipes ───────────────────────────────────
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS migration_flags (
+        key TEXT PRIMARY KEY,
+        ran_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // ── One-time financial wipe (cash ledger, payments, vouchers, sales) ──────
+    // Keeps members, plans, products/stock, staff, settings untouched.
+    const wipeFlag = await db.execute(sql`
+      INSERT INTO migration_flags (key) VALUES ('cash_wipe_v1')
+      ON CONFLICT (key) DO NOTHING
+      RETURNING key
+    `);
+    const isFirstRun = (wipeFlag as unknown as { rowCount?: number }).rowCount ?? 0;
+    if (isFirstRun > 0) {
+      await db.execute(sql`DELETE FROM accounting_entries`);
+      await db.execute(sql`DELETE FROM commissions`);
+      await db.execute(sql`DELETE FROM expenses`);
+      await db.execute(sql`DELETE FROM vouchers`);
+      await db.execute(sql`DELETE FROM payments`);
+      await db.execute(sql`DELETE FROM sales`);
+      await db.execute(sql`DELETE FROM cash_ledger`);
+      logger.info("One-time cash wipe complete — ledger, payments, vouchers, sales cleared");
+    }
+
     // ── Cancel duplicate Cash Receipt vouchers per member (keep newest) ────────
     const dupResult = await db.execute(sql`
       UPDATE vouchers
