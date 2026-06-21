@@ -367,46 +367,76 @@ router.patch("/:id", async (req: Request, res: Response) => {
     }
   }
 
-  // ── Sync voucher only when values actually changed (not on every edit) ────
-  if (cashAccountId && newAp > 0 && amountActuallyChanged) {
+  // ── Sync Cash Receipt voucher whenever payment fields are in the body ────────
+  // Always update in place so exchange rate + currency stay fresh.
+  // Only create a new voucher when none exists yet.
+  if (cashAccountId && newAp > 0 && amountChanged) {
+    const rate2 = await getExchangeRate();
+    const { amountUsd: vUsd, amountCdf: vCdf } = toUsdCdf(newAp, currency, rate2);
+    const voucherEffectiveDate = body.startDate ? new Date(body.startDate as string) : (existing.startDate ?? new Date());
+
     let accountName = "cash";
     const [acct] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, cashAccountId));
     if (acct) accountName = acct.name.toLowerCase().replace(/ /g, "_");
 
-    // Cancel any existing voucher for this member's membership
-    await db.update(vouchersTable)
-      .set({ status: "cancelled" })
+    // Find the current recorded Cash Receipt for this member (if any)
+    const [existingVoucher] = await db.select()
+      .from(vouchersTable)
       .where(and(
         eq(vouchersTable.linkedEntity, "member"),
         eq(vouchersTable.linkedEntityId, id),
         eq(vouchersTable.voucherType, "cash_receipt"),
+        eq(vouchersTable.status, "recorded"),
         isNull(vouchersTable.deletedAt),
-      ));
+      ))
+      .orderBy(desc(vouchersTable.id))
+      .limit(1);
 
-    // Create a fresh voucher with the correct amount and account
-    const voucherNumber = await getNextNumber("VCH");
-    const rate2 = await getExchangeRate();
-    const { amountUsd: vUsd, amountCdf: vCdf } = toUsdCdf(newAp, currency, rate2);
-    const voucherEffectiveDate = body.startDate ? new Date(body.startDate as string) : (existing.startDate ?? new Date());
-    await db.insert(vouchersTable).values({
-      voucherNumber,
-      voucherType: "cash_receipt",
-      direction: "in",
-      receivedFrom: member.name,
-      linkedEntity: "member",
-      linkedEntityId: id,
-      linkedEntityName: member.name,
-      amount: newAp,
-      currency,
-      exchangeRate: rate2,
-      amountUsd: vUsd,
-      amountCdf: vCdf,
-      account: accountName,
-      category: "membership",
-      description: `Membership payment — ${effectivePlanName}`,
-      voucherDate: voucherEffectiveDate,
-      status: "recorded",
-    });
+    if (existingVoucher) {
+      // Update in place — refreshes amount, currency, and exchange rate
+      await db.update(vouchersTable)
+        .set({
+          amount: newAp,
+          currency,
+          exchangeRate: rate2,
+          amountUsd: vUsd,
+          amountCdf: vCdf,
+          account: accountName,
+          description: `Membership payment — ${effectivePlanName}`,
+          voucherDate: voucherEffectiveDate,
+        })
+        .where(eq(vouchersTable.id, existingVoucher.id));
+    } else if (amountActuallyChanged) {
+      // No recorded voucher — create one (cancel any stale cancelled remnants first)
+      await db.update(vouchersTable)
+        .set({ status: "cancelled" })
+        .where(and(
+          eq(vouchersTable.linkedEntity, "member"),
+          eq(vouchersTable.linkedEntityId, id),
+          eq(vouchersTable.voucherType, "cash_receipt"),
+          isNull(vouchersTable.deletedAt),
+        ));
+      const voucherNumber = await getNextNumber("VCH");
+      await db.insert(vouchersTable).values({
+        voucherNumber,
+        voucherType: "cash_receipt",
+        direction: "in",
+        receivedFrom: member.name,
+        linkedEntity: "member",
+        linkedEntityId: id,
+        linkedEntityName: member.name,
+        amount: newAp,
+        currency,
+        exchangeRate: rate2,
+        amountUsd: vUsd,
+        amountCdf: vCdf,
+        account: accountName,
+        category: "membership",
+        description: `Membership payment — ${effectivePlanName}`,
+        voucherDate: voucherEffectiveDate,
+        status: "recorded",
+      });
+    }
   }
 
   await logActivity(req, "update_member", "member", id, { name: member.name });

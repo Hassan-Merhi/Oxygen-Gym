@@ -289,6 +289,10 @@ router.patch("/:id", async (req: Request, res: Response) => {
     : (existing.paymentAmount ?? 0);
   const newChangeDue = Math.max(0, newPaymentAmount - newTotalAmount);
 
+  // Recompute USD equivalents for cost and profit
+  const newTotalCostUsd   = (currency ?? existing.currency) === "CDF" ? newTotalCost   / rate : newTotalCost;
+  const newTotalProfitUsd = (currency ?? existing.currency) === "CDF" ? newTotalProfit / rate : newTotalProfit;
+
   const [updated] = await db
     .update(salesTable)
     .set({
@@ -298,6 +302,9 @@ router.patch("/:id", async (req: Request, res: Response) => {
       totalCost: newTotalCost,
       totalProfit: newTotalProfit,
       totalAmountUsd: newTotalAmountUsd,
+      totalCostUsd: newTotalCostUsd,
+      totalProfitUsd: newTotalProfitUsd,
+      exchangeRate: rate,
       paymentAmount: newPaymentAmount,
       changeDue: newChangeDue,
       ...(currency !== undefined && { currency }),

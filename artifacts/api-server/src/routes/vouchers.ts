@@ -186,7 +186,10 @@ router.patch("/:id", async (req: Request, res: Response) => {
   if (update.amount !== undefined || update.currency !== undefined || update.exchangeRate !== undefined) {
     const amt = (update.amount as number) ?? existing.amount ?? 0;
     const cur = (update.currency as string) ?? existing.currency;
-    const rate = (update.exchangeRate as number) ?? existing.exchangeRate ?? await getExchangeRate();
+    // Always use current settings rate when none is explicitly provided,
+    // so that editing any voucher picks up a global rate change.
+    const rate = (update.exchangeRate as number) ?? await getExchangeRate();
+    update.exchangeRate = rate;
     update.amountUsd = cur === "USD" ? amt : amt / rate;
     update.amountCdf = cur === "CDF" ? amt : amt * rate;
   }
