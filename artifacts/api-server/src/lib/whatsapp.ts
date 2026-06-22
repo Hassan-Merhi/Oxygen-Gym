@@ -266,9 +266,9 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const sales    = productLines.filter(p => p.currency === "USD").reduce((a, p) => a + p.total, 0);
   const salesCdf = productLines.filter(p => p.currency === "CDF").reduce((a, p) => a + p.total, 0);
 
-  // ── Remaining (Memberships + income vouchers − expenses) ───────────────────
-  const remaining    = memberships + incomeVouchersUsd - expenses;
-  const remainingCdf = membershipsCdf + incomeVouchersCdf - expensesCdf;
+  // ── Remaining (Memberships + sales + income vouchers − expenses) ───────────
+  const remaining    = memberships + sales + incomeVouchersUsd - expenses;
+  const remainingCdf = membershipsCdf + salesCdf + incomeVouchersCdf - expensesCdf;
 
   const [year, month, day] = lubDateStr.split("-");
   const friendlyDate = `${day}/${month}/${year}`;

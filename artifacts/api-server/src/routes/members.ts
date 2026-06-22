@@ -13,7 +13,7 @@ import {
   whatsappReminderLogsTable,
 } from "@workspace/db/schema";
 
-import { sendToAllChats, formatNewMemberMessage } from "../lib/whatsapp";
+import { sendToAllChats, formatNewMemberMessage, formatMemberInfoMessage } from "../lib/whatsapp";
 import { logger } from "../lib/logger";
 import {
   eq,
@@ -561,6 +561,22 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
 
   await logActivity(req, "renew_member", "member", id, { name: existing.name, plan: plan.name });
   res.json(member);
+
+  // Fire-and-forget WhatsApp notification on renewal
+  db.query.settingsTable.findFirst().then(async (settings) => {
+    if (settings?.greenApiInstanceId && settings?.greenApiToken) {
+      const message = formatMemberInfoMessage({
+        name: member.name ?? "",
+        phone: member.phone,
+        planName: member.planName,
+        amountPaid: member.amountPaid,
+        currency: member.currency,
+        expiryDate: member.expiryDate,
+        balance,
+      });
+      await sendToAllChats(settings.greenApiInstanceId, settings.greenApiToken, message).catch(() => {});
+    }
+  }).catch((err) => logger.error({ err }, "WhatsApp renewal notification failed"));
 });
 
 // ─── Freeze ──────────────────────────────────────────────────────────────────
