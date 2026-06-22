@@ -181,6 +181,55 @@ async function runStartupMigrations() {
       logger.info({ dupCancelled }, "Cancelled duplicate membership Cash Receipt vouchers");
     }
 
+    // ── Backfill payment records for completed sales missing from Cash Book ──────
+    // Uses a migration flag so it only runs once, even across restarts.
+    const salesBackfillFlag = await db.execute(sql`
+      INSERT INTO migration_flags (key) VALUES ('sales_cashbook_backfill_v1')
+      ON CONFLICT (key) DO NOTHING
+      RETURNING key
+    `);
+    if (((salesBackfillFlag as unknown as { rowCount?: number }).rowCount ?? 0) > 0) {
+      // Insert one payment row per completed sale that has no matching payment yet
+      const backfillResult = await db.execute(sql`
+        INSERT INTO payments (
+          payment_number, direction, category, type,
+          linked_entity, linked_entity_id, linked_entity_name,
+          amount, currency, exchange_rate, amount_usd, amount_cdf,
+          account, notes, payment_date, status, created_by
+        )
+        SELECT
+          s.sale_number,
+          'in',
+          'product_sale',
+          'product_sale',
+          'sale',
+          s.id,
+          s.sale_number,
+          s.total_amount,
+          s.currency,
+          COALESCE(s.exchange_rate, 2800),
+          CASE WHEN s.currency = 'USD' THEN s.total_amount
+               ELSE s.total_amount / COALESCE(s.exchange_rate, 2800) END,
+          CASE WHEN s.currency = 'CDF' THEN s.total_amount
+               ELSE s.total_amount * COALESCE(s.exchange_rate, 2800) END,
+          'cash',
+          NULL,
+          s.sale_date,
+          'completed',
+          s.created_by
+        FROM sales s
+        WHERE s.status = 'completed'
+          AND NOT EXISTS (
+            SELECT 1 FROM payments p
+            WHERE p.linked_entity = 'sale'
+              AND p.linked_entity_id = s.id
+              AND p.status = 'completed'
+          )
+      `);
+      const backfilled = (backfillResult as unknown as { rowCount?: number }).rowCount ?? 0;
+      logger.info({ backfilled }, "Backfilled payment records for existing completed sales");
+    }
+
     // ── Seed default chart of accounts (idempotent) ───────────────────────────
     await seedDefaultAccounts();
 
