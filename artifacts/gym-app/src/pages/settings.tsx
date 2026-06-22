@@ -139,6 +139,30 @@ function WhatsAppTab() {
   const [contactsFetching, setContactsFetching] = useState(false);
   const [contactsError, setContactsError] = useState<string | null>(null);
 
+  const [instanceState, setInstanceState] = useState<string | null>(null);
+  const [stateChecking, setStateChecking] = useState(false);
+
+  const checkConnection = async () => {
+    setStateChecking(true);
+    setInstanceState(null);
+    try {
+      const tok = localStorage.getItem("gym_token");
+      const res = await fetch(`${BASE}api/whatsapp/state`, {
+        headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+      });
+      const json = await res.json().catch(() => ({})) as { state?: string; error?: string };
+      if (res.ok && json.state) {
+        setInstanceState(json.state);
+      } else {
+        setInstanceState("error:" + (json.error ?? `HTTP ${res.status}`));
+      }
+    } catch {
+      setInstanceState("error:network");
+    } finally {
+      setStateChecking(false);
+    }
+  };
+
   const refetchContacts = async () => {
     setContactsFetching(true);
     setContactsError(null);
@@ -306,10 +330,21 @@ function WhatsAppTab() {
               </div>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button onClick={saveCreds} disabled={credsSaving} size="sm">
               {credsSaving && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
               {t("settings.save")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={checkConnection}
+              disabled={stateChecking || !instanceId || !token}
+            >
+              {stateChecking
+                ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                : <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />}
+              Check Connection
             </Button>
             <Button
               variant="outline"
@@ -322,6 +357,18 @@ function WhatsAppTab() {
                 : <Send className="w-3.5 h-3.5 mr-1.5" />}
               {t("settings.sendTest")}
             </Button>
+            {instanceState && (
+              <Badge
+                variant={instanceState === "authorized" ? "default" : "destructive"}
+                className={instanceState === "authorized" ? "bg-green-600" : ""}
+              >
+                {instanceState === "authorized"
+                  ? "✓ Connected"
+                  : instanceState.startsWith("error:")
+                    ? `⚠ ${instanceState.replace("error:", "")}`
+                    : `⚠ ${instanceState}`}
+              </Badge>
+            )}
           </div>
         </CardContent>
       </Card>

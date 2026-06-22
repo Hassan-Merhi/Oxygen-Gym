@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { whatsappChatsTable, settingsTable, membersTable, plansTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
-import { sendToAllChats, sendDailySummaryNow, formatMemberInfoMessage } from "../lib/whatsapp";
+import { sendToAllChats, sendDailySummaryNow, formatMemberInfoMessage, checkInstanceState } from "../lib/whatsapp";
 
 const router = Router();
 router.use(requireAuth());
@@ -159,6 +159,23 @@ router.get("/contacts", async (req: Request, res: Response) => {
   } catch (err) {
     req.log.error({ err }, "Failed to fetch Green API contacts");
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/whatsapp/state — check Green API instance connection status
+router.get("/state", async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const settings = await db.query.settingsTable.findFirst();
+    if (!settings?.greenApiInstanceId || !settings?.greenApiToken) {
+      res.status(400).json({ error: "Credentials not configured" });
+      return;
+    }
+    const state = await checkInstanceState(settings.greenApiInstanceId, settings.greenApiToken);
+    res.json({ state });
+  } catch (err) {
+    req.log.error({ err }, "WhatsApp state check failed");
+    res.status(500).json({ error: "State check failed" });
   }
 });
 

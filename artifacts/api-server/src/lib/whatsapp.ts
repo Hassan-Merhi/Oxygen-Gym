@@ -12,10 +12,25 @@ async function sendMessage(instanceId: string, token: string, chatId: string, me
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ chatId, message }),
   });
+  const body = await res.json().catch(() => ({})) as Record<string, unknown>;
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Green API error ${res.status}: ${text}`);
+    throw new Error(`Green API error ${res.status}: ${JSON.stringify(body)}`);
   }
+  // Green API returns {"idMessage":"..."} on success.
+  // If the instance is disconnected it still returns 200 but with a typeError or no idMessage.
+  if (!body.idMessage) {
+    throw new Error(`Green API did not queue message: ${JSON.stringify(body)}`);
+  }
+}
+
+export async function checkInstanceState(instanceId: string, token: string): Promise<string> {
+  const url = `${GREEN_API_BASE}/waInstance${instanceId}/getStateInstance/${token}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Green API state check failed: ${res.status}`);
+  }
+  const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+  return (body.stateInstance as string) ?? "unknown";
 }
 
 /**
