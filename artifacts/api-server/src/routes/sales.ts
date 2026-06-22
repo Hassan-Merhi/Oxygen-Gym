@@ -6,11 +6,13 @@ import {
   productsTable,
   salesTable,
   settingsTable,
+  paymentsTable,
 } from "@workspace/db/schema";
 import { eq, and, ilike, or, desc, count, gte, lte } from "drizzle-orm";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 import { reverseEntries } from "../lib/accounting";
+import { appendLedgerEntry } from "../lib/ledger";
 import type { SaleItem } from "@workspace/db/schema";
 
 const router = Router();
@@ -217,8 +219,46 @@ router.post("/", async (req: Request, res: Response) => {
         .where(eq(productsTable.id, item.productId));
     }
 
+    // 3. Create payment record so it appears in the Cash Book
+    const amountUsd = currency === "USD" ? totalAmount : totalAmount / rate;
+    const amountCdf = currency === "CDF" ? totalAmount : totalAmount * rate;
+    await tx.insert(paymentsTable).values({
+      paymentNumber,
+      direction: "in",
+      category: "product_sale",
+      type: "product_sale",
+      linkedEntity: "sale",
+      linkedEntityId: sale.id,
+      linkedEntityName: saleNumber,
+      amount: totalAmount,
+      currency,
+      exchangeRate: rate,
+      amountUsd,
+      amountCdf,
+      account: "cash",
+      notes: notes ?? null,
+      paymentDate: new Date(),
+      status: "completed",
+      createdBy: creator,
+    });
+
     return { sale };
   });
+
+  // 4. Append ledger entry for the cash balance
+  try {
+    await appendLedgerEntry({
+      sourceType: "sale",
+      sourceNumber: saleNumber,
+      sourceId: sale.id,
+      direction: "in",
+      amount: totalAmount,
+      currency,
+      exchangeRate: rate,
+      description: `Sale ${saleNumber}`,
+      createdBy: creator,
+    });
+  } catch { /* non-fatal */ }
 
   await logActivity(req, "sale_created", "sale", sale.id, {
     saleNumber,
@@ -369,6 +409,31 @@ router.patch("/:id/void", async (req: Request, res: Response) => {
   // 3. Reverse accounting entries
   try {
     await reverseEntries("sale", sale.id, "void_sale", creator);
+  } catch { /* non-fatal */ }
+
+  // 4. Cancel the corresponding payment record so it's removed from Cash Book balance
+  try {
+    await db
+      .update(paymentsTable)
+      .set({ status: "cancelled" })
+      .where(and(eq(paymentsTable.linkedEntity, "sale"), eq(paymentsTable.linkedEntityId, id)));
+  } catch { /* non-fatal */ }
+
+  // 5. Reverse the ledger entry for the void
+  try {
+    const voidSettings = await getSettings();
+    const voidRate = voidSettings.usdToCdfRate ?? 2800;
+    await appendLedgerEntry({
+      sourceType: "sale_void",
+      sourceNumber: sale.saleNumber ?? undefined,
+      sourceId: sale.id,
+      direction: "out",
+      amount: sale.totalAmount ?? 0,
+      currency: sale.currency ?? "USD",
+      exchangeRate: voidRate,
+      description: `Void Sale ${sale.saleNumber}`,
+      createdBy: creator,
+    });
   } catch { /* non-fatal */ }
 
   await logActivity(req, "sale_voided", "sale", sale.id, {
