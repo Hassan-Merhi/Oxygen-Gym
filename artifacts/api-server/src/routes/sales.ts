@@ -222,6 +222,9 @@ router.post("/", async (req: Request, res: Response) => {
     // 3. Create payment record so it appears in the Cash Book
     const amountUsd = currency === "USD" ? totalAmount : totalAmount / rate;
     const amountCdf = currency === "CDF" ? totalAmount : totalAmount * rate;
+    const itemSummary = saleItems
+      .map((i) => `${i.quantity > 1 ? `${i.quantity}× ` : ""}${i.productName}`)
+      .join(", ");
     await tx.insert(paymentsTable).values({
       paymentNumber,
       direction: "in",
@@ -236,7 +239,7 @@ router.post("/", async (req: Request, res: Response) => {
       amountUsd,
       amountCdf,
       account: "cash",
-      notes: notes ?? null,
+      notes: itemSummary || notes || null,
       paymentDate: new Date(),
       status: "completed",
       createdBy: creator,

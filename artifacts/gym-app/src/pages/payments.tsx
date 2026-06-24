@@ -512,13 +512,14 @@ export default function CashBook() {
         entry._kind === "payment"
           ? `${isIn ? "In" : "Out"} / ${(entry as PayEntry).category.replace(/_/g, " ")}`
           : (entry as VchEntry).voucherType.replace(/_/g, " ");
+      const isPdfProductSale = entry._kind === "payment" && (entry as PayEntry).category === "product_sale";
       const party =
         entry._kind === "payment"
-          ? ((entry as PayEntry).linkedEntityName ?? "—")
+          ? (isPdfProductSale ? ((entry as PayEntry).notes ?? "—") : ((entry as PayEntry).linkedEntityName ?? "—"))
           : ((entry as VchEntry).paidTo ?? (entry as VchEntry).receivedFrom ?? "—");
       const desc =
         entry._kind === "payment"
-          ? ((entry as PayEntry).notes ?? "—")
+          ? (isPdfProductSale ? "—" : ((entry as PayEntry).notes ?? "—"))
           : ((entry as VchEntry).description ?? "—");
 
       return `<tr style="background:${idx % 2 === 0 ? "#fff" : "#f9fafb"}">
@@ -749,8 +750,13 @@ export default function CashBook() {
             const bal = runningMap.get(key) ?? { usd: 0, cdf: 0 };
             const isIn = entry.direction === "in";
             const date = entry._kind === "payment" ? (entry as PayEntry).paymentDate : (entry as VchEntry).voucherDate;
-            const party = entry._kind === "payment" ? (entry as PayEntry).linkedEntityName : ((entry as VchEntry).paidTo ?? (entry as VchEntry).receivedFrom ?? (entry as VchEntry).linkedEntityName);
-            const desc = entry._kind === "payment" ? (entry as PayEntry).notes : (entry as VchEntry).description;
+            const isMobileProductSale = entry._kind === "payment" && (entry as PayEntry).category === "product_sale";
+            const party = entry._kind === "payment"
+              ? (isMobileProductSale ? ((entry as PayEntry).notes ?? null) : (entry as PayEntry).linkedEntityName)
+              : ((entry as VchEntry).paidTo ?? (entry as VchEntry).receivedFrom ?? (entry as VchEntry).linkedEntityName);
+            const desc = entry._kind === "payment"
+              ? (isMobileProductSale ? null : (entry as PayEntry).notes)
+              : (entry as VchEntry).description;
             return (
               <div key={key} className="flex items-start gap-3 px-4 py-3.5 border-b border-border/30 last:border-0">
                 {/* Color stripe */}
@@ -849,11 +855,12 @@ export default function CashBook() {
                   const bal = runningMap.get(key) ?? { usd: 0, cdf: 0 };
                   const isIn = entry.direction === "in";
                   const date = entry._kind === "payment" ? (entry as PayEntry).paymentDate : (entry as VchEntry).voucherDate;
+                  const isProductSale = entry._kind === "payment" && (entry as PayEntry).category === "product_sale";
                   const party = entry._kind === "payment"
-                    ? (entry as PayEntry).linkedEntityName
+                    ? (isProductSale ? ((entry as PayEntry).notes ?? null) : (entry as PayEntry).linkedEntityName)
                     : ((entry as VchEntry).paidTo ?? (entry as VchEntry).receivedFrom ?? (entry as VchEntry).linkedEntityName);
                   const description = entry._kind === "payment"
-                    ? (entry as PayEntry).notes
+                    ? (isProductSale ? null : (entry as PayEntry).notes)
                     : (entry as VchEntry).description;
 
                   return (
