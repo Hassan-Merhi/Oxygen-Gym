@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
-import { paymentsTable, settingsTable, cashLedgerTable, membersTable, commissionsTable, vouchersTable } from "@workspace/db/schema";
+import { paymentsTable, settingsTable, cashLedgerTable, membersTable, commissionsTable, vouchersTable, salesTable } from "@workspace/db/schema";
 import { eq, and, ilike, or, gte, lte, count, sum, desc, asc, not, inArray, sql } from "drizzle-orm";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
@@ -127,7 +127,35 @@ router.get("/", async (req: Request, res: Response) => {
     db.select({ total: count() }).from(paymentsTable).where(where),
   ]);
 
-  res.json({ items, total: Number(totRow.total), page: pageNum, limit: limitNum });
+  // Enrich product_sale entries that have no notes with item names from the sales table
+  const missingSaleIds = items
+    .filter((p) => p.category === "product_sale" && !p.notes && p.linkedEntityId)
+    .map((p) => p.linkedEntityId!);
+
+  const saleItemMap = new Map<number, string>();
+  if (missingSaleIds.length > 0) {
+    const sales = await db
+      .select({ id: salesTable.id, items: salesTable.items })
+      .from(salesTable)
+      .where(inArray(salesTable.id, missingSaleIds));
+    for (const sale of sales) {
+      const summary = (sale.items ?? [])
+        .map((i: { quantity: number; productName: string }) =>
+          i.quantity > 1 ? `${i.quantity}× ${i.productName}` : i.productName
+        )
+        .join(", ");
+      if (summary) saleItemMap.set(sale.id, summary);
+    }
+  }
+
+  const enriched = items.map((p) => {
+    if (p.category === "product_sale" && !p.notes && p.linkedEntityId && saleItemMap.has(p.linkedEntityId)) {
+      return { ...p, notes: saleItemMap.get(p.linkedEntityId) };
+    }
+    return p;
+  });
+
+  res.json({ items: enriched, total: Number(totRow.total), page: pageNum, limit: limitNum });
 });
 
 // ─── Create ───────────────────────────────────────────────────────────────────

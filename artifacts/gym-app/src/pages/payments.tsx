@@ -516,7 +516,9 @@ export default function CashBook() {
       const isPdfProductSale = entry._kind === "payment" && (entry as PayEntry).category === "product_sale";
       const party =
         entry._kind === "payment"
-          ? (isPdfProductSale ? ((entry as PayEntry).notes ?? "—") : ((entry as PayEntry).linkedEntityName ?? "—"))
+          ? (isPdfProductSale
+              ? ((entry as PayEntry).notes ?? "—")
+              : ((entry as PayEntry).memberName ?? (entry as PayEntry).linkedEntityName ?? "—"))
           : ((entry as VchEntry).paidTo ?? (entry as VchEntry).receivedFrom ?? "—");
       const desc =
         entry._kind === "payment"
@@ -753,7 +755,9 @@ export default function CashBook() {
             const date = entry._kind === "payment" ? (entry as PayEntry).paymentDate : (entry as VchEntry).voucherDate;
             const isMobileProductSale = entry._kind === "payment" && (entry as PayEntry).category === "product_sale";
             const party = entry._kind === "payment"
-              ? (isMobileProductSale ? ((entry as PayEntry).notes ?? null) : (entry as PayEntry).linkedEntityName)
+              ? (isMobileProductSale
+                  ? ((entry as PayEntry).notes ?? null)
+                  : ((entry as PayEntry).memberName ?? (entry as PayEntry).linkedEntityName))
               : ((entry as VchEntry).paidTo ?? (entry as VchEntry).receivedFrom ?? (entry as VchEntry).linkedEntityName);
             const desc = entry._kind === "payment"
               ? (isMobileProductSale ? null : (entry as PayEntry).notes)
@@ -858,7 +862,9 @@ export default function CashBook() {
                   const date = entry._kind === "payment" ? (entry as PayEntry).paymentDate : (entry as VchEntry).voucherDate;
                   const isProductSale = entry._kind === "payment" && (entry as PayEntry).category === "product_sale";
                   const party = entry._kind === "payment"
-                    ? (isProductSale ? ((entry as PayEntry).notes ?? null) : (entry as PayEntry).linkedEntityName)
+                    ? (isProductSale
+                        ? ((entry as PayEntry).notes ?? null)
+                        : ((entry as PayEntry).memberName ?? (entry as PayEntry).linkedEntityName))
                     : ((entry as VchEntry).paidTo ?? (entry as VchEntry).receivedFrom ?? (entry as VchEntry).linkedEntityName);
                   const description = entry._kind === "payment"
                     ? (isProductSale ? null : (entry as PayEntry).notes)
