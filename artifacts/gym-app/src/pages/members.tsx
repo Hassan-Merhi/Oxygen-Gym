@@ -578,6 +578,25 @@ export default function MembersPage() {
     freezeMutation.mutate({ id: freezeMember.id, data: values });
   }
 
+  function openReprintInvoice(m: Member) {
+    const inv: MemberInvoiceData = {
+      invoiceNum: m.memberNumber ? `INV-${m.memberNumber}` : `INV-${m.id}`,
+      memberName: m.name,
+      memberPhone: m.phone ?? undefined,
+      planName: m.planName ?? "",
+      planPrice: m.planPrice ?? 0,
+      startDate: m.startDate ?? m.joinDate,
+      expiryDate: m.expiryDate ?? "",
+      amountPaid: m.amountPaid ?? 0,
+      discount: m.discount ?? 0,
+      balance: m.balance ?? 0,
+      currency: m.currency,
+      isRenewal: false,
+    };
+    setInvoicePrintData(inv);
+    setLastInvoiceData(inv);
+  }
+
   // avatar color based on name
   function avatarColor(name: string) {
     const colors = [
@@ -762,6 +781,9 @@ export default function MembersPage() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => navigate(`/members/${m.id}`)}>
                         <Eye className="h-4 w-4 mr-2" />{t("members.actions.view")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => openReprintInvoice(m)}>
+                        <Printer className="h-4 w-4 mr-2" />{t("members.actions.reprintInvoice")}
                       </DropdownMenuItem>
                       {canManage && (
                         <>
