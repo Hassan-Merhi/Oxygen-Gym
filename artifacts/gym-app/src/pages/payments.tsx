@@ -629,13 +629,15 @@ export default function CashBook() {
           icon={<TrendingUp className="w-4 h-4" />}
           trend="neutral"
         />
-        <KpiCard
-          label="Cash Balance"
-          value={`$${fmtAmt(summary?.balanceUsd)}`}
-          sub={`FC ${fmtAmt(summary?.balanceCdf)}`}
-          icon={<DollarSign className="w-4 h-4" />}
-          trend="balance"
-        />
+        {isAdmin && (
+          <KpiCard
+            label="Cash Balance"
+            value={`$${fmtAmt(summary?.balanceUsd)}`}
+            sub={`FC ${fmtAmt(summary?.balanceCdf)}`}
+            icon={<DollarSign className="w-4 h-4" />}
+            trend="balance"
+          />
+        )}
       </div>
 
       {/* ── Unified table ── */}
@@ -775,13 +777,17 @@ export default function CashBook() {
                   <p className={`font-bold tabular-nums text-sm ${isIn ? "text-emerald-600" : "text-rose-600"}`}>
                     {entry.currency === "USD" ? "$" : "FC "}{isIn ? "" : "−"}{fmtAmt(entry.amount)}
                   </p>
-                  <p className={`text-xs tabular-nums mt-0.5 ${bal.usd >= 0 ? "text-muted-foreground" : "text-rose-600"}`}>
-                    ${fmtAmt(bal.usd)}
-                  </p>
-                  {bal.cdf !== 0 && (
-                    <p className={`text-xs tabular-nums ${bal.cdf >= 0 ? "text-muted-foreground" : "text-rose-600"}`}>
-                      FC {Math.round(bal.cdf).toLocaleString()}
-                    </p>
+                  {isAdmin && (
+                    <>
+                      <p className={`text-xs tabular-nums mt-0.5 ${bal.usd >= 0 ? "text-muted-foreground" : "text-rose-600"}`}>
+                        ${fmtAmt(bal.usd)}
+                      </p>
+                      {bal.cdf !== 0 && (
+                        <p className={`text-xs tabular-nums ${bal.cdf >= 0 ? "text-muted-foreground" : "text-rose-600"}`}>
+                          FC {Math.round(bal.cdf).toLocaleString()}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
                 {canManage && (
@@ -820,7 +826,7 @@ export default function CashBook() {
                 <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground w-28">Date</th>
                 <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Details</th>
                 <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground w-36">Amount</th>
-                <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground w-44">Running Balance</th>
+                {isAdmin && <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground w-44">Running Balance</th>}
                 {canManage && <th className="px-4 py-3 w-20" />}
               </tr>
             </thead>
@@ -891,14 +897,16 @@ export default function CashBook() {
                       </td>
 
                       {/* Running Balance — USD + CDF */}
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <p className={`font-semibold tabular-nums text-sm ${bal.usd >= 0 ? "text-foreground" : "text-rose-600"}`}>
-                          ${fmtAmt(bal.usd)}
-                        </p>
-                        <p className={`text-xs tabular-nums mt-0.5 ${bal.cdf >= 0 ? "text-muted-foreground" : "text-rose-500"}`}>
-                          FC {Math.round(bal.cdf).toLocaleString()}
-                        </p>
-                      </td>
+                      {isAdmin && (
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <p className={`font-semibold tabular-nums text-sm ${bal.usd >= 0 ? "text-foreground" : "text-rose-600"}`}>
+                            ${fmtAmt(bal.usd)}
+                          </p>
+                          <p className={`text-xs tabular-nums mt-0.5 ${bal.cdf >= 0 ? "text-muted-foreground" : "text-rose-500"}`}>
+                            FC {Math.round(bal.cdf).toLocaleString()}
+                          </p>
+                        </td>
+                      )}
 
                       {/* Actions */}
                       {canManage && (
