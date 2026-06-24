@@ -943,6 +943,9 @@ export default function MembersPage() {
                         <DropdownMenuItem onClick={() => navigate(`/members/${m.id}`)}>
                           <Eye className="h-4 w-4 mr-2" />{t("members.actions.view")}
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openReprintInvoice(m)}>
+                          <Printer className="h-4 w-4 mr-2" />{t("members.actions.reprintInvoice")}
+                        </DropdownMenuItem>
                         {canManage && (
                           <>
                             <DropdownMenuItem onClick={() => openEdit(m)}>
