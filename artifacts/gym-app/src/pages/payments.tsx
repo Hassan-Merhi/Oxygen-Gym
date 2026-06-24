@@ -238,8 +238,9 @@ export default function CashBook() {
         entry._kind === "payment"
           ? (entry as PayEntry).paymentDate
           : (entry as VchEntry).voucherDate;
-      if (dateFrom && dateStr && dateStr < dateFrom) return false;
-      if (dateTo && dateStr && dateStr > dateTo) return false;
+      const dateDay = dateStr ? String(dateStr).slice(0, 10) : "";
+      if (dateFrom && dateDay && dateDay < dateFrom) return false;
+      if (dateTo && dateDay && dateDay > dateTo) return false;
       if (searchD) {
         const q = searchD.toLowerCase();
         if (entry._kind === "payment") {
