@@ -156,13 +156,13 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
 
   const [
     membershipRow,
-    membershipCdfRow,
+    allPaymentsInRow,
     incomeVouchersRow,
     expPayments,
     expVouchers,
     todaySales,
   ] = await Promise.all([
-    // Membership in (USD) — payment records only
+    // Membership in (USD) — excludes product_sale, for display only
     db.select({ usd: sum(paymentsTable.amountUsd) })
       .from(paymentsTable)
       .where(and(
@@ -172,13 +172,12 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
         gte(paymentsTable.paymentDate, dayStart),
         lte(paymentsTable.paymentDate, dayEnd),
       )),
-    // Membership in (CDF)
-    db.select({ cdf: sum(paymentsTable.amountCdf) })
+    // All payments in (USD) — including product_sale, used for remaining calc
+    db.select({ usd: sum(paymentsTable.amountUsd) })
       .from(paymentsTable)
       .where(and(
         eq(paymentsTable.direction, "in"),
         eq(paymentsTable.status, "completed"),
-        not(eq(paymentsTable.category, "product_sale")),
         gte(paymentsTable.paymentDate, dayStart),
         lte(paymentsTable.paymentDate, dayEnd),
       )),
@@ -222,7 +221,7 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
         gte(vouchersTable.voucherDate, dayStart),
         lte(vouchersTable.voucherDate, dayEnd),
       )),
-    // Full sale rows with JSONB items
+    // Full sale rows with JSONB items (for product breakdown display only)
     db.select({ items: salesTable.items, currency: salesTable.currency })
       .from(salesTable)
       .where(and(
@@ -234,13 +233,14 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
 
   const n = (v: unknown) => Number(v ?? 0);
 
-  // ── Memberships ────────────────────────────────────────────────────────────
-  const memberships    = n(membershipRow[0]?.usd);
-  const membershipsCdf = n(membershipCdfRow[0]?.cdf);
+  // ── Memberships (for display — excludes product_sale) ─────────────────────
+  const memberships = n(membershipRow[0]?.usd);
+
+  // ── All payments in (for remaining calc — matches Net Today) ──────────────
+  const allPaymentsInUsd = n(allPaymentsInRow[0]?.usd);
 
   // ── Income vouchers (Cash Receipts etc.) — same as Cash Book "Cash In" ────
   const incomeVouchersUsd = n(incomeVouchersRow[0]?.usd);
-  const incomeVouchersCdf = n(incomeVouchersRow[0]?.cdf);
 
   // ── Expenses (per-item detail) ─────────────────────────────────────────────
   const expenseLines: ExpenseLine[] = [
@@ -255,14 +255,10 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
       currency: v.currency ?? "USD",
     })),
   ];
-  const expenses    = expPayments.reduce((a, p) => a + n(p.amountUsd), 0)
-                    + expVouchers.reduce((a, v) => a + n(v.amountUsd), 0);
-  const expensesCdf = expPayments.reduce((a, p) => a + n(p.amountCdf), 0)
-                    + expVouchers.reduce((a, v) => a + n(v.amountCdf), 0);
+  const expenses = expPayments.reduce((a, p) => a + n(p.amountUsd), 0)
+                 + expVouchers.reduce((a, v) => a + n(v.amountUsd), 0);
 
-  // ── Sales (aggregate products across all today's sales) ────────────────────
-  // Always use sale-level currency as the definitive source — per-item currency
-  // can be stale or missing in older JSONB records.
+  // ── Sales (aggregate products for display only) ────────────────────────────
   const productMap = new Map<string, ProductLine>();
   for (const sale of todaySales) {
     const saleCur = (sale.currency as string) || "USD";
@@ -281,19 +277,19 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const sales    = productLines.filter(p => p.currency === "USD").reduce((a, p) => a + p.total, 0);
   const salesCdf = productLines.filter(p => p.currency === "CDF").reduce((a, p) => a + p.total, 0);
 
-  // ── Remaining (Memberships + sales + income vouchers − expenses) ───────────
-  const remaining    = memberships + sales + incomeVouchersUsd - expenses;
-  const remainingCdf = membershipsCdf + salesCdf + incomeVouchersCdf - expensesCdf;
+  // ── Remaining = all cash in (payments + vouchers) − all cash out ───────────
+  // Matches the Net Today figure from the cashbook exactly.
+  const remaining = allPaymentsInUsd + incomeVouchersUsd - expenses;
 
   const [year, month, day] = lubDateStr.split("-");
   const friendlyDate = `${day}/${month}/${year}`;
 
   const message = formatDailySummaryMessage({
     date: friendlyDate,
-    memberships, membershipsCdf,
-    expenses, expensesCdf, expenseLines,
+    memberships,
+    expenses, expenseLines,
     sales, salesCdf, productLines,
-    remaining, remainingCdf,
+    remaining,
   });
   await sendToAllChats(instanceId, token, message);
 
@@ -304,17 +300,14 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
 export function formatDailySummaryMessage(opts: {
   date: string;
   memberships: number;
-  membershipsCdf: number;
   expenses: number;
-  expensesCdf: number;
   expenseLines: ExpenseLine[];
   sales: number;
   salesCdf: number;
   productLines: ProductLine[];
   remaining: number;
-  remainingCdf: number;
 }): string {
-  const { date, memberships, membershipsCdf, expenseLines, productLines, remaining, remainingCdf } = opts;
+  const { date, memberships, expenseLines, productLines, remaining } = opts;
 
   const fmtUsd = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtCdf = (n: number) => Math.round(n).toLocaleString("fr-FR");
@@ -325,8 +318,7 @@ export function formatDailySummaryMessage(opts: {
     `📊 *Résumé de la journée — ${date}*`,
     ``,
     `🏋️ *Abonnements salle :*`,
-    `   USD : *$${fmtUsd(memberships)}*`,
-    `   CDF : *FC ${fmtCdf(membershipsCdf)}*`,
+    `   *$${fmtUsd(memberships)}*`,
     ``,
   ];
 
@@ -377,8 +369,7 @@ export function formatDailySummaryMessage(opts: {
   // ── Caisse restante ────────────────────────────────────────────────────────
   const remainEmoji = remaining >= 0 ? "✅" : "🔴";
   lines.push(`${remainEmoji} *Caisse restante :*`);
-  lines.push(`   USD : *$${fmtUsd(remaining)}*`);
-  lines.push(`   CDF : *FC ${fmtCdf(remainingCdf)}*`);
+  lines.push(`   *$${fmtUsd(remaining)}*`);
   lines.push(``);
   lines.push(`_OxygenGym — rapport automatique_`);
 
