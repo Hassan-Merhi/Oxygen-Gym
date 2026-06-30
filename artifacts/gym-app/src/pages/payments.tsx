@@ -277,6 +277,30 @@ export default function CashBook() {
     });
   }, [filtered]);
 
+  // ── KPI from filtered entries (used when a date filter is active) ──
+  const kpiFiltered = useMemo(() => {
+    let inUsd = 0, inCdf = 0, outUsd = 0, outCdf = 0;
+    for (const e of filtered) {
+      const u = (e.amountUsd as number | null) ?? 0;
+      const c = (e.amountCdf as number | null) ?? 0;
+      if (e.direction === "in") { inUsd += u; inCdf += c; }
+      else { outUsd += u; outCdf += c; }
+    }
+    return { inUsd, inCdf, outUsd, outCdf, netUsd: inUsd - outUsd, netCdf: inCdf - outCdf };
+  }, [filtered]);
+
+  const hasDateFilter = !!(dateFrom || dateTo);
+
+  const kpiLabel = isYesterdayActive ? "Yesterday" : isTodayActive ? "Today" : hasDateFilter ? "Period" : "Today";
+
+  // When a date filter is active, compute from filtered entries; otherwise use the API's today summary
+  const kpiIn    = hasDateFilter ? kpiFiltered.inUsd    : (summary?.cashInToday ?? 0);
+  const kpiInCdf = hasDateFilter ? kpiFiltered.inCdf    : (summary?.cashInTodayCdf ?? 0);
+  const kpiOut   = hasDateFilter ? kpiFiltered.outUsd   : (summary?.cashOutToday ?? 0);
+  const kpiOutCdf= hasDateFilter ? kpiFiltered.outCdf   : (summary?.cashOutTodayCdf ?? 0);
+  const kpiNet   = hasDateFilter ? kpiFiltered.netUsd   : (summary?.netCashToday ?? 0);
+  const kpiNetCdf= hasDateFilter ? kpiFiltered.netCdf   : (summary?.netCashTodayCdf ?? 0);
+
   // ── Running balance (oldest→newest, tracking USD and CDF separately) ──
   const runningMap = useMemo(() => {
     const reversed = [...sorted].reverse();
@@ -613,23 +637,23 @@ export default function CashBook() {
       {/* ── Summary cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard
-          label="Cash In Today"
-          value={`$${fmtAmt(summary?.cashInToday)}`}
-          sub={`FC ${fmtAmt(summary?.cashInTodayCdf)}`}
+          label={`Cash In ${kpiLabel}`}
+          value={`$${fmtAmt(kpiIn)}`}
+          sub={`FC ${fmtAmt(kpiInCdf)}`}
           icon={<ArrowDownCircle className="w-4 h-4" />}
           trend="up"
         />
         <KpiCard
-          label="Cash Out Today"
-          value={`$${fmtAmt(summary?.cashOutToday)}`}
-          sub={`FC ${fmtAmt(summary?.cashOutTodayCdf)}`}
+          label={`Cash Out ${kpiLabel}`}
+          value={`$${fmtAmt(kpiOut)}`}
+          sub={`FC ${fmtAmt(kpiOutCdf)}`}
           icon={<ArrowUpCircle className="w-4 h-4" />}
           trend="down"
         />
         <KpiCard
-          label="Net Today"
-          value={`$${fmtAmt(summary?.netCashToday)}`}
-          sub={`FC ${fmtAmt(summary?.netCashTodayCdf)}`}
+          label={`Net ${kpiLabel}`}
+          value={`$${fmtAmt(kpiNet)}`}
+          sub={`FC ${fmtAmt(kpiNetCdf)}`}
           icon={<TrendingUp className="w-4 h-4" />}
           trend="neutral"
         />
