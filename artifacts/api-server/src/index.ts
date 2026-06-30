@@ -2,8 +2,8 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import cron from "node-cron";
 import { db } from "@workspace/db";
-import { settingsTable, membersTable, whatsappReminderLogsTable } from "@workspace/db/schema";
-import { sql, and, eq, gte, lte, isNull, isNotNull } from "drizzle-orm";
+import { settingsTable, membersTable, whatsappReminderLogsTable, plansTable } from "@workspace/db/schema";
+import { sql, and, eq, gte, lte, isNull, isNotNull, gt } from "drizzle-orm";
 import { sendDailySummaryNow, lookupPhoneOnWhatsApp, sendDirectMessage, formatExpiryReminderMessage } from "./lib/whatsapp";
 import { seedDefaultAccounts } from "./lib/accounting";
 
@@ -289,9 +289,11 @@ cron.schedule("15 * * * *", async () => {
     const windowEnd   = new Date(now.getTime() + 25 * 60 * 60 * 1000); // 25h from now
 
     // Find active members expiring within the 23–25h window who have a waChatId
+    // and whose plan duration is >= 7 days (weekly/monthly/quarterly — not daily).
     const candidates = await db
-      .select()
+      .select({ member: membersTable })
       .from(membersTable)
+      .innerJoin(plansTable, eq(plansTable.id, membersTable.planId))
       .where(
         and(
           isNull(membersTable.deletedAt),
@@ -299,8 +301,10 @@ cron.schedule("15 * * * *", async () => {
           isNotNull(membersTable.waChatId),
           gte(membersTable.expiryDate, windowStart),
           lte(membersTable.expiryDate, windowEnd),
+          gt(plansTable.durationDays, 1),   // exclude daily plans (1 day)
         )
-      );
+      )
+      .then(rows => rows.map(r => r.member));
 
     if (candidates.length === 0) return;
 
