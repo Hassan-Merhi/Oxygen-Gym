@@ -21,6 +21,7 @@ import attendanceRouter from "./attendance";
 import notificationsRouter from "./notifications";
 import auditRouter from "./audit";
 import whatsappRouter from "./whatsapp";
+import supplierCreditsRouter from "./supplier-credits";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use("/attendance", attendanceRouter);
 router.use("/notifications", notificationsRouter);
 router.use("/audit", auditRouter);
 router.use("/whatsapp", whatsappRouter);
+router.use("/supplier-credits", supplierCreditsRouter);
 
 export default router;

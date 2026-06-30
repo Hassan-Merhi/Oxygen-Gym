@@ -5,6 +5,76 @@
  * Gym Management API
  * OpenAPI spec version: 0.1.0
  */
+export interface SupplierCredit {
+  id: number;
+  creditNumber?: string | null;
+  supplier: string;
+  description?: string | null;
+  productId?: number | null;
+  productName?: string | null;
+  totalAmount: number;
+  amountPaid: number;
+  remaining: number;
+  currency: string;
+  purchaseDate?: string;
+  notes?: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupplierCreditInput {
+  supplier: string;
+  description?: string | null;
+  productId?: number | null;
+  productName?: string | null;
+  totalAmount: number;
+  currency?: string | null;
+  purchaseDate?: string | null;
+  notes?: string | null;
+  status?: string | null;
+}
+
+export interface SupplierPayment {
+  id: number;
+  creditId: number;
+  amount: number;
+  currency: string;
+  paymentDate: string;
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface SupplierCreditsSummary {
+  totalOwed: number;
+  totalPaid: number;
+  remaining: number;
+  totalProfitUsd: number;
+  productCount: number;
+  lowStock: number;
+}
+
+export interface SupplierProduct {
+  id: number;
+  productNumber?: string | null;
+  name: string;
+  category?: string | null;
+  supplier?: string | null;
+  quantity: number;
+  alertQuantity: number;
+  costPrice: number;
+  sellingPrice: number;
+  currency: string;
+  status: string;
+  profitPerUnit: number;
+  stockValue: number;
+  costValue: number;
+  qtySold: number;
+  totalProfit: number;
+  totalRevenue: number;
+  isLowStock: boolean;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -1338,6 +1408,27 @@ export type SendDailySummary200 = {
   cashIn: number;
   expenses: number;
   remaining: number;
+};
+
+export type DeleteSupplierCredit200 = {
+  ok: boolean;
+};
+
+export type CreateSupplierPaymentBody = {
+  amount: number;
+  currency?: string | null;
+  paymentDate?: string | null;
+  notes?: string | null;
+};
+
+export type CreateSupplierPayment201 = {
+  payment: SupplierPayment;
+  credit: SupplierCredit;
+};
+
+export type DeleteSupplierPayment200 = {
+  ok: boolean;
+  credit: SupplierCredit;
 };
 
 export type ListActivityLogsParams = {

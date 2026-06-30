@@ -63,6 +63,37 @@ async function runStartupMigrations() {
     `);
 
     await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS supplier_credits (
+        id SERIAL PRIMARY KEY,
+        credit_number TEXT UNIQUE,
+        supplier TEXT NOT NULL,
+        description TEXT,
+        product_id INTEGER,
+        product_name TEXT,
+        total_amount DOUBLE PRECISION NOT NULL,
+        amount_paid DOUBLE PRECISION NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'USD',
+        purchase_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        notes TEXT,
+        status TEXT NOT NULL DEFAULT 'open',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS supplier_payments (
+        id SERIAL PRIMARY KEY,
+        credit_id INTEGER NOT NULL,
+        amount DOUBLE PRECISION NOT NULL,
+        currency TEXT NOT NULL DEFAULT 'USD',
+        payment_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await db.execute(sql`
       CREATE INDEX IF NOT EXISTS idx_payments_member_id      ON payments(member_id);
       CREATE INDEX IF NOT EXISTS idx_payments_payment_date   ON payments(payment_date);
       CREATE INDEX IF NOT EXISTS idx_payments_status         ON payments(status);

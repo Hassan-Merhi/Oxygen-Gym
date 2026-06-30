@@ -20,6 +20,7 @@ import Accounts from "@/pages/accounts";
 import Financials from "@/pages/financials";
 import Stock from "@/pages/stock";
 import Sales from "@/pages/sales";
+import Supplements from "@/pages/supplements";
 import Plans from "@/pages/plans";
 import Attendance from "@/pages/attendance";
 import NotificationsPage from "@/pages/notifications";
@@ -213,6 +214,7 @@ function AppShell() {
         <Route path="/financials"><ProtectedRoute component={Financials} permKey="viewAccounting" /></Route>
         <Route path="/stock"><ProtectedRoute component={Stock} permKey="stock" /></Route>
         <Route path="/sales"><ProtectedRoute component={Sales} permKey="sales" /></Route>
+        <Route path="/supplements"><ProtectedRoute component={Supplements} permKey="stock" /></Route>
 
         <Route path="*"><NotFound /></Route>
       </Switch>

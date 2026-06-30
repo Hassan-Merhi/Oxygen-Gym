@@ -7,6 +7,7 @@ import {
   UserCog,
   CreditCard,
   Package,
+  FlaskConical,
   TrendingUp,
   Settings,
   BookOpen,
@@ -26,8 +27,9 @@ const NAV_ITEMS = [
   { id: "payments",   href: "/payments",   icon: CreditCard,      labelKey: "nav.cashbook",   permKey: "payments"       },
   { id: "accounts",   href: "/accounts",   icon: BookOpen,        labelKey: "nav.accounts",   permKey: "accounts"       },
   { id: "financials", href: "/financials", icon: BarChart3,       labelKey: "nav.financials", permKey: "viewAccounting" },
-  { id: "stock",      href: "/stock",      icon: Package,         labelKey: "nav.stock",      permKey: "stock"          },
-  { id: "sales",      href: "/sales",      icon: TrendingUp,      labelKey: "nav.sales",      permKey: "sales"          },
+  { id: "stock",       href: "/stock",       icon: Package,       labelKey: "nav.stock",        permKey: "stock"          },
+  { id: "supplements", href: "/supplements", icon: FlaskConical,  labelKey: "nav.supplements",  permKey: "stock"          },
+  { id: "sales",       href: "/sales",       icon: TrendingUp,    labelKey: "nav.sales",        permKey: "sales"          },
   { id: "settings",   href: "/settings",   icon: Settings,        labelKey: "nav.settings",   permKey: "settings"       },
 ] as const;
 

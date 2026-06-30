@@ -42,8 +42,12 @@ import type {
   CompleteSaleBody,
   CreatePayrollBody,
   CreateProductBody,
+  CreateSupplierPayment201,
+  CreateSupplierPaymentBody,
   CurrentUser,
   DashboardKpis,
+  DeleteSupplierCredit200,
+  DeleteSupplierPayment200,
   ExpensePage,
   FixAuditAccounts200,
   FixAuditDashboard200,
@@ -113,6 +117,11 @@ import type {
   StaffEmployeeListResponse,
   StockPurchaseRecord,
   StockSummary,
+  SupplierCredit,
+  SupplierCreditInput,
+  SupplierCreditsSummary,
+  SupplierPayment,
+  SupplierProduct,
   TestWhatsappConnection200,
   UpdateProductBody,
   User,
@@ -1667,6 +1676,671 @@ export const useSendDailySummary = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getSendDailySummaryMutationOptions(options));
+    }
+
+export const getGetSupplierCreditsSummaryUrl = () => {
+
+
+
+
+  return `/api/supplier-credits/summary`
+}
+
+/**
+ * @summary KPI summary for supplier credits and product profits
+ */
+export const getSupplierCreditsSummary = async ( options?: RequestInit): Promise<SupplierCreditsSummary> => {
+
+  return customFetch<SupplierCreditsSummary>(getGetSupplierCreditsSummaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSupplierCreditsSummaryQueryKey = () => {
+    return [
+    `/api/supplier-credits/summary`
+    ] as const;
+    }
+
+
+export const getGetSupplierCreditsSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getSupplierCreditsSummary>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierCreditsSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSupplierCreditsSummaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSupplierCreditsSummary>>> = ({ signal }) => getSupplierCreditsSummary({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSupplierCreditsSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSupplierCreditsSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getSupplierCreditsSummary>>>
+export type GetSupplierCreditsSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary KPI summary for supplier credits and product profits
+ */
+
+export function useGetSupplierCreditsSummary<TData = Awaited<ReturnType<typeof getSupplierCreditsSummary>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierCreditsSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSupplierCreditsSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListSupplierCreditsUrl = () => {
+
+
+
+
+  return `/api/supplier-credits`
+}
+
+/**
+ * @summary List all supplier credits
+ */
+export const listSupplierCredits = async ( options?: RequestInit): Promise<SupplierCredit[]> => {
+
+  return customFetch<SupplierCredit[]>(getListSupplierCreditsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSupplierCreditsQueryKey = () => {
+    return [
+    `/api/supplier-credits`
+    ] as const;
+    }
+
+
+export const getListSupplierCreditsQueryOptions = <TData = Awaited<ReturnType<typeof listSupplierCredits>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupplierCredits>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSupplierCreditsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSupplierCredits>>> = ({ signal }) => listSupplierCredits({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSupplierCredits>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSupplierCreditsQueryResult = NonNullable<Awaited<ReturnType<typeof listSupplierCredits>>>
+export type ListSupplierCreditsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all supplier credits
+ */
+
+export function useListSupplierCredits<TData = Awaited<ReturnType<typeof listSupplierCredits>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupplierCredits>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSupplierCreditsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateSupplierCreditUrl = () => {
+
+
+
+
+  return `/api/supplier-credits`
+}
+
+/**
+ * @summary Create a new supplier credit
+ */
+export const createSupplierCredit = async (supplierCreditInput: SupplierCreditInput, options?: RequestInit): Promise<SupplierCredit> => {
+
+  return customFetch<SupplierCredit>(getCreateSupplierCreditUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      supplierCreditInput,)
+  }
+);}
+
+
+
+
+export const getCreateSupplierCreditMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSupplierCredit>>, TError,{data: BodyType<SupplierCreditInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSupplierCredit>>, TError,{data: BodyType<SupplierCreditInput>}, TContext> => {
+
+const mutationKey = ['createSupplierCredit'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSupplierCredit>>, {data: BodyType<SupplierCreditInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createSupplierCredit(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSupplierCreditMutationResult = NonNullable<Awaited<ReturnType<typeof createSupplierCredit>>>
+    export type CreateSupplierCreditMutationBody = BodyType<SupplierCreditInput>
+    export type CreateSupplierCreditMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a new supplier credit
+ */
+export const useCreateSupplierCredit = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSupplierCredit>>, TError,{data: BodyType<SupplierCreditInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createSupplierCredit>>,
+        TError,
+        {data: BodyType<SupplierCreditInput>},
+        TContext
+      > => {
+      return useMutation(getCreateSupplierCreditMutationOptions(options));
+    }
+
+export const getGetSupplierProductsUrl = () => {
+
+
+
+
+  return `/api/supplier-credits/products`
+}
+
+/**
+ * @summary Active products with profit/sales stats for Supplements page
+ */
+export const getSupplierProducts = async ( options?: RequestInit): Promise<SupplierProduct[]> => {
+
+  return customFetch<SupplierProduct[]>(getGetSupplierProductsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSupplierProductsQueryKey = () => {
+    return [
+    `/api/supplier-credits/products`
+    ] as const;
+    }
+
+
+export const getGetSupplierProductsQueryOptions = <TData = Awaited<ReturnType<typeof getSupplierProducts>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierProducts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSupplierProductsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSupplierProducts>>> = ({ signal }) => getSupplierProducts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSupplierProducts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSupplierProductsQueryResult = NonNullable<Awaited<ReturnType<typeof getSupplierProducts>>>
+export type GetSupplierProductsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Active products with profit/sales stats for Supplements page
+ */
+
+export function useGetSupplierProducts<TData = Awaited<ReturnType<typeof getSupplierProducts>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierProducts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSupplierProductsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateSupplierCreditUrl = (id: number,) => {
+
+
+
+
+  return `/api/supplier-credits/${id}`
+}
+
+/**
+ * @summary Update a supplier credit
+ */
+export const updateSupplierCredit = async (id: number,
+    supplierCreditInput: SupplierCreditInput, options?: RequestInit): Promise<SupplierCredit> => {
+
+  return customFetch<SupplierCredit>(getUpdateSupplierCreditUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      supplierCreditInput,)
+  }
+);}
+
+
+
+
+export const getUpdateSupplierCreditMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSupplierCredit>>, TError,{id: number;data: BodyType<SupplierCreditInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSupplierCredit>>, TError,{id: number;data: BodyType<SupplierCreditInput>}, TContext> => {
+
+const mutationKey = ['updateSupplierCredit'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSupplierCredit>>, {id: number;data: BodyType<SupplierCreditInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateSupplierCredit(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSupplierCreditMutationResult = NonNullable<Awaited<ReturnType<typeof updateSupplierCredit>>>
+    export type UpdateSupplierCreditMutationBody = BodyType<SupplierCreditInput>
+    export type UpdateSupplierCreditMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a supplier credit
+ */
+export const useUpdateSupplierCredit = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSupplierCredit>>, TError,{id: number;data: BodyType<SupplierCreditInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateSupplierCredit>>,
+        TError,
+        {id: number;data: BodyType<SupplierCreditInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateSupplierCreditMutationOptions(options));
+    }
+
+export const getDeleteSupplierCreditUrl = (id: number,) => {
+
+
+
+
+  return `/api/supplier-credits/${id}`
+}
+
+/**
+ * @summary Delete a supplier credit and its payments
+ */
+export const deleteSupplierCredit = async (id: number, options?: RequestInit): Promise<DeleteSupplierCredit200> => {
+
+  return customFetch<DeleteSupplierCredit200>(getDeleteSupplierCreditUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteSupplierCreditMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSupplierCredit>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteSupplierCredit>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteSupplierCredit'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteSupplierCredit>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteSupplierCredit(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteSupplierCreditMutationResult = NonNullable<Awaited<ReturnType<typeof deleteSupplierCredit>>>
+
+    export type DeleteSupplierCreditMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a supplier credit and its payments
+ */
+export const useDeleteSupplierCredit = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSupplierCredit>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteSupplierCredit>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteSupplierCreditMutationOptions(options));
+    }
+
+export const getListSupplierPaymentsUrl = (id: number,) => {
+
+
+
+
+  return `/api/supplier-credits/${id}/payments`
+}
+
+/**
+ * @summary List installment payments for a credit
+ */
+export const listSupplierPayments = async (id: number, options?: RequestInit): Promise<SupplierPayment[]> => {
+
+  return customFetch<SupplierPayment[]>(getListSupplierPaymentsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSupplierPaymentsQueryKey = (id: number,) => {
+    return [
+    `/api/supplier-credits/${id}/payments`
+    ] as const;
+    }
+
+
+export const getListSupplierPaymentsQueryOptions = <TData = Awaited<ReturnType<typeof listSupplierPayments>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupplierPayments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSupplierPaymentsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSupplierPayments>>> = ({ signal }) => listSupplierPayments(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSupplierPayments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSupplierPaymentsQueryResult = NonNullable<Awaited<ReturnType<typeof listSupplierPayments>>>
+export type ListSupplierPaymentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List installment payments for a credit
+ */
+
+export function useListSupplierPayments<TData = Awaited<ReturnType<typeof listSupplierPayments>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupplierPayments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSupplierPaymentsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateSupplierPaymentUrl = (id: number,) => {
+
+
+
+
+  return `/api/supplier-credits/${id}/payments`
+}
+
+/**
+ * @summary Record an installment payment
+ */
+export const createSupplierPayment = async (id: number,
+    createSupplierPaymentBody: CreateSupplierPaymentBody, options?: RequestInit): Promise<CreateSupplierPayment201> => {
+
+  return customFetch<CreateSupplierPayment201>(getCreateSupplierPaymentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createSupplierPaymentBody,)
+  }
+);}
+
+
+
+
+export const getCreateSupplierPaymentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSupplierPayment>>, TError,{id: number;data: BodyType<CreateSupplierPaymentBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSupplierPayment>>, TError,{id: number;data: BodyType<CreateSupplierPaymentBody>}, TContext> => {
+
+const mutationKey = ['createSupplierPayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSupplierPayment>>, {id: number;data: BodyType<CreateSupplierPaymentBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createSupplierPayment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSupplierPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof createSupplierPayment>>>
+    export type CreateSupplierPaymentMutationBody = BodyType<CreateSupplierPaymentBody>
+    export type CreateSupplierPaymentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Record an installment payment
+ */
+export const useCreateSupplierPayment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSupplierPayment>>, TError,{id: number;data: BodyType<CreateSupplierPaymentBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createSupplierPayment>>,
+        TError,
+        {id: number;data: BodyType<CreateSupplierPaymentBody>},
+        TContext
+      > => {
+      return useMutation(getCreateSupplierPaymentMutationOptions(options));
+    }
+
+export const getDeleteSupplierPaymentUrl = (id: number,
+    paymentId: number,) => {
+
+
+
+
+  return `/api/supplier-credits/${id}/payments/${paymentId}`
+}
+
+/**
+ * @summary Delete (undo) an installment payment
+ */
+export const deleteSupplierPayment = async (id: number,
+    paymentId: number, options?: RequestInit): Promise<DeleteSupplierPayment200> => {
+
+  return customFetch<DeleteSupplierPayment200>(getDeleteSupplierPaymentUrl(id,paymentId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteSupplierPaymentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSupplierPayment>>, TError,{id: number;paymentId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteSupplierPayment>>, TError,{id: number;paymentId: number}, TContext> => {
+
+const mutationKey = ['deleteSupplierPayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteSupplierPayment>>, {id: number;paymentId: number}> = (props) => {
+          const {id,paymentId} = props ?? {};
+
+          return  deleteSupplierPayment(id,paymentId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteSupplierPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof deleteSupplierPayment>>>
+
+    export type DeleteSupplierPaymentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete (undo) an installment payment
+ */
+export const useDeleteSupplierPayment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSupplierPayment>>, TError,{id: number;paymentId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteSupplierPayment>>,
+        TError,
+        {id: number;paymentId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteSupplierPaymentMutationOptions(options));
     }
 
 export const getGetSettingsUrl = () => {

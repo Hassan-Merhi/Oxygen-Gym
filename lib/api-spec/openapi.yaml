@@ -36,6 +36,8 @@ tags:
     description: Stock and inventory management
   - name: accounts
     description: Accounts overview and accounting reports
+  - name: suppliers
+    description: Supplier credits and installment payment tracking
 paths:
   /healthz:
     get:
@@ -423,6 +425,190 @@ paths:
                   expenses: { type: number }
                   remaining: { type: number }
                 required: [ok, cashIn, expenses, remaining]
+
+  /supplier-credits/summary:
+    get:
+      operationId: getSupplierCreditsSummary
+      tags: [suppliers]
+      summary: KPI summary for supplier credits and product profits
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierCreditsSummary"
+
+  /supplier-credits:
+    get:
+      operationId: listSupplierCredits
+      tags: [suppliers]
+      summary: List all supplier credits
+      responses:
+        "200":
+          description: List of credits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierCredit"
+    post:
+      operationId: createSupplierCredit
+      tags: [suppliers]
+      summary: Create a new supplier credit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierCreditInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierCredit"
+
+  /supplier-credits/products:
+    get:
+      operationId: getSupplierProducts
+      tags: [suppliers]
+      summary: Active products with profit/sales stats for Supplements page
+      responses:
+        "200":
+          description: Enriched product list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierProduct"
+
+  /supplier-credits/{id}:
+    patch:
+      operationId: updateSupplierCredit
+      tags: [suppliers]
+      summary: Update a supplier credit
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierCreditInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierCredit"
+    delete:
+      operationId: deleteSupplierCredit
+      tags: [suppliers]
+      summary: Delete a supplier credit and its payments
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                required: [ok]
+
+  /supplier-credits/{id}/payments:
+    get:
+      operationId: listSupplierPayments
+      tags: [suppliers]
+      summary: List installment payments for a credit
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Payments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierPayment"
+    post:
+      operationId: createSupplierPayment
+      tags: [suppliers]
+      summary: Record an installment payment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount: { type: number }
+                currency: { type: string, nullable: true }
+                paymentDate: { type: string, nullable: true }
+                notes: { type: string, nullable: true }
+              required: [amount]
+      responses:
+        "201":
+          description: Payment recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payment:
+                    $ref: "#/components/schemas/SupplierPayment"
+                  credit:
+                    $ref: "#/components/schemas/SupplierCredit"
+                required: [payment, credit]
+
+  /supplier-credits/{id}/payments/{paymentId}:
+    delete:
+      operationId: deleteSupplierPayment
+      tags: [suppliers]
+      summary: Delete (undo) an installment payment
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+        - in: path
+          name: paymentId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  credit:
+                    $ref: "#/components/schemas/SupplierCredit"
+                required: [ok, credit]
 
   /settings:
     get:
@@ -2034,6 +2220,86 @@ paths:
 
 components:
   schemas:
+    SupplierCredit:
+      type: object
+      properties:
+        id: { type: integer }
+        creditNumber: { type: string, nullable: true }
+        supplier: { type: string }
+        description: { type: string, nullable: true }
+        productId: { type: integer, nullable: true }
+        productName: { type: string, nullable: true }
+        totalAmount: { type: number }
+        amountPaid: { type: number }
+        remaining: { type: number }
+        currency: { type: string }
+        purchaseDate: { type: string }
+        notes: { type: string, nullable: true }
+        status: { type: string }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+      required: [id, supplier, totalAmount, amountPaid, remaining, currency, status, createdAt, updatedAt]
+
+    SupplierCreditInput:
+      type: object
+      properties:
+        supplier: { type: string }
+        description: { type: string, nullable: true }
+        productId: { type: integer, nullable: true }
+        productName: { type: string, nullable: true }
+        totalAmount: { type: number }
+        currency: { type: string, nullable: true }
+        purchaseDate: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        status: { type: string, nullable: true }
+      required: [supplier, totalAmount]
+
+    SupplierPayment:
+      type: object
+      properties:
+        id: { type: integer }
+        creditId: { type: integer }
+        amount: { type: number }
+        currency: { type: string }
+        paymentDate: { type: string }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string }
+      required: [id, creditId, amount, currency, paymentDate, createdAt]
+
+    SupplierCreditsSummary:
+      type: object
+      properties:
+        totalOwed: { type: number }
+        totalPaid: { type: number }
+        remaining: { type: number }
+        totalProfitUsd: { type: number }
+        productCount: { type: integer }
+        lowStock: { type: integer }
+      required: [totalOwed, totalPaid, remaining, totalProfitUsd, productCount, lowStock]
+
+    SupplierProduct:
+      type: object
+      properties:
+        id: { type: integer }
+        productNumber: { type: string, nullable: true }
+        name: { type: string }
+        category: { type: string, nullable: true }
+        supplier: { type: string, nullable: true }
+        quantity: { type: integer }
+        alertQuantity: { type: integer }
+        costPrice: { type: number }
+        sellingPrice: { type: number }
+        currency: { type: string }
+        status: { type: string }
+        profitPerUnit: { type: number }
+        stockValue: { type: number }
+        costValue: { type: number }
+        qtySold: { type: number }
+        totalProfit: { type: number }
+        totalRevenue: { type: number }
+        isLowStock: { type: boolean }
+      required: [id, name, quantity, alertQuantity, costPrice, sellingPrice, currency, status, profitPerUnit, stockValue, costValue, qtySold, totalProfit, totalRevenue, isLowStock]
+
     HealthStatus:
       type: object
       properties:

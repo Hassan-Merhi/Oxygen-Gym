@@ -501,6 +501,198 @@ export const SendDailySummaryResponse = zod.object({
 
 
 /**
+ * @summary KPI summary for supplier credits and product profits
+ */
+export const GetSupplierCreditsSummaryResponse = zod.object({
+  "totalOwed": zod.number(),
+  "totalPaid": zod.number(),
+  "remaining": zod.number(),
+  "totalProfitUsd": zod.number(),
+  "productCount": zod.number(),
+  "lowStock": zod.number()
+})
+
+
+/**
+ * @summary List all supplier credits
+ */
+export const ListSupplierCreditsResponseItem = zod.object({
+  "id": zod.number(),
+  "creditNumber": zod.string().nullish(),
+  "supplier": zod.string(),
+  "description": zod.string().nullish(),
+  "productId": zod.number().nullish(),
+  "productName": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "amountPaid": zod.number(),
+  "remaining": zod.number(),
+  "currency": zod.string(),
+  "purchaseDate": zod.string().optional(),
+  "notes": zod.string().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListSupplierCreditsResponse = zod.array(ListSupplierCreditsResponseItem)
+
+
+/**
+ * @summary Create a new supplier credit
+ */
+export const CreateSupplierCreditBody = zod.object({
+  "supplier": zod.string(),
+  "description": zod.string().nullish(),
+  "productId": zod.number().nullish(),
+  "productName": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "currency": zod.string().nullish(),
+  "purchaseDate": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "status": zod.string().nullish()
+})
+
+
+/**
+ * @summary Active products with profit/sales stats for Supplements page
+ */
+export const GetSupplierProductsResponseItem = zod.object({
+  "id": zod.number(),
+  "productNumber": zod.string().nullish(),
+  "name": zod.string(),
+  "category": zod.string().nullish(),
+  "supplier": zod.string().nullish(),
+  "quantity": zod.number(),
+  "alertQuantity": zod.number(),
+  "costPrice": zod.number(),
+  "sellingPrice": zod.number(),
+  "currency": zod.string(),
+  "status": zod.string(),
+  "profitPerUnit": zod.number(),
+  "stockValue": zod.number(),
+  "costValue": zod.number(),
+  "qtySold": zod.number(),
+  "totalProfit": zod.number(),
+  "totalRevenue": zod.number(),
+  "isLowStock": zod.boolean()
+})
+export const GetSupplierProductsResponse = zod.array(GetSupplierProductsResponseItem)
+
+
+/**
+ * @summary Update a supplier credit
+ */
+export const UpdateSupplierCreditParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateSupplierCreditBody = zod.object({
+  "supplier": zod.string(),
+  "description": zod.string().nullish(),
+  "productId": zod.number().nullish(),
+  "productName": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "currency": zod.string().nullish(),
+  "purchaseDate": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "status": zod.string().nullish()
+})
+
+export const UpdateSupplierCreditResponse = zod.object({
+  "id": zod.number(),
+  "creditNumber": zod.string().nullish(),
+  "supplier": zod.string(),
+  "description": zod.string().nullish(),
+  "productId": zod.number().nullish(),
+  "productName": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "amountPaid": zod.number(),
+  "remaining": zod.number(),
+  "currency": zod.string(),
+  "purchaseDate": zod.string().optional(),
+  "notes": zod.string().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a supplier credit and its payments
+ */
+export const DeleteSupplierCreditParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteSupplierCreditResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary List installment payments for a credit
+ */
+export const ListSupplierPaymentsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListSupplierPaymentsResponseItem = zod.object({
+  "id": zod.number(),
+  "creditId": zod.number(),
+  "amount": zod.number(),
+  "currency": zod.string(),
+  "paymentDate": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListSupplierPaymentsResponse = zod.array(ListSupplierPaymentsResponseItem)
+
+
+/**
+ * @summary Record an installment payment
+ */
+export const CreateSupplierPaymentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CreateSupplierPaymentBody = zod.object({
+  "amount": zod.number(),
+  "currency": zod.string().nullish(),
+  "paymentDate": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+
+
+/**
+ * @summary Delete (undo) an installment payment
+ */
+export const DeleteSupplierPaymentParams = zod.object({
+  "id": zod.coerce.number(),
+  "paymentId": zod.coerce.number()
+})
+
+export const DeleteSupplierPaymentResponse = zod.object({
+  "ok": zod.boolean(),
+  "credit": zod.object({
+  "id": zod.number(),
+  "creditNumber": zod.string().nullish(),
+  "supplier": zod.string(),
+  "description": zod.string().nullish(),
+  "productId": zod.number().nullish(),
+  "productName": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "amountPaid": zod.number(),
+  "remaining": zod.number(),
+  "currency": zod.string(),
+  "purchaseDate": zod.string().optional(),
+  "notes": zod.string().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+})
+
+
+/**
  * @summary Get gym settings
  */
 export const GetSettingsResponse = zod.object({
