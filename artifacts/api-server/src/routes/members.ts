@@ -13,7 +13,7 @@ import {
   whatsappReminderLogsTable,
 } from "@workspace/db/schema";
 
-import { sendToAllChats, formatNewMemberMessage, formatMemberInfoMessage } from "../lib/whatsapp";
+import { sendToAllChats, formatNewMemberMessage, formatMemberInfoMessage, lookupPhoneOnWhatsApp } from "../lib/whatsapp";
 import { logger } from "../lib/logger";
 import {
   eq,
@@ -254,17 +254,25 @@ router.post("/", async (req: Request, res: Response) => {
   await logActivity(req, "create_member", "member", member.id, { name: member.name, memberNumber });
   res.status(201).json(member);
 
-  // Fire-and-forget WhatsApp notification
+  // Fire-and-forget: resolve WhatsApp chatId for the member's phone, then send group notification
   db.query.settingsTable.findFirst().then(async (settings) => {
-    if (settings?.greenApiInstanceId && settings?.greenApiToken) {
-      const message = formatNewMemberMessage({
-        ...member,
-        exchangeRate: settings.usdToCdfRate ?? 1,
-      });
-      const sent = await sendToAllChats(settings.greenApiInstanceId, settings.greenApiToken, message);
-      if (sent) {
-        await db.insert(whatsappReminderLogsTable).values({ memberId: member.id, reminderType: "new_member" });
+    if (!settings?.greenApiInstanceId || !settings?.greenApiToken) return;
+    const { greenApiInstanceId: instanceId, greenApiToken: token } = settings;
+
+    // Lookup phone → chatId and persist it on the member record
+    if (member.phone) {
+      const chatId = await lookupPhoneOnWhatsApp(member.phone, instanceId, token);
+      if (chatId) {
+        await db.update(membersTable).set({ waChatId: chatId }).where(eq(membersTable.id, member.id));
+        logger.info({ memberId: member.id, chatId }, "WhatsApp chatId resolved for new member");
       }
+    }
+
+    // Send new-member notification to group chats
+    const message = formatNewMemberMessage({ ...member, exchangeRate: settings.usdToCdfRate ?? 1 });
+    const sent = await sendToAllChats(instanceId, token, message);
+    if (sent) {
+      await db.insert(whatsappReminderLogsTable).values({ memberId: member.id, reminderType: "new_member" });
     }
   }).catch((err) => logger.error({ err }, "WhatsApp new-member notification failed"));
 });
@@ -459,6 +467,20 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
   await logActivity(req, "update_member", "member", id, { name: member.name });
   res.json(member);
+
+  // Fire-and-forget: if phone changed (or chatId not yet resolved), re-lookup on WhatsApp
+  const phoneChanged = body.phone !== undefined && body.phone !== existing.phone;
+  const needsLookup = phoneChanged || (member.phone && !member.waChatId);
+  if (needsLookup && member.phone) {
+    db.query.settingsTable.findFirst().then(async (settings) => {
+      if (!settings?.greenApiInstanceId || !settings?.greenApiToken) return;
+      const chatId = await lookupPhoneOnWhatsApp(member.phone!, settings.greenApiInstanceId, settings.greenApiToken);
+      if (chatId) {
+        await db.update(membersTable).set({ waChatId: chatId }).where(eq(membersTable.id, id));
+        logger.info({ memberId: id, chatId }, "WhatsApp chatId resolved/updated for member");
+      }
+    }).catch((err) => logger.error({ err, memberId: id }, "WhatsApp chatId re-lookup failed"));
+  }
 });
 
 // ─── Archive ─────────────────────────────────────────────────────────────────

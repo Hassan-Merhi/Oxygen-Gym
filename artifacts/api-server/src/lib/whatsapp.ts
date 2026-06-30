@@ -5,6 +5,45 @@ import { logger } from "./logger";
 
 const GREEN_API_BASE = "https://api.green-api.com";
 
+/**
+ * Strip all non-digit characters from a phone number, then call Green API's
+ * checkWhatsapp endpoint to verify it exists and get the chatId.
+ * Returns the chatId (e.g. "243812345678@c.us") or null if not found / error.
+ */
+export async function lookupPhoneOnWhatsApp(
+  phone: string,
+  instanceId: string,
+  token: string,
+): Promise<string | null> {
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return null;
+  try {
+    const url = `${GREEN_API_BASE}/waInstance${instanceId}/checkWhatsapp/${token}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phoneNumber: digits }),
+    });
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (!res.ok || !body.existsWhatsapp) return null;
+    return (body.chatId as string) ?? `${digits}@c.us`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Send a WhatsApp message directly to a single member's personal chat.
+ */
+export async function sendDirectMessage(
+  instanceId: string,
+  token: string,
+  chatId: string,
+  message: string,
+): Promise<void> {
+  return sendMessage(instanceId, token, chatId, message);
+}
+
 async function sendMessage(instanceId: string, token: string, chatId: string, message: string): Promise<void> {
   const url = `${GREEN_API_BASE}/waInstance${instanceId}/sendMessage/${token}`;
   const res = await fetch(url, {

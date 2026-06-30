@@ -36,6 +36,8 @@ export const membersTable = pgTable("members", {
   fingerprintId: text("fingerprint_id"),
   qrCodeId: text("qr_code_id"),
   notes: text("notes"),
+  // WhatsApp chat ID resolved via Green API (e.g. "243812345678@c.us")
+  waChatId: text("wa_chat_id"),
   // Last-used cash account (pre-populates edit form)
   cashAccountId: integer("cash_account_id"),
   // Coach commission
