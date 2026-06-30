@@ -274,6 +274,7 @@ export default function MembersPage() {
   const [sortBy, setSortBy] = useState("joinDate");
   const [sortOrder, setSortOrder] = useState("desc");
   const [showFilters, setShowFilters] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
   const [page, setPage] = useState(1);
   const LIMIT = 20;
   const [archiveId, setArchiveId] = useState<number | null>(null);
@@ -325,9 +326,10 @@ export default function MembersPage() {
     ...(statusFilter !== "all" && { status: statusFilter }),
     ...(planFilter !== "all" && { planId: parseInt(planFilter) }),
     ...(expiryWindow !== "all" && { expiryWindow: parseInt(expiryWindow) }),
+    ...(showDeleted && { showDeleted: true }),
     sortBy,
     sortOrder,
-  });
+  } as any);
   const { data: plans = [] } = useListPlans();
   // Fetch count of active members expiring within 7 days
   const { data: expiringData } = useListMembers({ page: 1, limit: 1, status: "active", expiryWindow: 7 } as any, {
@@ -669,7 +671,7 @@ export default function MembersPage() {
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
             {t("common.filters") || "Filters"}
-            {(statusFilter !== "all" || planFilter !== "all" || expiryWindow !== "all") && (
+            {(statusFilter !== "all" || planFilter !== "all" || expiryWindow !== "all" || showDeleted) && (
               <span className="w-1.5 h-1.5 rounded-full bg-primary" />
             )}
           </Button>
@@ -727,6 +729,16 @@ export default function MembersPage() {
             title={sortOrder === "desc" ? "Newest first" : "Oldest first"}
           >
             {sortOrder === "desc" ? <ArrowDown className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
+          </Button>
+          <Button
+            variant={showDeleted ? "default" : "outline"}
+            size="sm"
+            className="h-9 gap-1.5 shrink-0"
+            onClick={() => { setShowDeleted(v => !v); setPage(1); }}
+            title="Show deleted members"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            <span className="text-xs">Deleted</span>
           </Button>
         </div>
       </div>

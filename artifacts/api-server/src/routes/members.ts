@@ -18,6 +18,7 @@ import { logger } from "../lib/logger";
 import {
   eq,
   isNull,
+  isNotNull,
   and,
   ilike,
   or,
@@ -58,13 +59,19 @@ router.get("/", async (req: Request, res: Response) => {
     expiryWindow,
     sortBy = "name",
     sortOrder = "asc",
+    showDeleted = "false",
   } = req.query as Record<string, string>;
 
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
   const offset = (pageNum - 1) * limitNum;
 
-  const conditions: ReturnType<typeof eq>[] = [isNull(membersTable.deletedAt) as ReturnType<typeof eq>];
+  // When showDeleted=true show only soft-deleted rows; otherwise hide them
+  const deletedCondition = showDeleted === "true"
+    ? (isNotNull(membersTable.deletedAt) as ReturnType<typeof eq>)
+    : (isNull(membersTable.deletedAt) as ReturnType<typeof eq>);
+
+  const conditions: ReturnType<typeof eq>[] = [deletedCondition];
 
   if (search) {
     conditions.push(
@@ -77,7 +84,18 @@ router.get("/", async (req: Request, res: Response) => {
     );
   }
   if (status && status !== "all") {
-    conditions.push(eq(membersTable.status, status));
+    if (status === "expired") {
+      // Catch both explicitly-marked expired AND active members whose expiry date has passed
+      const now = new Date();
+      conditions.push(
+        or(
+          eq(membersTable.status, "expired"),
+          and(eq(membersTable.status, "active"), lte(membersTable.expiryDate, now))
+        ) as ReturnType<typeof eq>
+      );
+    } else {
+      conditions.push(eq(membersTable.status, status));
+    }
   }
   if (planId) {
     conditions.push(eq(membersTable.planId, parseInt(planId)));

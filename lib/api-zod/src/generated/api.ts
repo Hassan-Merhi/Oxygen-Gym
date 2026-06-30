@@ -776,7 +776,8 @@ export const ListMembersQueryParams = zod.object({
   "planId": zod.coerce.number().optional(),
   "expiryWindow": zod.coerce.number().optional(),
   "sortBy": zod.coerce.string().optional(),
-  "sortOrder": zod.coerce.string().optional()
+  "sortOrder": zod.coerce.string().optional(),
+  "showDeleted": zod.coerce.boolean().optional()
 })
 
 export const ListMembersResponse = zod.object({

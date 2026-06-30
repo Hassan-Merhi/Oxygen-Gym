@@ -591,6 +591,9 @@ paths:
         - name: sortOrder
           in: query
           schema: { type: string }
+        - name: showDeleted
+          in: query
+          schema: { type: boolean }
       responses:
         "200":
           description: Paginated members
