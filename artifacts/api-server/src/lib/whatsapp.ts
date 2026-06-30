@@ -147,12 +147,20 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
 
   const { greenApiInstanceId: instanceId, greenApiToken: token } = settings;
 
+  const summaryHour = settings.dailySummaryHour ?? 21;
   const lubOffsetMs = 2 * 60 * 60 * 1000;
   const lubNow = new Date(Date.now() + lubOffsetMs);
   const lubDateStr = lubNow.toISOString().slice(0, 10);
 
-  const dayStart = new Date(`${lubDateStr}T00:00:00+02:00`);
-  const dayEnd   = new Date(`${lubDateStr}T23:59:59+02:00`);
+  // Report covers the 24-hour window that ENDS at the configured summary hour today.
+  // e.g. summaryHour=21: from yesterday 21:00:00 to today 20:59:59.999 (Lubumbashi UTC+2).
+  // Anything registered after 9 PM is counted in tomorrow's report, not today's.
+  const hourStr = String(summaryHour).padStart(2, "0");
+  const periodEnd   = new Date(`${lubDateStr}T${hourStr}:00:00+02:00`);
+  const periodStart = new Date(periodEnd.getTime() - 24 * 60 * 60 * 1000);
+
+  const dayStart = periodStart;
+  const dayEnd   = new Date(periodEnd.getTime() - 1);
 
   const [
     membershipRow,
