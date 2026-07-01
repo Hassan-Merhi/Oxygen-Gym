@@ -110,6 +110,14 @@ type VchForm = {
   category: string;
 };
 
+// After 9 PM local time, default new entries to tomorrow's date so they
+// are filed under the correct business day automatically.
+function businessDateStr() {
+  const d = new Date();
+  if (d.getHours() >= 21) d.setDate(d.getDate() + 1);
+  return d.toLocaleDateString("en-CA"); // YYYY-MM-DD in local tz
+}
+
 const emptyPayForm = (): PayForm => ({
   direction: "in",
   category: "membership",
@@ -119,12 +127,12 @@ const emptyPayForm = (): PayForm => ({
   exchangeRate: "1",
   account: "cash",
   notes: "",
-  paymentDate: new Date().toISOString().slice(0, 10),
+  paymentDate: businessDateStr(),
 });
 
 const emptyVchForm = (): VchForm => ({
   voucherType: "cash_receipt",
-  voucherDate: new Date().toISOString().slice(0, 10),
+  voucherDate: businessDateStr(),
   receivedFrom: "",
   paidTo: "",
   amount: "",
@@ -388,7 +396,7 @@ export default function CashBook() {
       notes: item.notes ?? "",
       paymentDate: item.paymentDate
         ? item.paymentDate.slice(0, 10)
-        : new Date().toISOString().slice(0, 10),
+        : businessDateStr(),
     });
     setPayModal(true);
   }

@@ -428,7 +428,13 @@ function SaleEditDialog({
   const originalItems = ((sale?.items ?? []) as SaleItemData[]);
 
   const [currency, setCurrency] = useState<"USD" | "CDF">("CDF");
-  const [saleDate, setSaleDate] = useState("");
+  // After 9 PM, new sales default to tomorrow's business date
+  function businessDateStr() {
+    const d = new Date();
+    if (d.getHours() >= 21) d.setDate(d.getDate() + 1);
+    return d.toLocaleDateString("en-CA");
+  }
+  const [saleDate, setSaleDate] = useState(businessDateStr());
   const [notes, setNotes] = useState("");
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [editItems, setEditItems] = useState<Array<{ productId: number; productName: string; quantity: number; unitPrice: number; discount: number; costPrice: number }>>([]);
