@@ -1219,6 +1219,40 @@ paths:
         "200":
           description: Cancelled
 
+  /ledger/opening-balance:
+    post:
+      operationId: setOpeningBalance
+      tags: [ledger]
+      summary: Set a cash opening balance (inserts an adjustment entry, no data deleted)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                targetAmountUsd: { type: number }
+                date: { type: string, nullable: true }
+                notes: { type: string, nullable: true }
+              required: [targetAmountUsd]
+      responses:
+        "200":
+          description: Balance set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  skipped: { type: boolean }
+                  balance:
+                    type: object
+                    properties:
+                      balanceUsd: { type: number }
+                      balanceCdf: { type: number }
+                    required: [balanceUsd, balanceCdf]
+                required: [ok, skipped, balance]
+
   /ledger:
     get:
       operationId: listLedger

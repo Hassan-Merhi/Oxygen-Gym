@@ -1469,6 +1469,23 @@ dateFrom?: string;
 dateTo?: string;
 };
 
+export type SetOpeningBalanceBody = {
+  targetAmountUsd: number;
+  date?: string | null;
+  notes?: string | null;
+};
+
+export type SetOpeningBalance200Balance = {
+  balanceUsd: number;
+  balanceCdf: number;
+};
+
+export type SetOpeningBalance200 = {
+  ok: boolean;
+  skipped: boolean;
+  balance: SetOpeningBalance200Balance;
+};
+
 export type ListLedgerParams = {
 page?: number;
 limit?: number;

@@ -145,6 +145,11 @@ export default function CashBook() {
   const canManage = me?.role === "admin" || me?.permissions?.viewAccounting; // edit/delete restricted
 
   const [sendingNow, setSendingNow] = useState(false);
+  const [openBalModal, setOpenBalModal] = useState(false);
+  const [openBalAmount, setOpenBalAmount] = useState("");
+  const [openBalDate, setOpenBalDate] = useState(new Date().toISOString().slice(0, 10));
+  const [openBalNotes, setOpenBalNotes] = useState("");
+  const [openBalSaving, setOpenBalSaving] = useState(false);
   const sendWhatsAppSummary = async () => {
     setSendingNow(true);
     try {
@@ -614,6 +619,17 @@ export default function CashBook() {
         subtitle={t("cashbook.subtitle")}
         actions={
           <>
+            {isAdmin && (
+              <Button variant="outline" size="sm" onClick={() => {
+                setOpenBalAmount(String((summary?.balanceUsd ?? 0).toFixed(2)));
+                setOpenBalDate(new Date().toISOString().slice(0, 10));
+                setOpenBalNotes("");
+                setOpenBalModal(true);
+              }} className="gap-2">
+                <DollarSign className="w-4 h-4" />
+                {t("cashbook.openingBalance")}
+              </Button>
+            )}
             {isAdmin && (
               <Button variant="outline" size="sm" onClick={sendWhatsAppSummary} disabled={sendingNow} className="gap-2">
                 {sendingNow ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
@@ -1406,6 +1422,105 @@ export default function CashBook() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Opening Balance Dialog ── */}
+      <Dialog open={openBalModal} onOpenChange={v => !v && setOpenBalModal(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("cashbook.openingBalance")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <p className="text-xs text-muted-foreground leading-relaxed rounded-lg bg-muted/60 px-3 py-2">
+              {t("cashbook.openingBalance.hint")}
+            </p>
+            {summary && (
+              <div className="flex items-center justify-between text-sm rounded-lg border px-3 py-2">
+                <span className="text-muted-foreground">{t("cashbook.openingBalance.currentBalance")}</span>
+                <span className="font-semibold">${(summary.balanceUsd ?? 0).toFixed(2)}</span>
+              </div>
+            )}
+            <div>
+              <Label htmlFor="ob-amount">{t("cashbook.openingBalance.targetAmount")} *</Label>
+              <Input
+                id="ob-amount"
+                className="mt-1"
+                type="number"
+                step="0.01"
+                min="0"
+                value={openBalAmount}
+                onChange={e => setOpenBalAmount(e.target.value)}
+                placeholder="e.g. 1200.00"
+              />
+            </div>
+            <div>
+              <Label htmlFor="ob-date">{t("cashbook.openingBalance.date")}</Label>
+              <Input
+                id="ob-date"
+                className="mt-1"
+                type="date"
+                value={openBalDate}
+                onChange={e => setOpenBalDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="ob-notes">{t("cashbook.openingBalance.notes")}</Label>
+              <Input
+                id="ob-notes"
+                className="mt-1"
+                value={openBalNotes}
+                onChange={e => setOpenBalNotes(e.target.value)}
+                placeholder="e.g. Yesterday + today cash combined"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenBalModal(false)}>
+              {t("common.cancel") || "Cancel"}
+            </Button>
+            <Button
+              disabled={openBalSaving || !openBalAmount}
+              onClick={async () => {
+                const target = parseFloat(openBalAmount);
+                if (isNaN(target) || target < 0) return;
+                setOpenBalSaving(true);
+                try {
+                  const token = localStorage.getItem("gym_token");
+                  const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
+                  const res = await fetch(`${apiBase}/api/ledger/opening-balance`, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
+                    body: JSON.stringify({
+                      targetAmountUsd: target,
+                      date: openBalDate || undefined,
+                      notes: openBalNotes || undefined,
+                    }),
+                  });
+                  const json = await res.json();
+                  if (!res.ok) throw new Error((json as { error?: string }).error ?? "Error");
+                  if ((json as { skipped?: boolean }).skipped) {
+                    toast({ title: t("cashbook.openingBalance.noChange") });
+                  } else {
+                    toast({ title: t("cashbook.openingBalance.success") });
+                    summaryQ.refetch();
+                    payListQ.refetch();
+                  }
+                  setOpenBalModal(false);
+                } catch (e) {
+                  toast({ title: (e as Error).message || "Error", variant: "destructive" });
+                } finally {
+                  setOpenBalSaving(false);
+                }
+              }}
+            >
+              {openBalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : t("cashbook.openingBalance") }
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

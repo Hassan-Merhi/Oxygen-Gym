@@ -1709,6 +1709,25 @@ export const DeleteVoucherParams = zod.object({
 
 
 /**
+ * @summary Set a cash opening balance (inserts an adjustment entry, no data deleted)
+ */
+export const SetOpeningBalanceBody = zod.object({
+  "targetAmountUsd": zod.number(),
+  "date": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+
+export const SetOpeningBalanceResponse = zod.object({
+  "ok": zod.boolean(),
+  "skipped": zod.boolean(),
+  "balance": zod.object({
+  "balanceUsd": zod.number(),
+  "balanceCdf": zod.number()
+})
+})
+
+
+/**
  * @summary List cash ledger entries
  */
 export const ListLedgerQueryParams = zod.object({

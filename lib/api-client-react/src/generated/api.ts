@@ -110,6 +110,8 @@ import type {
   SalesPage,
   SendDailySummary200,
   SendMemberWhatsapp200,
+  SetOpeningBalance200,
+  SetOpeningBalanceBody,
   Settings,
   SettingsUpdate,
   StaffEmployee,
@@ -4574,6 +4576,77 @@ export const useDeleteVoucher = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteVoucherMutationOptions(options));
+    }
+
+export const getSetOpeningBalanceUrl = () => {
+
+
+
+
+  return `/api/ledger/opening-balance`
+}
+
+/**
+ * @summary Set a cash opening balance (inserts an adjustment entry, no data deleted)
+ */
+export const setOpeningBalance = async (setOpeningBalanceBody: SetOpeningBalanceBody, options?: RequestInit): Promise<SetOpeningBalance200> => {
+
+  return customFetch<SetOpeningBalance200>(getSetOpeningBalanceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      setOpeningBalanceBody,)
+  }
+);}
+
+
+
+
+export const getSetOpeningBalanceMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setOpeningBalance>>, TError,{data: BodyType<SetOpeningBalanceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setOpeningBalance>>, TError,{data: BodyType<SetOpeningBalanceBody>}, TContext> => {
+
+const mutationKey = ['setOpeningBalance'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setOpeningBalance>>, {data: BodyType<SetOpeningBalanceBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  setOpeningBalance(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetOpeningBalanceMutationResult = NonNullable<Awaited<ReturnType<typeof setOpeningBalance>>>
+    export type SetOpeningBalanceMutationBody = BodyType<SetOpeningBalanceBody>
+    export type SetOpeningBalanceMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Set a cash opening balance (inserts an adjustment entry, no data deleted)
+ */
+export const useSetOpeningBalance = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setOpeningBalance>>, TError,{data: BodyType<SetOpeningBalanceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setOpeningBalance>>,
+        TError,
+        {data: BodyType<SetOpeningBalanceBody>},
+        TContext
+      > => {
+      return useMutation(getSetOpeningBalanceMutationOptions(options));
     }
 
 export const getListLedgerUrl = (params?: ListLedgerParams,) => {
