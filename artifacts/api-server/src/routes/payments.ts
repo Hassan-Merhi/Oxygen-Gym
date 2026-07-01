@@ -28,8 +28,12 @@ router.get("/summary", async (req: Request, res: Response) => {
   const rate = s?.rate ?? 2800;
   const currency = s?.currency ?? "USD";
 
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+  // Use Lubumbashi time (UTC+2) for day boundaries so transactions at any
+  // hour of the local day are counted in the correct day's KPIs.
+  const lubOffsetMs = 2 * 60 * 60 * 1000;
+  const lubDateStr = new Date(Date.now() + lubOffsetMs).toISOString().slice(0, 10);
+  const todayStart = new Date(`${lubDateStr}T00:00:00+02:00`);
+  const todayEnd   = new Date(`${lubDateStr}T23:59:59.999+02:00`);
 
   const [
     payTodayIn, payTodayOut, payAllIn, payAllOut,

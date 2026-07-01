@@ -181,10 +181,19 @@ export default function CashBook() {
   const [showFilters, setShowFilters] = useState(false);
   const [dateTo, setDateTo] = useState("");
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const yesterdayStr = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
-  const isTodayActive = dateFrom === todayStr && dateTo === todayStr;
+  // Use the browser's local date (Lubumbashi) so quick-date buttons match
+  // what the user sees on their clock, not the UTC date.
+  const localDate = (offset: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return d.toLocaleDateString("en-CA"); // YYYY-MM-DD in local tz
+  };
+  const todayStr     = localDate(0);
+  const yesterdayStr = localDate(-1);
+  const tomorrowStr  = localDate(1);
+  const isTodayActive     = dateFrom === todayStr     && dateTo === todayStr;
   const isYesterdayActive = dateFrom === yesterdayStr && dateTo === yesterdayStr;
+  const isTomorrowActive  = dateFrom === tomorrowStr  && dateTo === tomorrowStr;
   const setQuickDate = (d: string) => {
     const already = dateFrom === d && dateTo === d;
     setDateFrom(already ? "" : d);
@@ -750,7 +759,7 @@ export default function CashBook() {
               ))}
             </div>
             <div className="flex rounded-lg border border-border overflow-hidden text-xs font-semibold">
-              {([["Today", todayStr, isTodayActive], ["Yesterday", yesterdayStr, isYesterdayActive]] as const).map(([label, d, active]) => (
+              {([["Yesterday", yesterdayStr, isYesterdayActive], ["Today", todayStr, isTodayActive], ["Tomorrow", tomorrowStr, isTomorrowActive]] as const).map(([label, d, active], i) => (
                 <button
                   key={label}
                   onClick={() => setQuickDate(d)}
@@ -758,7 +767,7 @@ export default function CashBook() {
                     active
                       ? "bg-primary text-primary-foreground"
                       : "bg-background text-muted-foreground hover:bg-muted"
-                  } ${label === "Yesterday" ? "border-l border-border" : ""}`}
+                  } ${i > 0 ? "border-l border-border" : ""}`}
                 >
                   {label}
                 </button>
