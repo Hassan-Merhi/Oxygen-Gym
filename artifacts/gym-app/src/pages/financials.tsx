@@ -1,8 +1,8 @@
 import { useState, useCallback } from "react";
+import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 import { useFmtDate } from "@/lib/useFmtDate";
 import { useGetMe } from "@/hooks/use-me";
-import { TOKEN_KEY } from "@/lib/auth-context";
 import {
   useGetAccountSummary,
   useGetProfitLoss,
@@ -17,6 +17,8 @@ import {
   BarChart3,
   Printer,
   AlertCircle,
+  Send,
+  Loader2,
 } from "lucide-react";
 
 const PERIODS = ["today", "month", "last_month", "year", "custom"] as const;
@@ -136,6 +138,8 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
   const [catDetails, setCatDetails] = useState<Record<string, DetailRow[]>>({});
   const [catLoading, setCatLoading] = useState<Record<string, boolean>>({});
+  const [sharingWA, setSharingWA] = useState(false);
+  const { toast } = useToast();
 
   const fetchCategoryDetails = useCallback(
     async (cat: string, from: string, to: string) => {
@@ -143,12 +147,10 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
       if (catDetails[cacheKey]) return; // already loaded for this period
       setCatLoading((prev) => ({ ...prev, [cacheKey]: true }));
       try {
-        const token = localStorage.getItem(TOKEN_KEY);
-        const authHeaders: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
         const params = new URLSearchParams({ dateFrom: from.slice(0, 10), dateTo: to.slice(0, 10), limit: "1000" });
         const [salesRes, expRes] = await Promise.all([
-          fetch(`/api/accounts/sales?${params}`, { headers: authHeaders }),
-          fetch(`/api/accounts/expenses?${params}`, { headers: authHeaders }),
+          fetch(`/api/accounts/sales?${params}`, { credentials: "include" }),
+          fetch(`/api/accounts/expenses?${params}`, { credentials: "include" }),
         ]);
         const salesJson = salesRes.ok ? await salesRes.json() : { items: [] };
         const expJson = expRes.ok ? await expRes.json() : { items: [] };
@@ -208,6 +210,48 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
 
   const pl = query.data;
 
+  async function shareOnWhatsApp() {
+    if (!pl) return;
+    setSharingWA(true);
+    try {
+      const fmtUsd = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const fmtCdf = (n: number) => Math.round(n).toLocaleString("fr-FR");
+      const from = new Date(pl.dateFrom).toLocaleDateString("fr-FR");
+      const to   = new Date(pl.dateTo).toLocaleDateString("fr-FR");
+      const netEmoji = pl.net.usd >= 0 ? "✅" : "🔴";
+      const breakdownLines = Object.entries(pl.breakdown)
+        .map(([cat, v]) => `   ${cat}: $${fmtUsd(v.usd)} / FC ${fmtCdf(v.cdf)}`)
+        .join("\n");
+      const message = [
+        `📊 *Rapport P&L — ${from} → ${to}*`,
+        ``,
+        `💰 *Revenus :* $${fmtUsd(pl.revenue.usd)} / FC ${fmtCdf(pl.revenue.cdf)}`,
+        `💸 *Dépenses :* $${fmtUsd(pl.expenses.usd)} / FC ${fmtCdf(pl.expenses.cdf)}`,
+        `${netEmoji} *Net :* $${fmtUsd(pl.net.usd)} / FC ${fmtCdf(pl.net.cdf)}`,
+        ``,
+        `*Détail par catégorie :*`,
+        breakdownLines,
+        ``,
+        `_OxygenGym — rapport financier_`,
+      ].join("\n");
+
+      const res = await fetch("/api/whatsapp/broadcast", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+      if (res.ok) {
+        toast({ title: "Rapport envoyé sur WhatsApp ✓" });
+      } else {
+        const j = await res.json().catch(() => ({})) as Record<string, unknown>;
+        toast({ title: (j.error as string) ?? "Erreur envoi WhatsApp", variant: "destructive" });
+      }
+    } finally {
+      setSharingWA(false);
+    }
+  }
+
   function printReport() {
     if (!pl) return;
     const breakdownRows = Object.entries(pl.breakdown)
@@ -264,9 +308,15 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
             <Input type="date" className="w-36" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </>
         )}
-        <Button variant="outline" size="sm" onClick={printReport} className="gap-2 ml-auto">
-          <Printer className="w-4 h-4" />{t("acc.print")}
-        </Button>
+        <div className="flex gap-2 ml-auto">
+          <Button variant="outline" size="sm" onClick={printReport} className="gap-2" disabled={!pl}>
+            <Printer className="w-4 h-4" />{t("acc.print")}
+          </Button>
+          <Button variant="outline" size="sm" onClick={shareOnWhatsApp} className="gap-2 text-green-600 border-green-200 hover:bg-green-50" disabled={!pl || sharingWA}>
+            {sharingWA ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            WhatsApp
+          </Button>
+        </div>
       </div>
 
       {query.isLoading ? (

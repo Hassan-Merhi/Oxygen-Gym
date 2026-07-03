@@ -244,6 +244,24 @@ router.post("/send-member/:id", async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/whatsapp/broadcast — send a custom message to all enabled chats
+router.post("/broadcast", async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
+  const { message } = req.body as { message?: string };
+  if (!message?.trim()) { res.status(400).json({ error: "message required" }); return; }
+  try {
+    const settings = await db.query.settingsTable.findFirst();
+    if (!settings?.greenApiInstanceId || !settings?.greenApiToken) {
+      res.status(400).json({ error: "Green API credentials not configured" }); return;
+    }
+    const sent = await sendToAllChats(settings.greenApiInstanceId, settings.greenApiToken, message.trim());
+    res.json({ ok: sent });
+  } catch (err) {
+    req.log.error({ err }, "WhatsApp broadcast failed");
+    res.status(500).json({ error: "Broadcast failed" });
+  }
+});
+
 // POST /api/whatsapp/send-daily-summary — trigger daily summary immediately
 router.post("/send-daily-summary", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;

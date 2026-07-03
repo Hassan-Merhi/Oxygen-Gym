@@ -7,6 +7,7 @@ import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 import { appendLedgerEntry, getCurrentBalance } from "../lib/ledger";
 import { postDoubleEntry, reverseEntries, categoryAccountNames } from "../lib/accounting";
+import { lookupPhoneOnWhatsApp, sendDirectMessage, formatReceiptMessage } from "../lib/whatsapp";
 
 const router = Router();
 router.use(requireAuth());
@@ -524,6 +525,43 @@ router.all("/admin/cash-cleanup", async (req: Request, res: Response) => {
     member_vouchers_preview: memberVouchers.slice(0, 20),
     sale_payments_preview: salePayments.slice(0, 20),
   });
+});
+
+// ── Send WhatsApp receipt for a payment ──────────────────────────────────────
+router.post("/:id/send-receipt", async (req: Request, res: Response) => {
+  const paymentId = parseInt(req.params.id as string);
+  if (isNaN(paymentId)) { res.status(400).json({ error: "Invalid ID" }); return; }
+
+  const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, paymentId)).limit(1);
+  if (!payment) { res.status(404).json({ error: "Payment not found" }); return; }
+
+  let phone: string | null = null;
+  if (payment.memberId) {
+    const [m] = await db.select({ phone: membersTable.phone }).from(membersTable).where(eq(membersTable.id, payment.memberId)).limit(1);
+    phone = m?.phone ?? null;
+  }
+  if (!phone) { res.status(400).json({ error: "no_phone" }); return; }
+
+  const settings = await db.query.settingsTable.findFirst();
+  if (!settings?.greenApiInstanceId || !settings?.greenApiToken) {
+    res.status(400).json({ error: "WhatsApp not configured" }); return;
+  }
+
+  const chatId = await lookupPhoneOnWhatsApp(phone, settings.greenApiInstanceId, settings.greenApiToken);
+  if (!chatId) { res.status(400).json({ error: "not_on_whatsapp" }); return; }
+
+  const msg = formatReceiptMessage({
+    memberName: payment.memberName,
+    planName:   payment.planName,
+    category:   payment.category,
+    amount:     payment.amount,
+    currency:   payment.currency,
+    paymentDate: payment.paymentDate,
+    gymName:    settings.gymName,
+  });
+
+  await sendDirectMessage(settings.greenApiInstanceId, settings.greenApiToken, chatId, msg);
+  res.json({ ok: true });
 });
 
 export default router;

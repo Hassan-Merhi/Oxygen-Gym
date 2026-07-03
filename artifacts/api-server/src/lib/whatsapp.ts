@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
-import { whatsappChatsTable, paymentsTable, vouchersTable, salesTable } from "@workspace/db/schema";
-import { eq, and, gte, lte, sum, not } from "drizzle-orm";
+import { whatsappChatsTable, paymentsTable, vouchersTable, salesTable, productsTable } from "@workspace/db/schema";
+import { eq, and, gte, lte, sum, not, isNull } from "drizzle-orm";
 import { logger } from "./logger";
 
 const GREEN_API_BASE = "https://api.green-api.com";
@@ -175,6 +175,52 @@ export function formatExpiryReminderMessage(member: {
   return lines.join("\n");
 }
 
+// ── Receipt for a single payment ────────────────────────────────────────────
+
+export function formatReceiptMessage(opts: {
+  memberName?: string | null;
+  planName?: string | null;
+  category?: string | null;
+  amount?: number | null;
+  currency?: string | null;
+  paymentDate?: Date | string | null;
+  gymName?: string | null;
+}): string {
+  const cur = (opts.currency ?? "USD") as string;
+  const isCdf = cur === "CDF";
+  const fmtAmt = (n: number) => isCdf
+    ? `FC ${Math.round(n).toLocaleString("fr-FR")}`
+    : `$${n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const lines: string[] = [`🧾 *Reçu — ${opts.gymName ?? "GymPro"}*`, ``];
+  if (opts.memberName) lines.push(`👤 ${opts.memberName}`);
+  if (opts.planName)   lines.push(`📋 ${opts.planName}`);
+  else if (opts.category) lines.push(`🏷️ ${opts.category}`);
+  if (opts.amount != null) lines.push(`💰 *${fmtAmt(opts.amount)}*`);
+  if (opts.paymentDate) {
+    const d = new Date(opts.paymentDate as string);
+    lines.push(`📅 ${d.toLocaleDateString("fr-FR")}`);
+  }
+  lines.push(``, `_Merci pour votre confiance !_`);
+  return lines.join("\n");
+}
+
+// ── Low-stock helper (shared with daily summary) ────────────────────────────
+
+interface LowStockItem { name: string; quantity: number; alertQuantity: number }
+
+export async function getLowStockProducts(): Promise<LowStockItem[]> {
+  const rows = await db
+    .select({ name: productsTable.name, quantity: productsTable.quantity, alertQuantity: productsTable.alertQuantity })
+    .from(productsTable)
+    .where(and(
+      eq(productsTable.status, "active"),
+      isNull(productsTable.deletedAt),
+      lte(productsTable.quantity, productsTable.alertQuantity),
+    ));
+  return rows.map(r => ({ name: r.name, quantity: r.quantity ?? 0, alertQuantity: r.alertQuantity ?? 5 }));
+}
+
 interface ProductLine { name: string; qty: number; total: number; currency: string }
 interface ExpenseLine { desc: string; amount: number; currency: string }
 
@@ -326,12 +372,15 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const [year, month, day] = lubDateStr.split("-");
   const friendlyDate = `${day}/${month}/${year}`;
 
+  const lowStock = await getLowStockProducts();
+
   const message = formatDailySummaryMessage({
     date: friendlyDate,
     memberships,
     expenses, expenseLines,
     sales, salesCdf, productLines,
     remaining,
+    lowStock,
   });
   await sendToAllChats(instanceId, token, message);
 
@@ -348,8 +397,9 @@ export function formatDailySummaryMessage(opts: {
   salesCdf: number;
   productLines: ProductLine[];
   remaining: number;
+  lowStock?: LowStockItem[];
 }): string {
-  const { date, memberships, expenseLines, productLines, remaining } = opts;
+  const { date, memberships, expenseLines, productLines, remaining, lowStock } = opts;
 
   const fmtUsd = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtCdf = (n: number) => Math.round(n).toLocaleString("fr-FR");
@@ -413,6 +463,16 @@ export function formatDailySummaryMessage(opts: {
   lines.push(`${remainEmoji} *Caisse restante :*`);
   lines.push(`   *$${fmtUsd(remaining)}*`);
   lines.push(``);
+
+  // ── Stock faible (alertes) ─────────────────────────────────────────────────
+  if (lowStock && lowStock.length > 0) {
+    lines.push(`⚠️ *Stock faible :*`);
+    for (const p of lowStock) {
+      lines.push(`   ${p.name} — ${p.quantity} restant(s)`);
+    }
+    lines.push(``);
+  }
+
   lines.push(`_OxygenGym — rapport automatique_`);
 
   return lines.join("\n");

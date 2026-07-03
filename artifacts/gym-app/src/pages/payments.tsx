@@ -155,9 +155,34 @@ export default function CashBook() {
   const [sendingNow, setSendingNow] = useState(false);
   const [openBalModal, setOpenBalModal] = useState(false);
   const [openBalAmount, setOpenBalAmount] = useState("");
-  const [openBalDate, setOpenBalDate] = useState(new Date().toISOString().slice(0, 10));
+  const [openBalDate, setOpenBalDate] = useState(businessDateStr());
   const [openBalNotes, setOpenBalNotes] = useState("");
   const [openBalSaving, setOpenBalSaving] = useState(false);
+  const [sendReceiptLoading, setSendReceiptLoading] = useState<number | null>(null);
+
+  async function sendReceipt(paymentId: number) {
+    setSendReceiptLoading(paymentId);
+    try {
+      const res = await fetch(`/api/payments/${paymentId}/send-receipt`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const json = await res.json().catch(() => ({})) as Record<string, unknown>;
+      if (!res.ok) {
+        const errMap: Record<string, string> = {
+          no_phone: "Ce membre n'a pas de numéro de téléphone.",
+          not_on_whatsapp: "Le numéro n'est pas sur WhatsApp.",
+          "WhatsApp not configured": "WhatsApp n'est pas configuré.",
+        };
+        toast({ title: errMap[json.error as string] ?? "Erreur envoi reçu", variant: "destructive" });
+      } else {
+        toast({ title: "Reçu envoyé sur WhatsApp ✓" });
+      }
+    } finally {
+      setSendReceiptLoading(null);
+    }
+  }
+
   const sendWhatsAppSummary = async () => {
     setSendingNow(true);
     try {
@@ -861,6 +886,11 @@ export default function CashBook() {
                   <div className="flex gap-1 shrink-0 mt-0.5">
                     {entry._kind === "payment" ? (
                       <>
+                        {(entry as PayEntry).memberId && (
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" title="Envoyer reçu WhatsApp" disabled={sendReceiptLoading === entry.id} onClick={() => sendReceipt(entry.id)}>
+                            {sendReceiptLoading === entry.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                          </Button>
+                        )}
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openPayEdit(entry as PayEntry)}>
                           <Pencil className="w-3.5 h-3.5" />
                         </Button>
@@ -984,6 +1014,11 @@ export default function CashBook() {
                           <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                             {entry._kind === "payment" ? (
                               <>
+                                {(entry as PayEntry).memberId && (
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" title="Envoyer reçu WhatsApp" disabled={sendReceiptLoading === entry.id} onClick={() => sendReceipt(entry.id)}>
+                                    {sendReceiptLoading === entry.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                                  </Button>
+                                )}
                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openPayEdit(entry as PayEntry)}>
                                   <Pencil className="w-3.5 h-3.5" />
                                 </Button>
