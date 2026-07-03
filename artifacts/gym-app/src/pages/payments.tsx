@@ -161,11 +161,10 @@ export default function CashBook() {
   const sendWhatsAppSummary = async () => {
     setSendingNow(true);
     try {
-      const token = localStorage.getItem("gym_token");
       const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
       const res = await fetch(`${apiBase}/api/whatsapp/send-daily-summary`, {
         method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
       });
       if (res.ok) {
         toast({ title: "Résumé envoyé sur WhatsApp ✓" });
@@ -1501,13 +1500,12 @@ export default function CashBook() {
                 if (isNaN(target) || target < 0) return;
                 setOpenBalSaving(true);
                 try {
-                  const token = localStorage.getItem("gym_token");
                   const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
                   const res = await fetch(`${apiBase}/api/ledger/opening-balance`, {
                     method: "POST",
+                    credentials: "include",
                     headers: {
                       "Content-Type": "application/json",
-                      ...(token ? { Authorization: `Bearer ${token}` } : {}),
                     },
                     body: JSON.stringify({
                       targetAmountUsd: target,
