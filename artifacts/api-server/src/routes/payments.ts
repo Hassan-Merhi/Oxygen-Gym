@@ -8,6 +8,7 @@ import { logActivity } from "../lib/activity";
 import { appendLedgerEntry, getCurrentBalance } from "../lib/ledger";
 import { postDoubleEntry, reverseEntries, categoryAccountNames } from "../lib/accounting";
 import { lookupPhoneOnWhatsApp, sendDirectMessage, formatReceiptMessage } from "../lib/whatsapp";
+import { lubumbashiTodayStart, lubumbashiTodayEnd } from "../lib/timezone";
 
 const router = Router();
 router.use(requireAuth());
@@ -31,10 +32,8 @@ router.get("/summary", async (req: Request, res: Response) => {
 
   // Use Lubumbashi time (UTC+2) for day boundaries so transactions at any
   // hour of the local day are counted in the correct day's KPIs.
-  const lubOffsetMs = 2 * 60 * 60 * 1000;
-  const lubDateStr = new Date(Date.now() + lubOffsetMs).toISOString().slice(0, 10);
-  const todayStart = new Date(`${lubDateStr}T00:00:00+02:00`);
-  const todayEnd   = new Date(`${lubDateStr}T23:59:59.999+02:00`);
+  const todayStart = lubumbashiTodayStart();
+  const todayEnd   = lubumbashiTodayEnd();
 
   const [
     payTodayIn, payTodayOut, payAllIn, payAllOut,

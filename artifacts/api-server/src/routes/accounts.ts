@@ -8,6 +8,7 @@ import {
 } from "drizzle-orm";
 import { getCurrentBalance } from "../lib/ledger";
 import { logActivity } from "../lib/activity";
+import { lubumbashiTodayStart, lubumbashiTodayEnd } from "../lib/timezone";
 
 const router = Router();
 router.use(requireAuth());
@@ -16,22 +17,14 @@ router.use(requireAuth());
 
 function startOf(period: "today" | "month" | "last_month" | "year"): Date {
   const now = new Date();
-  if (period === "today") {
-    const d = new Date(now);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
+  if (period === "today") return lubumbashiTodayStart(now);
   if (period === "month") return new Date(now.getFullYear(), now.getMonth(), 1);
   if (period === "last_month") return new Date(now.getFullYear(), now.getMonth() - 1, 1);
   return new Date(now.getFullYear(), 0, 1);
 }
 function endOf(period: "today" | "month" | "last_month" | "year"): Date {
   const now = new Date();
-  if (period === "today") {
-    const d = new Date(now);
-    d.setHours(23, 59, 59, 999);
-    return d;
-  }
+  if (period === "today") return lubumbashiTodayEnd(now);
   if (period === "month") return new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
   if (period === "last_month") return new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
   return new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);

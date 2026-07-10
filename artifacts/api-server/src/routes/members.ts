@@ -33,6 +33,7 @@ import { requireAuth } from "../middlewares/auth";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 import { appendLedgerEntry } from "../lib/ledger";
+import { lubumbashiTodayStart, lubumbashiTodayEnd } from "../lib/timezone";
 
 async function getExchangeRate(): Promise<number> {
   const [s] = await db.select({ rate: settingsTable.usdToCdfRate }).from(settingsTable);
@@ -506,8 +507,8 @@ router.post("/:id/checkin", async (req: Request, res: Response) => {
     .where(and(eq(membersTable.id, id), isNull(membersTable.deletedAt)));
   if (!member) { res.status(404).json({ error: "Not found" }); return; }
 
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+  const todayStart = lubumbashiTodayStart();
+  const todayEnd = lubumbashiTodayEnd();
 
   const existing = await db.select().from(checkInsTable).where(
     and(eq(checkInsTable.memberId, id), between(checkInsTable.checkedInAt, todayStart, todayEnd))

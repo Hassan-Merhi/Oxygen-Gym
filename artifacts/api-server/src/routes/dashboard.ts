@@ -12,6 +12,7 @@ import {
 } from "@workspace/db";
 import { and, gte, lte, isNull, lt, desc, eq } from "drizzle-orm";
 import { calculateProfit } from "../lib/profit";
+import { lubumbashiTodayStart, lubumbashiTodayEnd } from "../lib/timezone";
 
 const router = Router();
 router.use(requireAuth());
@@ -62,8 +63,7 @@ router.get("/kpis", async (req, res) => {
     const rate = await getRate();
 
     // ── 1. Active members ──────────────────────────────────────────────────
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = lubumbashiTodayStart();
 
     const allActiveMembers = await db
       .select({
@@ -126,8 +126,7 @@ router.get("/kpis", async (req, res) => {
     ]);
 
     // ── 4. Today's check-ins ───────────────────────────────────────────────
-    const todayEnd = new Date(today);
-    todayEnd.setHours(23, 59, 59, 999);
+    const todayEnd = lubumbashiTodayEnd();
 
     const todayCheckins = await db
       .select({ checkedInAt: checkInsTable.checkedInAt })

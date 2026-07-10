@@ -3,20 +3,11 @@ import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
 import { checkInsTable, membersTable } from "@workspace/db/schema";
 import { eq, and, gte, lte, desc, count, sql } from "drizzle-orm";
+import { lubumbashiTodayStart, lubumbashiTodayEnd } from "../lib/timezone";
 
 const router = Router();
 router.use(requireAuth());
 
-function startOfDay(d: Date): Date {
-  const r = new Date(d);
-  r.setHours(0, 0, 0, 0);
-  return r;
-}
-function endOfDay(d: Date): Date {
-  const r = new Date(d);
-  r.setHours(23, 59, 59, 999);
-  return r;
-}
 function daysAgo(n: number): Date {
   const d = new Date();
   d.setDate(d.getDate() - n);
@@ -40,9 +31,8 @@ function startOfMonth(): Date {
 
 // ── Summary cards ─────────────────────────────────────────────────────────────
 router.get("/summary", async (_req: Request, res: Response) => {
-  const now = new Date();
-  const todayStart = startOfDay(now);
-  const todayEnd = endOfDay(now);
+  const todayStart = lubumbashiTodayStart();
+  const todayEnd = lubumbashiTodayEnd();
   const weekStart = startOfWeek();
   const monthStart = startOfMonth();
   const thirtyDaysAgo = daysAgo(30);
@@ -180,11 +170,10 @@ router.get("/top-members", async (req: Request, res: Response) => {
 
 // ── Today's check-ins ─────────────────────────────────────────────────────────
 router.get("/today", async (_req: Request, res: Response) => {
-  const now = new Date();
   const rows = await db.select().from(checkInsTable)
     .where(and(
-      gte(checkInsTable.checkedInAt, startOfDay(now)),
-      lte(checkInsTable.checkedInAt, endOfDay(now)),
+      gte(checkInsTable.checkedInAt, lubumbashiTodayStart()),
+      lte(checkInsTable.checkedInAt, lubumbashiTodayEnd()),
     ))
     .orderBy(desc(checkInsTable.checkedInAt));
 
@@ -208,7 +197,7 @@ router.get("/list", async (req: Request, res: Response) => {
   const offset = (pageNum - 1) * limitNum;
 
   const fromDate = q.from ? new Date(q.from) : daysAgo(30);
-  const toDate = q.to ? (() => { const d = new Date(q.to!); d.setHours(23, 59, 59, 999); return d; })() : endOfDay(new Date());
+  const toDate = q.to ? (() => { const d = new Date(q.to!); d.setHours(23, 59, 59, 999); return d; })() : lubumbashiTodayEnd();
 
   const memberSearch = q.memberSearch?.trim() || null;
   const planName = q.planName?.trim() || null;
