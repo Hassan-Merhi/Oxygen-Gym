@@ -557,6 +557,45 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
   const [plan] = await db.select().from(plansTable).where(eq(plansTable.id, body.planId));
   if (!plan) { res.status(400).json({ error: "Plan not found" }); return; }
 
+  const renewRate = await getExchangeRate();
+
+  // ── Cancel any same-day membership payments to prevent double-entry ──────────
+  // When a member enrolled today and immediately switches plan via "Renew" (same-
+  // day plan change rather than a genuine future renewal), the original payment
+  // must be cancelled and reversed before the new one is posted.
+  const sameDayStart = new Date(body.startDate);
+  sameDayStart.setHours(0, 0, 0, 0);
+  const sameDayEnd = new Date(body.startDate);
+  sameDayEnd.setHours(23, 59, 59, 999);
+
+  const sameDayPayments = await db
+    .select()
+    .from(paymentsTable)
+    .where(and(
+      eq(paymentsTable.memberId, id),
+      eq(paymentsTable.category, "membership"),
+      gte(paymentsTable.paymentDate, sameDayStart),
+      lte(paymentsTable.paymentDate, sameDayEnd),
+      eq(paymentsTable.status, "completed"),
+    ));
+
+  for (const sp of sameDayPayments) {
+    await db.update(paymentsTable)
+      .set({ status: "cancelled" })
+      .where(eq(paymentsTable.id, sp.id));
+    if ((sp.amount ?? 0) > 0) {
+      await appendLedgerEntry({
+        sourceType: "payment_correction",
+        sourceId: sp.id,
+        direction: "out",
+        amount: sp.amount ?? 0,
+        currency: sp.currency,
+        exchangeRate: sp.exchangeRate ?? renewRate,
+        description: `Reversal: plan changed same-day — ${existing.name}`,
+      });
+    }
+  }
+
   const balance = plan.price - (body.discount ?? 0) - (body.amountPaid ?? 0);
 
   const [member] = await db.update(membersTable).set({
@@ -567,7 +606,6 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
     ...(body.cashAccountId ? { cashAccountId: body.cashAccountId } : {}),
   }).where(eq(membersTable.id, id)).returning();
 
-  const renewRate = await getExchangeRate();
   const { amountUsd: renewUsd, amountCdf: renewCdf } = toUsdCdf(body.amountPaid, body.currency, renewRate);
 
   const paymentNumber = await getNextNumber("PAY");
