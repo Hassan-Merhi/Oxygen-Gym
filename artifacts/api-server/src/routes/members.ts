@@ -340,6 +340,11 @@ router.patch("/:id", async (req: Request, res: Response) => {
     newAp !== Number(existing.amountPaid ?? 0) ||
     newDisc !== Number(existing.discount ?? 0) ||
     currency !== ((existing.currency as string) ?? "USD");
+  // Track whether we updated an existing payment (vs. creating a brand-new one).
+  // Used below to skip voucher creation when the payment record already covers
+  // the transaction — otherwise a modify would create both an updated payment
+  // AND a new voucher, causing a double entry in the cash book.
+  let hadExistingPayment = false;
   if (amountChanged) {
     // Find the most recent membership payment for this member
     const [existingPayment] = await db
@@ -352,6 +357,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
     const rate = await getExchangeRate();
     const { amountUsd: pUsd, amountCdf: pCdf } = toUsdCdf(newAp, currency, rate);
     if (existingPayment) {
+      hadExistingPayment = true;
       const oldAmount = existingPayment.amount ?? 0;
       // Update the existing payment record
       await db.update(paymentsTable)
@@ -433,8 +439,8 @@ router.patch("/:id", async (req: Request, res: Response) => {
           voucherDate: voucherEffectiveDate,
         })
         .where(eq(vouchersTable.id, existingVoucher.id));
-    } else if (amountActuallyChanged) {
-      // No recorded voucher — create one (cancel any stale cancelled remnants first)
+    } else if (amountActuallyChanged && !hadExistingPayment) {
+      // No recorded voucher and no existing payment — create one (cancel any stale cancelled remnants first)
       await db.update(vouchersTable)
         .set({ status: "cancelled" })
         .where(and(
