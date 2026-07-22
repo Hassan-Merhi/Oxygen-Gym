@@ -920,6 +920,7 @@ export default function CashBook() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border/60 bg-muted/20">
+                <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground w-10">#</th>
                 <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground w-28">Date</th>
                 <th className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Details</th>
                 <th className="text-right px-4 py-3 font-semibold text-xs uppercase tracking-wide text-muted-foreground w-36">Amount</th>
@@ -941,7 +942,7 @@ export default function CashBook() {
                   </td>
                 </tr>
               ) : (
-                pageItems.map((entry) => {
+                pageItems.map((entry, idx) => {
                   const key = `${entry._kind}-${entry.id}`;
                   const bal = runningMap.get(key) ?? { usd: 0, cdf: 0 };
                   const isIn = entry.direction === "in";
@@ -955,9 +956,14 @@ export default function CashBook() {
                   const description = entry._kind === "payment"
                     ? (isProductSale ? null : (entry as PayEntry).notes)
                     : (entry as VchEntry).description;
+                  const rowNum = (page - 1) * LIMIT + idx + 1;
 
                   return (
                     <tr key={key} className="border-b border-border/30 hover:bg-muted/20 transition-colors group">
+                      {/* Row number */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="text-xs text-muted-foreground/50 tabular-nums font-medium select-none">{rowNum}</span>
+                      </td>
                       {/* Date */}
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className="text-xs text-muted-foreground font-medium">{fmtDate(date)}</span>
