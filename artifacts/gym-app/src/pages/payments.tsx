@@ -209,6 +209,7 @@ export default function CashBook() {
   const [searchD, setSearchD] = useState("");
   const [dirFilter, setDirFilter] = useState("all");
   const [curFilter, setCurFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [dateTo, setDateTo] = useState("");
@@ -280,6 +281,16 @@ export default function CashBook() {
       if (dirFilter === "in" && !isIn) return false;
       if (dirFilter === "out" && isIn) return false;
       if (curFilter !== "all" && entry.currency !== curFilter) return false;
+      // Type filter
+      if (typeFilter !== "all") {
+        if (typeFilter === "voucher") {
+          if (entry._kind !== "voucher") return false;
+        } else {
+          // payment category filters
+          if (entry._kind !== "payment") return false;
+          if ((entry as PayEntry).category !== typeFilter) return false;
+        }
+      }
       const dateStr =
         entry._kind === "payment"
           ? (entry as PayEntry).paymentDate
@@ -301,7 +312,7 @@ export default function CashBook() {
       }
       return true;
     });
-  }, [allEntries, dirFilter, curFilter, dateFrom, dateTo, searchD]);
+  }, [allEntries, dirFilter, curFilter, typeFilter, dateFrom, dateTo, searchD]);
 
   // ── Sort: newest day first; within same day payments before vouchers ──
   const sorted = useMemo(() => {
@@ -755,7 +766,7 @@ export default function CashBook() {
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
               Filters
-              {(dirFilter !== "all" || curFilter !== "all" || dateFrom || dateTo) && (
+              {(dirFilter !== "all" || curFilter !== "all" || typeFilter !== "all" || dateFrom || dateTo) && (
                 <span className="w-1.5 h-1.5 rounded-full bg-primary" />
               )}
             </Button>
@@ -775,6 +786,30 @@ export default function CashBook() {
                 <SelectItem value="out">Money Out</SelectItem>
               </SelectContent>
             </Select>
+            {/* Type/category filter pills */}
+            <div className="flex rounded-lg border border-border overflow-hidden text-xs font-semibold">
+              {([
+                { v: "all",         label: "All" },
+                { v: "membership",  label: "Membership" },
+                { v: "product_sale",label: "Product Sale" },
+                { v: "supplement",  label: "Supplement" },
+                { v: "commission",  label: "Commission" },
+                { v: "expense",     label: "Expense" },
+                { v: "voucher",     label: "Voucher" },
+              ] as const).map(({ v, label }, i) => (
+                <button
+                  key={v}
+                  onClick={() => { setTypeFilter(v); setPage(1); }}
+                  className={`px-3 h-8 transition-colors whitespace-nowrap ${
+                    typeFilter === v
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:bg-muted"
+                  } ${i > 0 ? "border-l border-border" : ""}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <div className="flex rounded-lg border border-border overflow-hidden text-xs font-semibold">
               {(["all", "USD", "CDF"] as const).map((v) => (
                 <button
