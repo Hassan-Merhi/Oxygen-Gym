@@ -87,7 +87,8 @@ export interface CashMovement {
  *   of trusting stale/null/zero derived columns;
  * - legacy rows created before FX locking can contain exchange_rate=1. A DRC
  *   USD/CDF rate below 10 is not credible, so those rows use the configured gym
- *   exchange rate rather than being interpreted as 1 CDF = 1 USD;
+ *   exchange rate (or the established 2800 legacy fallback) rather than being
+ *   interpreted as 1 CDF = 1 USD;
  * - only collapse a legacy member cash-receipt voucher when there is a matching
  *   completed Cash payment for the same member, amount, currency, and day;
  * - a linked payment suppresses a stock/supplier Cash row only when that payment
@@ -279,7 +280,8 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
     ORDER BY entry_date ASC, source_type ASC, source_id ASC
   `);
 
-  const fallbackRate = await getExchangeRate(executor);
+  const configuredRate = await getExchangeRate(executor);
+  const fallbackRate = configuredRate >= 10 ? configuredRate : 2800;
 
   type RawMovement = {
     source_type?: string;
