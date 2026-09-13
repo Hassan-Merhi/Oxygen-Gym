@@ -2,7 +2,7 @@ import { db, withTransaction, type DbExecutor } from "@workspace/db";
 import { cashLedgerTable } from "@workspace/db/schema";
 import { desc, sql } from "drizzle-orm";
 import { addMoney, fxRate, money, subtractMoney } from "../shared/accounting/decimal";
-import { toUsdCdf } from "../shared/accounting/currency";
+import { getExchangeRate, toUsdCdf } from "../shared/accounting/currency";
 
 export interface LedgerEntryInput {
   entryDate?: Date;
@@ -85,6 +85,10 @@ export interface CashMovement {
  * Important legacy rules:
  * - derive currency equivalents from amount + locked FX whenever possible instead
  *   of trusting stale/null/zero derived columns;
+ * - legacy rows created before FX locking can contain exchange_rate=1. A DRC
+ *   USD/CDF rate below 10 is not credible, so those rows use the configured gym
+ *   exchange rate (or the established 2800 legacy fallback) rather than being
+ *   interpreted as 1 CDF = 1 USD;
  * - only collapse a legacy member cash-receipt voucher when there is a matching
  *   completed Cash payment for the same member, amount, currency, and day;
  * - a linked payment suppresses a stock/supplier Cash row only when that payment
@@ -276,6 +280,9 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
     ORDER BY entry_date ASC, source_type ASC, source_id ASC
   `);
 
+  const configuredRate = await getExchangeRate(executor);
+  const fallbackRate = configuredRate >= 10 ? configuredRate : 2800;
+
   type RawMovement = {
     source_type?: string;
     source_id?: number | string | null;
@@ -291,20 +298,29 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
     party?: string | null;
   };
 
-  return (result.rows as RawMovement[]).map((row) => ({
-    sourceType: row.source_type ?? "cash",
-    sourceId: row.source_id == null ? null : Number(row.source_id),
-    sourceNumber: row.source_number ?? null,
-    date: row.entry_date instanceof Date ? row.entry_date : new Date(row.entry_date ?? 0),
-    direction: row.direction === "out" ? "out" : "in",
-    amount: money(Number(row.amount ?? 0)),
-    currency: (row.currency ?? "USD").toUpperCase(),
-    exchangeRate: fxRate(Number(row.exchange_rate ?? 1)),
-    amountUsd: money(Number(row.amount_usd ?? 0)),
-    amountCdf: money(Number(row.amount_cdf ?? 0)),
-    description: row.description ?? "",
-    party: row.party ?? "",
-  }));
+  return (result.rows as RawMovement[]).map((row) => {
+    const amount = money(Number(row.amount ?? 0));
+    const nativeCurrency = (row.currency ?? "USD").toUpperCase();
+    const currency = nativeCurrency === "USD" ? "USD" : "CDF";
+    const storedRate = Number(row.exchange_rate ?? 0);
+    const rate = storedRate >= 10 ? fxRate(storedRate) : fallbackRate;
+    const converted = toUsdCdf(amount, currency, rate);
+
+    return {
+      sourceType: row.source_type ?? "cash",
+      sourceId: row.source_id == null ? null : Number(row.source_id),
+      sourceNumber: row.source_number ?? null,
+      date: row.entry_date instanceof Date ? row.entry_date : new Date(row.entry_date ?? 0),
+      direction: row.direction === "out" ? "out" : "in",
+      amount,
+      currency,
+      exchangeRate: rate,
+      amountUsd: converted.amountUsd,
+      amountCdf: converted.amountCdf,
+      description: row.description ?? "",
+      party: row.party ?? "",
+    };
+  });
 }
 
 export async function getCurrentBalance(executor: DbExecutor = db): Promise<{ balanceUsd: number; balanceCdf: number }> {

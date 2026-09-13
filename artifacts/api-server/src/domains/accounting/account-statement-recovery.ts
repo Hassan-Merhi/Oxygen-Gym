@@ -1,6 +1,8 @@
 import { db } from "@workspace/db";
 import { cashLedgerTable, chartOfAccountsTable } from "@workspace/db/schema";
 import { and, asc, eq, gte, lte } from "drizzle-orm";
+import { fxRate, money } from "../../shared/accounting/decimal";
+import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
 import { getAccountStatement } from "./accounts-service";
 import { canonicalAccountType } from "./chart-service";
 
@@ -23,11 +25,19 @@ async function getCashLedgerFallback(account: NonNullable<Awaited<ReturnType<typ
   const ledgerRows = await db.select().from(cashLedgerTable)
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(asc(cashLedgerTable.entryDate), asc(cashLedgerTable.id));
+  const configuredRate = await getExchangeRate();
+  const fallbackRate = configuredRate >= 10 ? configuredRate : 2800;
 
   let runningBalance = 0;
   const rows = ledgerRows.map((row) => {
-    const amountUsd = Number(row.amountUsd ?? 0);
-    const amountCdf = Number(row.amountCdf ?? 0);
+    const amount = money(Number(row.amount ?? 0));
+    const nativeCurrency = (row.currency ?? "USD").toUpperCase();
+    const currency = nativeCurrency === "USD" ? "USD" : "CDF";
+    const storedRate = Number(row.exchangeRate ?? 0);
+    const rate = storedRate >= 10 ? fxRate(storedRate) : fallbackRate;
+    const converted = toUsdCdf(amount, currency, rate);
+    const amountUsd = converted.amountUsd;
+    const amountCdf = converted.amountCdf;
     if (row.direction === "out") runningBalance -= amountUsd;
     else runningBalance += amountUsd;
 
@@ -38,13 +48,13 @@ async function getCashLedgerFallback(account: NonNullable<Awaited<ReturnType<typ
       party: row.sourceNumber ?? "",
       sourceType: row.sourceType,
       sourceId: row.sourceId,
-      amount: Number(row.amount ?? 0),
-      currency: row.currency,
+      amount,
+      currency,
       debitUsd: row.direction === "out" ? 0 : amountUsd,
       creditUsd: row.direction === "out" ? amountUsd : 0,
       debitCdf: row.direction === "out" ? 0 : amountCdf,
       creditCdf: row.direction === "out" ? amountCdf : 0,
-      exchangeRate: Number(row.exchangeRate ?? 1),
+      exchangeRate: rate,
       runningBalance,
     };
   });

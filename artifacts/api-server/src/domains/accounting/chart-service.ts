@@ -21,6 +21,15 @@ const CANONICAL_TYPES = new Map<string, AccountType>([
   [ACCOUNTS.OTHER_EXPENSE, "expense"],
 ]);
 
+// Keep the detailed Phase-2 accounts available internally for correct double-entry
+// posting, but do not expose those implementation accounts in the simple gym UI.
+// The Accounts page historically had these three user-facing ledgers.
+const USER_FACING_CANONICAL_ACCOUNTS = new Set<string>([
+  ACCOUNTS.CASH,
+  ACCOUNTS.GENERAL_EXPENSE,
+  ACCOUNTS.SALES_REVENUE,
+]);
+
 function accountType(value: string): AccountType {
   const normalized = value.toLowerCase() as AccountType;
   if (!VALID_TYPES.has(normalized)) throw badRequest("Account type must be asset, liability, income, expense, or equity");
@@ -31,11 +40,17 @@ export function canonicalAccountType(name: string): AccountType | undefined {
   return CANONICAL_TYPES.get(normalizeName(name));
 }
 
+function isUserFacingAccount(name: string) {
+  const normalized = normalizeName(name);
+  return !CANONICAL_TYPES.has(normalized) || USER_FACING_CANONICAL_ACCOUNTS.has(normalized);
+}
+
 /**
  * Production databases can contain canonical accounts created before the type
  * guard existed (for example Cash persisted as income). Repair those rows on
- * read so the UI never computes debit-normal cash with credit-normal polarity,
- * and persist the correction so every downstream accounting consumer agrees.
+ * read so every downstream accounting consumer agrees. Detailed canonical
+ * accounts remain internal; only Cash, General Expense, Sales Revenue, and any
+ * explicitly user-created custom accounts are returned to the Accounts UI.
  */
 export async function listChartAccounts() {
   const rows = await db.select().from(chartOfAccountsTable).orderBy(asc(chartOfAccountsTable.type), asc(chartOfAccountsTable.name));
@@ -51,10 +66,12 @@ export async function listChartAccounts() {
   });
   if (repairs.length > 0) await Promise.all(repairs);
 
-  return rows.map((row) => {
-    const requiredType = canonicalAccountType(row.name);
-    return requiredType ? { ...row, type: requiredType, isActive: true } : row;
-  });
+  return rows
+    .map((row) => {
+      const requiredType = canonicalAccountType(row.name);
+      return requiredType ? { ...row, type: requiredType, isActive: true } : row;
+    })
+    .filter((row) => isUserFacingAccount(row.name));
 }
 
 export async function createChartAccount(name: string, type: string, description?: string) {
