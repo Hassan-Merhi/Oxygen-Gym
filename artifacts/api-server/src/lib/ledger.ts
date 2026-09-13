@@ -19,6 +19,9 @@ async function appendLedgerEntryWithExecutor(
   input: LedgerEntryInput,
   executor: DbExecutor,
 ): Promise<void> {
+  if (!Number.isFinite(input.amount) || input.amount < 0) {
+    throw new Error("Ledger amount must be a non-negative finite number");
+  }
   if (!Number.isFinite(input.exchangeRate) || input.exchangeRate <= 0) {
     throw new Error("Ledger exchangeRate must be greater than zero");
   }
@@ -87,20 +90,15 @@ export async function appendLedgerEntry(
 }
 
 /**
- * Current physical Cash balance.
- *
- * `accounting_entries` was introduced after the gym already had historical
- * payments and sales, so using only the double-entry Cash account can produce a
- * false negative balance until every legacy transaction is backfilled.
- *
- * Reconstruct the balance from the authoritative business records that actually
- * move physical cash. The append-only ledger is used only for explicit opening
- * balance adjustments, because those may pre-date the accounting_entries table.
- * This preserves legitimate historical opening cash without reintroducing old
- * ledger drift or correction duplicates.
+ * Current physical Cash balance reconstructed from authoritative source rows.
+ * The optional executor lets callers calculate balances while holding the same
+ * financial transaction lock used for a write (for example opening-balance
+ * adjustments), avoiding a read-then-write race.
  */
-export async function getCurrentBalance(): Promise<{ balanceUsd: number; balanceCdf: number }> {
-  const result = await db.execute(sql`
+export async function getCurrentBalance(
+  executor: DbExecutor = db,
+): Promise<{ balanceUsd: number; balanceCdf: number }> {
+  const result = await executor.execute(sql`
     WITH payment_values AS (
       SELECT
         p.*,
@@ -200,6 +198,26 @@ export async function getCurrentBalance(): Promise<{ balanceUsd: number; balance
           )
         )
     ),
+    supplier_cash AS (
+      SELECT
+        -COALESCE(SUM(COALESCE(
+          sp.amount_usd,
+          CASE
+            WHEN sp.currency = 'USD' THEN sp.amount
+            WHEN COALESCE(sp.exchange_rate, 0) > 0 THEN sp.amount / sp.exchange_rate
+            ELSE 0
+          END
+        )), 0) AS usd,
+        -COALESCE(SUM(COALESCE(
+          sp.amount_cdf,
+          CASE
+            WHEN sp.currency = 'CDF' THEN sp.amount
+            WHEN COALESCE(sp.exchange_rate, 0) > 0 THEN sp.amount * sp.exchange_rate
+            ELSE 0
+          END
+        )), 0) AS cdf
+      FROM supplier_payments sp
+    ),
     opening_adjustments AS (
       SELECT
         COALESCE(SUM(
@@ -246,9 +264,9 @@ export async function getCurrentBalance(): Promise<{ balanceUsd: number; balance
       WHERE cl.source_type = 'opening_balance'
     )
     SELECT
-      payment_cash.usd + voucher_cash.usd + stock_cash.usd + opening_adjustments.usd AS balance_usd,
-      payment_cash.cdf + voucher_cash.cdf + stock_cash.cdf + opening_adjustments.cdf AS balance_cdf
-    FROM payment_cash, voucher_cash, stock_cash, opening_adjustments
+      payment_cash.usd + voucher_cash.usd + stock_cash.usd + supplier_cash.usd + opening_adjustments.usd AS balance_usd,
+      payment_cash.cdf + voucher_cash.cdf + stock_cash.cdf + supplier_cash.cdf + opening_adjustments.cdf AS balance_cdf
+    FROM payment_cash, voucher_cash, stock_cash, supplier_cash, opening_adjustments
   `);
 
   const row = result.rows[0] as { balance_usd?: number | string; balance_cdf?: number | string } | undefined;
