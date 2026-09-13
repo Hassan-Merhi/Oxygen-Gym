@@ -10,10 +10,11 @@ import {
 } from "@workspace/db/schema";
 import { and, between, desc, eq, gte, isNull, lte } from "drizzle-orm";
 import { appendLedgerEntry } from "../../lib/ledger";
+import { ACCOUNTS, postDoubleEntry, reverseEntries } from "../../lib/accounting";
 import { getNextNumber } from "../../lib/numbering";
-import { postDoubleEntry, reverseEntries } from "../../lib/accounting";
 import { lubumbashiTodayEnd, lubumbashiTodayStart } from "../../lib/timezone";
 import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
+import { fxRate, money } from "../../shared/accounting/decimal";
 import { withTransaction, type DatabaseTransaction } from "../../shared/db/transaction";
 import { badRequest, notFound } from "../../shared/http/errors";
 import { calculateMemberBalance, planPriceInCurrency } from "./pricing";
@@ -68,12 +69,18 @@ export interface RenewMemberInput {
   notes?: string;
 }
 
+function normalizeCurrency(value: string): "USD" | "CDF" {
+  const currency = value.toUpperCase();
+  if (currency !== "USD" && currency !== "CDF") throw badRequest("currency must be USD or CDF");
+  return currency;
+}
+
 async function cashAccountName(tx: DatabaseTransaction, accountId?: number | null): Promise<string> {
-  if (!accountId) return "cash";
+  if (!accountId) return ACCOUNTS.CASH;
   const [account] = await tx.select({ name: chartOfAccountsTable.name })
     .from(chartOfAccountsTable)
     .where(eq(chartOfAccountsTable.id, accountId));
-  return account?.name.toLowerCase().replace(/ /g, "_") ?? "cash";
+  return account?.name ?? ACCOUNTS.CASH;
 }
 
 async function postMembershipAccounting(params: {
@@ -89,22 +96,24 @@ async function postMembershipAccounting(params: {
   entryDate?: Date;
   sourceType?: string;
 }): Promise<void> {
-  if (params.amount <= 0) return;
-  const { amountUsd, amountCdf } = toUsdCdf(params.amount, params.currency, params.rate);
+  const amount = money(params.amount);
+  if (amount <= 0) return;
+  const rate = fxRate(params.rate);
+  const { amountUsd, amountCdf } = toUsdCdf(amount, params.currency, rate);
   await postDoubleEntry({
     entryDate: params.entryDate,
     sourceType: params.sourceType ?? "payment",
     sourceId: params.paymentId,
     sourceNumber: params.paymentNumber ?? undefined,
-    debitName: params.account ?? "cash",
+    debitName: params.account ?? ACCOUNTS.CASH,
     debitType: "asset",
-    creditName: "Membership Revenue",
+    creditName: ACCOUNTS.MEMBERSHIP_REVENUE,
     creditType: "income",
-    amount: params.amount,
+    amount,
     amountUsd,
     amountCdf,
     currency: params.currency,
-    exchangeRate: params.rate,
+    exchangeRate: rate,
     description: `Membership — ${params.planName ?? ""} (${params.memberName})`,
   }, params.tx);
 }
@@ -115,12 +124,11 @@ export async function createMember(input: CreateMemberInput) {
   if ((input.discount ?? 0) < 0) throw badRequest("Discount cannot be negative");
   if ((input.commissionAmount ?? 0) < 0) throw badRequest("Commission amount cannot be negative");
 
-  const memberNumber = await getNextNumber("MEM");
-  const rate = await getExchangeRate();
-  const paymentNumber = input.planId ? await getNextNumber("PAY") : undefined;
-
   return withTransaction(async (tx) => {
-    const currency = input.currency ?? "USD";
+    const rate = fxRate(await getExchangeRate(tx));
+    const memberNumber = await getNextNumber("MEM", tx);
+    const paymentNumber = input.planId ? await getNextNumber("PAY", tx) : undefined;
+    const currency = normalizeCurrency(input.currency ?? "USD");
     let planName: string | undefined;
     let planPrice: number | undefined;
 
@@ -131,9 +139,10 @@ export async function createMember(input: CreateMemberInput) {
       planPrice = planPriceInCurrency(plan, currency, rate);
     }
 
-    const amountPaid = input.amountPaid ?? 0;
-    const discount = input.discount ?? 0;
+    const amountPaid = money(input.amountPaid ?? 0);
+    const discount = money(input.discount ?? 0);
     const balance = calculateMemberBalance(planPrice ?? 0, amountPaid, discount);
+    const commissionAmount = money(input.commissionAmount ?? 0);
 
     const [member] = await tx.insert(membersTable).values({
       memberNumber,
@@ -156,12 +165,13 @@ export async function createMember(input: CreateMemberInput) {
       qrCodeId: input.qrCodeId,
       notes: input.notes,
       coachId: input.coachId ?? null,
-      commissionAmount: input.commissionAmount ?? 0,
+      commissionAmount,
     }).returning();
 
     if (input.planId && paymentNumber && (amountPaid > 0 || (planPrice ?? 0) > 0)) {
       const converted = toUsdCdf(amountPaid, currency, rate);
       const account = await cashAccountName(tx, input.cashAccountId);
+      const paymentDate = input.startDate ?? new Date();
       const [payment] = await tx.insert(paymentsTable).values({
         paymentNumber,
         memberId: member.id,
@@ -178,7 +188,7 @@ export async function createMember(input: CreateMemberInput) {
         direction: "in",
         account,
         notes: input.notes,
-        paymentDate: input.startDate ?? new Date(),
+        paymentDate,
         status: "completed",
       }).returning();
 
@@ -192,7 +202,7 @@ export async function createMember(input: CreateMemberInput) {
           currency,
           exchangeRate: rate,
           description: `Membership — ${planName ?? ""} (${member.name})`,
-          entryDate: input.startDate ?? new Date(),
+          entryDate: paymentDate,
         }, tx);
         await postMembershipAccounting({
           tx,
@@ -204,17 +214,17 @@ export async function createMember(input: CreateMemberInput) {
           currency,
           rate,
           account,
-          entryDate: input.startDate,
+          entryDate: paymentDate,
         });
       }
     }
 
-    if (amountPaid > 0 && member.coachId && (member.commissionAmount ?? 0) > 0) {
+    if (amountPaid > 0 && member.coachId && money(member.commissionAmount ?? 0) > 0) {
       await tx.insert(commissionsTable).values({
         staffEmployeeId: member.coachId,
         memberId: member.id,
         memberName: member.name,
-        amount: member.commissionAmount!,
+        amount: money(member.commissionAmount ?? 0),
         currency: member.currency,
         status: "pending",
         note: `Commission — ${member.name} (membership payment)`,
@@ -231,28 +241,28 @@ export async function updateMember(id: number, input: UpdateMemberInput) {
   if ((input.commissionAmount ?? 0) < 0) throw badRequest("Commission amount cannot be negative");
   if (input.startDate && input.expiryDate && input.expiryDate <= input.startDate) throw badRequest("Expiry date must be after start date");
 
-  const rate = await getExchangeRate();
-
   return withTransaction(async (tx) => {
-    const [existing] = await tx.select().from(membersTable).where(eq(membersTable.id, id));
+    const [existing] = await tx.select().from(membersTable).where(eq(membersTable.id, id)).for("update");
     if (!existing) throw notFound("Member not found");
 
-    const currency = input.currency ?? existing.currency ?? "USD";
+    const currentRate = fxRate(await getExchangeRate(tx));
+    const currency = normalizeCurrency(input.currency ?? existing.currency ?? "USD");
     let planName = existing.planName ?? undefined;
-    let planPrice = input.planPrice ?? existing.planPrice ?? 0;
+    let planPrice = money(input.planPrice ?? existing.planPrice ?? 0);
 
     if (input.planId !== undefined && input.planId !== null) {
       const [plan] = await tx.select().from(plansTable).where(eq(plansTable.id, input.planId));
       if (!plan) throw badRequest("Plan not found");
       planName = plan.name;
-      if (input.planPrice === undefined) planPrice = planPriceInCurrency(plan, currency, rate);
+      if (input.planPrice === undefined) planPrice = planPriceInCurrency(plan, currency, currentRate);
     } else if (input.currency && input.currency !== existing.currency && existing.planId && input.planPrice === undefined) {
       const [plan] = await tx.select().from(plansTable).where(eq(plansTable.id, existing.planId));
-      if (plan) planPrice = planPriceInCurrency(plan, currency, rate);
+      if (plan) planPrice = planPriceInCurrency(plan, currency, currentRate);
     }
 
-    const amountPaid = input.amountPaid ?? existing.amountPaid ?? 0;
-    const discount = input.discount ?? existing.discount ?? 0;
+    const amountPaid = money(input.amountPaid ?? existing.amountPaid ?? 0);
+    const discount = money(input.discount ?? existing.discount ?? 0);
+    const commissionAmount = money(input.commissionAmount ?? existing.commissionAmount ?? 0);
     const updateData: Partial<typeof membersTable.$inferInsert> = {
       ...(input.name !== undefined && { name: input.name }),
       ...(input.phone !== undefined && { phone: input.phone }),
@@ -260,15 +270,15 @@ export async function updateMember(id: number, input: UpdateMemberInput) {
       ...(input.startDate !== undefined && { startDate: input.startDate }),
       ...(input.expiryDate !== undefined && { expiryDate: input.expiryDate }),
       ...(input.status !== undefined && { status: input.status }),
-      ...(input.amountPaid !== undefined && { amountPaid: input.amountPaid }),
-      ...(input.discount !== undefined && { discount: input.discount }),
-      ...(input.currency !== undefined && { currency: input.currency }),
+      amountPaid,
+      discount,
+      currency,
       ...(input.photoUrl !== undefined && { photoUrl: input.photoUrl }),
       ...(input.fingerprintId !== undefined && { fingerprintId: input.fingerprintId }),
       ...(input.qrCodeId !== undefined && { qrCodeId: input.qrCodeId }),
       ...(input.notes !== undefined && { notes: input.notes }),
       ...(input.coachId !== undefined && { coachId: input.coachId }),
-      ...(input.commissionAmount !== undefined && { commissionAmount: input.commissionAmount }),
+      commissionAmount,
       ...(input.cashAccountId !== undefined && { cashAccountId: input.cashAccountId }),
       planName,
       planPrice,
@@ -278,28 +288,34 @@ export async function updateMember(id: number, input: UpdateMemberInput) {
     const [member] = await tx.update(membersTable).set(updateData).where(eq(membersTable.id, id)).returning();
 
     const amountFieldsPresent = input.amountPaid !== undefined || input.discount !== undefined || input.currency !== undefined;
-    const amountActuallyChanged = amountPaid !== Number(existing.amountPaid ?? 0)
-      || discount !== Number(existing.discount ?? 0)
-      || currency !== (existing.currency ?? "USD");
+    const amountActuallyChanged = amountPaid !== money(existing.amountPaid ?? 0)
+      || discount !== money(existing.discount ?? 0)
+      || currency !== (existing.currency ?? "USD").toUpperCase();
 
     if (amountFieldsPresent) {
       const [existingPayment] = await tx.select().from(paymentsTable)
-        .where(and(eq(paymentsTable.memberId, id), eq(paymentsTable.type, "membership")))
+        .where(and(
+          eq(paymentsTable.memberId, id),
+          eq(paymentsTable.category, "membership"),
+          eq(paymentsTable.status, "completed"),
+        ))
         .orderBy(desc(paymentsTable.createdAt))
-        .limit(1);
+        .limit(1)
+        .for("update");
       const account = await cashAccountName(tx, input.cashAccountId ?? member.cashAccountId);
       const effectivePlanId = member.planId ?? undefined;
       const effectivePlanName = member.planName ?? "";
-      const converted = toUsdCdf(amountPaid, currency, rate);
 
       if (existingPayment) {
-        const oldAmount = existingPayment.amount ?? 0;
+        const paymentRate = fxRate(Number(existingPayment.exchangeRate ?? currentRate));
+        const oldAmount = money(existingPayment.amount ?? 0);
+        const converted = toUsdCdf(amountPaid, currency, paymentRate);
         await tx.update(paymentsTable).set({
           amount: amountPaid,
           discount,
           currency,
           planName: effectivePlanName,
-          exchangeRate: rate,
+          exchangeRate: paymentRate,
           account,
           ...converted,
         }).where(eq(paymentsTable.id, existingPayment.id));
@@ -312,7 +328,7 @@ export async function updateMember(id: number, input: UpdateMemberInput) {
               direction: "out",
               amount: oldAmount,
               currency: existingPayment.currency,
-              exchangeRate: existingPayment.exchangeRate ?? rate,
+              exchangeRate: paymentRate,
               description: `Correction: membership payment reversed — ${member.name}`,
             }, tx);
           }
@@ -323,7 +339,7 @@ export async function updateMember(id: number, input: UpdateMemberInput) {
               direction: "in",
               amount: amountPaid,
               currency,
-              exchangeRate: rate,
+              exchangeRate: paymentRate,
               description: `Correction: membership payment updated — ${member.name}`,
             }, tx);
           }
@@ -336,14 +352,16 @@ export async function updateMember(id: number, input: UpdateMemberInput) {
             planName: effectivePlanName,
             amount: amountPaid,
             currency,
-            rate,
+            rate: paymentRate,
             account,
             sourceType: "payment_correction",
           });
         }
       } else if (effectivePlanId) {
-        const paymentNumber = await getNextNumber("PAY");
+        const paymentRate = currentRate;
+        const paymentNumber = await getNextNumber("PAY", tx);
         const effectiveDate = input.startDate ?? existing.startDate ?? new Date();
+        const converted = toUsdCdf(amountPaid, currency, paymentRate);
         const [payment] = await tx.insert(paymentsTable).values({
           paymentNumber,
           memberId: id,
@@ -353,7 +371,7 @@ export async function updateMember(id: number, input: UpdateMemberInput) {
           amount: amountPaid,
           discount,
           currency,
-          exchangeRate: rate,
+          exchangeRate: paymentRate,
           account,
           ...converted,
           type: "membership",
@@ -370,7 +388,7 @@ export async function updateMember(id: number, input: UpdateMemberInput) {
             direction: "in",
             amount: amountPaid,
             currency,
-            exchangeRate: rate,
+            exchangeRate: paymentRate,
             description: `Membership payment — ${effectivePlanName} (${member.name})`,
             entryDate: effectiveDate,
           }, tx);
@@ -382,30 +400,29 @@ export async function updateMember(id: number, input: UpdateMemberInput) {
             planName: effectivePlanName,
             amount: amountPaid,
             currency,
-            rate,
+            rate: paymentRate,
             account,
             entryDate: effectiveDate,
           });
         }
       }
 
-      // Legacy member-linked cash receipt vouchers duplicated the payment cash flow.
-      // Keep any existing receipt synchronized for audit/display, but never create a
-      // second financial record when the payment is already the canonical source.
       const [existingVoucher] = await tx.select().from(vouchersTable).where(and(
         eq(vouchersTable.linkedEntity, "member"),
         eq(vouchersTable.linkedEntityId, id),
         eq(vouchersTable.voucherType, "cash_receipt"),
         eq(vouchersTable.status, "recorded"),
         isNull(vouchersTable.deletedAt),
-      )).orderBy(desc(vouchersTable.id)).limit(1);
+      )).orderBy(desc(vouchersTable.id)).limit(1).for("update");
 
       if (existingVoucher) {
+        const voucherRate = fxRate(Number(existingVoucher.exchangeRate ?? currentRate));
+        const converted = toUsdCdf(amountPaid, currency, voucherRate);
         const effectiveDate = input.startDate ?? existing.startDate ?? new Date();
         await tx.update(vouchersTable).set({
           amount: amountPaid,
           currency,
-          exchangeRate: rate,
+          exchangeRate: voucherRate,
           ...converted,
           account,
           description: `Membership payment — ${member.planName ?? ""}`,
@@ -466,15 +483,17 @@ export async function renewMember(id: number, input: RenewMemberInput) {
   if (input.amountPaid < 0) throw badRequest("Amount paid cannot be negative");
   if (input.discount < 0) throw badRequest("Discount cannot be negative");
 
-  const rate = await getExchangeRate();
-  const paymentNumber = await getNextNumber("PAY");
-
   return withTransaction(async (tx) => {
-    const [existing] = await tx.select().from(membersTable).where(eq(membersTable.id, id));
+    const rate = fxRate(await getExchangeRate(tx));
+    const paymentNumber = await getNextNumber("PAY", tx);
+    const [existing] = await tx.select().from(membersTable).where(eq(membersTable.id, id)).for("update");
     if (!existing) throw notFound("Member not found");
     const [plan] = await tx.select().from(plansTable).where(eq(plansTable.id, input.planId));
     if (!plan) throw badRequest("Plan not found");
 
+    const currency = normalizeCurrency(input.currency);
+    const amountPaid = money(input.amountPaid);
+    const discount = money(input.discount);
     const sameDayStart = new Date(input.startDate);
     sameDayStart.setHours(0, 0, 0, 0);
     const sameDayEnd = new Date(input.startDate);
@@ -485,41 +504,42 @@ export async function renewMember(id: number, input: RenewMemberInput) {
       gte(paymentsTable.paymentDate, sameDayStart),
       lte(paymentsTable.paymentDate, sameDayEnd),
       eq(paymentsTable.status, "completed"),
-    ));
+    )).for("update");
 
     for (const payment of sameDayPayments) {
       await tx.update(paymentsTable).set({ status: "cancelled" }).where(eq(paymentsTable.id, payment.id));
-      if ((payment.amount ?? 0) > 0) {
+      if (money(payment.amount ?? 0) > 0) {
+        const paymentRate = fxRate(Number(payment.exchangeRate ?? rate));
         await appendLedgerEntry({
           sourceType: "payment_correction",
           sourceId: payment.id,
           direction: "out",
-          amount: payment.amount ?? 0,
+          amount: money(payment.amount ?? 0),
           currency: payment.currency,
-          exchangeRate: payment.exchangeRate ?? rate,
+          exchangeRate: paymentRate,
           description: `Reversal: plan changed same-day — ${existing.name}`,
         }, tx);
         await reverseEntries("payment", payment.id, "payment_correction", existing.name, tx);
       }
     }
 
-    const planPrice = planPriceInCurrency(plan, input.currency, rate);
-    const balance = calculateMemberBalance(planPrice, input.amountPaid, input.discount);
+    const planPrice = planPriceInCurrency(plan, currency, rate);
+    const balance = calculateMemberBalance(planPrice, amountPaid, discount);
     const [member] = await tx.update(membersTable).set({
       planId: input.planId,
       planName: plan.name,
       planPrice,
       startDate: input.startDate,
       expiryDate: input.expiryDate,
-      amountPaid: input.amountPaid,
-      discount: input.discount,
+      amountPaid,
+      discount,
       balance,
-      currency: input.currency,
+      currency,
       status: "active",
       ...(input.cashAccountId !== undefined && { cashAccountId: input.cashAccountId }),
     }).where(eq(membersTable.id, id)).returning();
 
-    const converted = toUsdCdf(input.amountPaid, input.currency, rate);
+    const converted = toUsdCdf(amountPaid, currency, rate);
     const account = await cashAccountName(tx, input.cashAccountId ?? member.cashAccountId);
     const [payment] = await tx.insert(paymentsTable).values({
       paymentNumber,
@@ -527,9 +547,9 @@ export async function renewMember(id: number, input: RenewMemberInput) {
       memberName: existing.name,
       planId: input.planId,
       planName: plan.name,
-      amount: input.amountPaid,
-      discount: input.discount,
-      currency: input.currency,
+      amount: amountPaid,
+      discount,
+      currency,
       exchangeRate: rate,
       account,
       ...converted,
@@ -541,14 +561,14 @@ export async function renewMember(id: number, input: RenewMemberInput) {
       status: "completed",
     }).returning();
 
-    if (input.amountPaid > 0) {
+    if (amountPaid > 0) {
       await appendLedgerEntry({
         sourceType: "payment",
         sourceNumber: paymentNumber,
         sourceId: payment.id,
         direction: "in",
-        amount: input.amountPaid,
-        currency: input.currency,
+        amount: amountPaid,
+        currency,
         exchangeRate: rate,
         description: `Renewal — ${plan.name} (${existing.name})`,
         entryDate: input.startDate,
@@ -559,20 +579,20 @@ export async function renewMember(id: number, input: RenewMemberInput) {
         paymentNumber,
         memberName: existing.name,
         planName: plan.name,
-        amount: input.amountPaid,
-        currency: input.currency,
+        amount: amountPaid,
+        currency,
         rate,
         account,
         entryDate: input.startDate,
       });
     }
 
-    if (input.amountPaid > 0 && member.coachId && (member.commissionAmount ?? 0) > 0) {
+    if (amountPaid > 0 && member.coachId && money(member.commissionAmount ?? 0) > 0) {
       await tx.insert(commissionsTable).values({
         staffEmployeeId: member.coachId,
         memberId: member.id,
         memberName: member.name,
-        amount: member.commissionAmount!,
+        amount: money(member.commissionAmount ?? 0),
         currency: member.currency,
         status: "pending",
         note: `Commission — ${member.name} (renewal: ${plan.name})`,

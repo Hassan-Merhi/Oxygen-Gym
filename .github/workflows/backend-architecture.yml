@@ -71,6 +71,8 @@ jobs:
         run: pnpm run db:migrate
       - name: Verify financial atomicity and idempotency
         run: pnpm --filter @workspace/db run check:atomicity
+      - name: Verify accounting model and precision
+        run: pnpm --filter @workspace/db run check:accounting
       - name: Typecheck workspace
         run: pnpm run typecheck
       - name: Build production backend

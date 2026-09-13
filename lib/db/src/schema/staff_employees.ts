@@ -1,24 +1,22 @@
-import { pgTable, text, serial, timestamp, doublePrecision, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, numeric, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+
+const money = (name: string) => numeric(name, { precision: 20, scale: 6, mode: "number" });
 
 export const staffEmployeesTable = pgTable("staff_employees", {
   id: serial("id").primaryKey(),
   staffNumber: text("staff_number").unique(),
-  // Optional link to login user
   linkedUserId: integer("linked_user_id"),
-  // Identity
   name: text("name").notNull(),
   phone: text("phone"),
   email: text("email"),
   jobTitle: text("job_title"),
-  // Employment
   hireDate: timestamp("hire_date", { withTimezone: true }),
-  salary: doublePrecision("salary").notNull().default(0),
+  salary: money("salary").notNull().default(0),
   salaryCurrency: text("salary_currency").notNull().default("USD"),
-  paymentFrequency: text("payment_frequency").notNull().default("monthly"), // 'monthly' | 'weekly' | 'daily'
-  // Status
-  status: text("status").notNull().default("active"), // 'active' | 'inactive' | 'archived'
+  paymentFrequency: text("payment_frequency").notNull().default("monthly"),
+  status: text("status").notNull().default("active"),
   notes: text("notes"),
   createdBy: text("created_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
