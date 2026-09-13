@@ -1,11 +1,12 @@
 import { db } from "@workspace/db";
 import { paymentsTable, productsTable, salesTable } from "@workspace/db/schema";
-import type { SaleItem } from "@workspace/db/schema";
+import type { SaleItem, DbExecutor } from "@workspace/db";
 import { and, count, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
 import { appendLedgerEntry } from "../../lib/ledger";
+import { ACCOUNTS, postDoubleEntry, reverseEntries } from "../../lib/accounting";
 import { getNextNumber } from "../../lib/numbering";
-import { postDoubleEntry, reverseEntries } from "../../lib/accounting";
-import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
+import { convertCurrencyAmount, getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
+import { addMoney, fxRate, money, multiplyMoney, subtractMoney } from "../../shared/accounting/decimal";
 import { withTransaction } from "../../shared/db/transaction";
 import { badRequest, notFound } from "../../shared/http/errors";
 
@@ -52,7 +53,60 @@ function validateSaleLine(item: SaleLineInput): void {
   if (!Number.isFinite(item.quantity) || item.quantity <= 0) throw badRequest("Sale item quantity must be greater than zero");
   if (!Number.isFinite(item.unitPrice) || item.unitPrice < 0) throw badRequest("Unit price cannot be negative");
   if (!Number.isFinite(item.discount) || item.discount < 0) throw badRequest("Discount cannot be negative");
-  if (item.discount > item.unitPrice) throw badRequest("Discount cannot exceed unit price");
+  if (money(item.discount) > money(item.unitPrice)) throw badRequest("Discount cannot exceed unit price");
+}
+
+async function postSaleAccounting(input: {
+  executor: DbExecutor;
+  sourceType: string;
+  sourceId: number;
+  sourceNumber?: string | null;
+  entryDate?: Date;
+  cashAccount?: string;
+  revenue: number;
+  cogs: number;
+  currency: string;
+  exchangeRate: number;
+  description: string;
+  actor: string;
+}): Promise<void> {
+  const revenueConverted = toUsdCdf(input.revenue, input.currency, input.exchangeRate);
+  await postDoubleEntry({
+    sourceType: input.sourceType,
+    sourceId: input.sourceId,
+    sourceNumber: input.sourceNumber ?? undefined,
+    entryDate: input.entryDate,
+    debitName: input.cashAccount ?? ACCOUNTS.CASH,
+    debitType: "asset",
+    creditName: ACCOUNTS.SALES_REVENUE,
+    creditType: "income",
+    amount: input.revenue,
+    ...revenueConverted,
+    currency: input.currency,
+    exchangeRate: input.exchangeRate,
+    description: input.description,
+    createdBy: input.actor,
+  }, input.executor);
+
+  if (money(input.cogs) > 0) {
+    const costConverted = toUsdCdf(input.cogs, input.currency, input.exchangeRate);
+    await postDoubleEntry({
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      sourceNumber: input.sourceNumber ?? undefined,
+      entryDate: input.entryDate,
+      debitName: ACCOUNTS.COGS,
+      debitType: "expense",
+      creditName: ACCOUNTS.INVENTORY,
+      creditType: "asset",
+      amount: input.cogs,
+      ...costConverted,
+      currency: input.currency,
+      exchangeRate: input.exchangeRate,
+      description: `${input.description} — COGS`,
+      createdBy: input.actor,
+    }, input.executor);
+  }
 }
 
 export async function lookupProductByBarcode(barcode: string) {
@@ -92,22 +146,22 @@ export async function createSale(input: CreateSaleInput, actor: string) {
   if (!input.items.length) throw badRequest("Cart is empty");
   input.items.forEach(validateSaleLine);
   if (!Number.isFinite(input.paymentAmount) || input.paymentAmount < 0) throw badRequest("Payment amount cannot be negative");
-
-  const rate = await getExchangeRate();
-  const saleNumber = await getNextNumber("sale");
-  const paymentNumber = await getNextNumber("PAY");
+  const currency = input.currency.toUpperCase();
+  if (currency !== "USD" && currency !== "CDF") throw badRequest("currency must be USD or CDF");
 
   return withTransaction(async (tx) => {
+    const rate = fxRate(await getExchangeRate(tx));
+    const saleNumber = await getNextNumber("sale", tx);
+    const paymentNumber = await getNextNumber("PAY", tx);
     const productIds = [...new Set(input.items.map((item) => item.productId))];
     const products = await tx.select().from(productsTable).where(
       or(...productIds.map((productId) => eq(productsTable.id, productId))) as ReturnType<typeof eq>,
-    );
+    ).for("update");
     const productMap = new Map(products.map((product) => [product.id, product]));
 
     let totalAmount = 0;
     let totalDiscount = 0;
     let totalCost = 0;
-    let totalProfit = 0;
 
     const saleItems: SaleItem[] = input.items.map((item) => {
       const product = productMap.get(item.productId);
@@ -115,37 +169,35 @@ export async function createSale(input: CreateSaleInput, actor: string) {
       if (product.status !== "active") throw badRequest(`Product "${product.name}" is not active`);
       if (product.quantity < item.quantity) throw badRequest(`Insufficient stock for "${product.name}" (available: ${product.quantity})`);
 
-      let costInSaleCurrency = product.costPrice;
-      if (product.currency !== input.currency) {
-        if (input.currency === "USD" && product.currency === "CDF") costInSaleCurrency = product.costPrice / rate;
-        if (input.currency === "CDF" && product.currency === "USD") costInSaleCurrency = product.costPrice * rate;
-      }
-
-      const lineTotal = (item.unitPrice - item.discount) * item.quantity;
-      const lineCost = costInSaleCurrency * item.quantity;
-      const lineProfit = lineTotal - lineCost;
-      totalAmount += lineTotal;
-      totalDiscount += item.discount * item.quantity;
-      totalCost += lineCost;
-      totalProfit += lineProfit;
+      const unitPrice = money(item.unitPrice);
+      const discount = money(item.discount);
+      const costInSaleCurrency = convertCurrencyAmount(product.costPrice, product.currency, currency, rate);
+      const lineTotal = multiplyMoney(subtractMoney(unitPrice, discount), item.quantity);
+      const lineCost = multiplyMoney(costInSaleCurrency, item.quantity);
+      const lineProfit = subtractMoney(lineTotal, lineCost);
+      totalAmount = addMoney(totalAmount, lineTotal);
+      totalDiscount = addMoney(totalDiscount, multiplyMoney(discount, item.quantity));
+      totalCost = addMoney(totalCost, lineCost);
 
       return {
         productId: product.id,
         productName: product.name,
         quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        discount: item.discount,
+        unitPrice,
+        discount,
         lineTotal,
         costPrice: costInSaleCurrency,
         profit: lineProfit,
-        currency: input.currency,
+        currency,
       };
     });
 
-    const totalAmountUsd = input.currency === "USD" ? totalAmount : totalAmount / rate;
-    const totalCostUsd = input.currency === "USD" ? totalCost : totalCost / rate;
-    const totalProfitUsd = input.currency === "USD" ? totalProfit : totalProfit / rate;
-    const changeDue = Math.max(0, input.paymentAmount - totalAmount);
+    const totalProfit = subtractMoney(totalAmount, totalCost);
+    const totalAmountUsd = toUsdCdf(totalAmount, currency, rate).amountUsd;
+    const totalCostUsd = toUsdCdf(totalCost, currency, rate).amountUsd;
+    const totalProfitUsd = subtractMoney(totalAmountUsd, totalCostUsd);
+    const paymentAmount = money(input.paymentAmount);
+    const changeDue = money(Math.max(0, subtractMoney(paymentAmount, totalAmount)));
 
     const [sale] = await tx.insert(salesTable).values({
       saleNumber,
@@ -157,9 +209,9 @@ export async function createSale(input: CreateSaleInput, actor: string) {
       totalAmountUsd,
       totalCostUsd,
       totalProfitUsd,
-      currency: input.currency,
+      currency,
       exchangeRate: rate,
-      paymentAmount: input.paymentAmount,
+      paymentAmount,
       changeDue,
       notes: input.notes ?? null,
       createdBy: actor,
@@ -175,7 +227,7 @@ export async function createSale(input: CreateSaleInput, actor: string) {
       if (updated.length === 0) throw badRequest(`Insufficient stock for "${product.name}"`);
     }
 
-    const { amountUsd, amountCdf } = toUsdCdf(totalAmount, input.currency, rate);
+    const { amountUsd, amountCdf } = toUsdCdf(totalAmount, currency, rate);
     const itemSummary = saleItems.map((item) => `${item.quantity > 1 ? `${item.quantity}× ` : ""}${item.productName}`).join(", ");
     await tx.insert(paymentsTable).values({
       paymentNumber,
@@ -186,93 +238,108 @@ export async function createSale(input: CreateSaleInput, actor: string) {
       linkedEntityId: sale.id,
       linkedEntityName: saleNumber,
       amount: totalAmount,
-      currency: input.currency,
+      currency,
       exchangeRate: rate,
       amountUsd,
       amountCdf,
       account: "cash",
       notes: itemSummary || input.notes || null,
-      paymentDate: new Date(),
+      paymentDate: sale.saleDate,
       status: "completed",
       createdBy: actor,
     });
 
     await appendLedgerEntry({
+      entryDate: sale.saleDate,
       sourceType: "sale",
       sourceNumber: saleNumber,
       sourceId: sale.id,
       direction: "in",
       amount: totalAmount,
-      currency: input.currency,
+      currency,
       exchangeRate: rate,
       description: `Sale ${saleNumber}`,
       createdBy: actor,
     }, tx);
 
-    await postDoubleEntry({
+    await postSaleAccounting({
+      executor: tx,
       sourceType: "sale",
       sourceId: sale.id,
       sourceNumber: saleNumber,
-      debitName: "Cash",
-      debitType: "asset",
-      creditName: "Sales Revenue",
-      creditType: "income",
-      amount: totalAmount,
-      amountUsd,
-      amountCdf,
-      currency: input.currency,
+      entryDate: sale.saleDate,
+      revenue: totalAmount,
+      cogs: totalCost,
+      currency,
       exchangeRate: rate,
       description: `Sale ${saleNumber}`,
-      createdBy: actor,
-    }, tx);
+      actor,
+    });
 
     return sale;
   });
 }
 
 export async function patchSale(id: number, patch: PatchSaleInput, actor: string) {
-  const rate = await getExchangeRate();
-
   return withTransaction(async (tx) => {
-    const [existing] = await tx.select().from(salesTable).where(eq(salesTable.id, id));
+    const [existing] = await tx.select().from(salesTable).where(eq(salesTable.id, id)).for("update");
     if (!existing) throw notFound("Sale not found");
     if (existing.status === "voided") throw badRequest("Cannot edit a voided sale");
 
-    const existingItems = (existing.items ?? []) as SaleItem[];
-    let newItems = existingItems;
-    let totalAmount = existing.totalAmount ?? 0;
-    let totalDiscount = existing.totalDiscount ?? 0;
-    let totalCost = existing.totalCost ?? 0;
-    let totalProfit = existing.totalProfit ?? 0;
-    const targetCurrency = patch.currency ?? existing.currency;
+    const lockedRate = fxRate(Number(existing.exchangeRate ?? await getExchangeRate(tx)));
+    const oldCurrency = existing.currency.toUpperCase();
+    const targetCurrency = (patch.currency ?? existing.currency).toUpperCase();
+    if (targetCurrency !== "USD" && targetCurrency !== "CDF") throw badRequest("currency must be USD or CDF");
 
-    if (patch.items && patch.items.length > 0) {
+    const existingItems = (existing.items ?? []) as SaleItem[];
+    const convertedBaseItems = existingItems.map((item) => {
+      const sourceCurrency = (item.currency || oldCurrency).toUpperCase();
+      const unitPrice = convertCurrencyAmount(item.unitPrice ?? 0, sourceCurrency, targetCurrency, lockedRate);
+      const discount = convertCurrencyAmount(item.discount ?? 0, sourceCurrency, targetCurrency, lockedRate);
+      const costPrice = convertCurrencyAmount(item.costPrice ?? 0, sourceCurrency, targetCurrency, lockedRate);
+      const lineTotal = multiplyMoney(subtractMoney(unitPrice, discount), item.quantity);
+      const lineCost = multiplyMoney(costPrice, item.quantity);
+      return {
+        ...item,
+        unitPrice,
+        discount,
+        costPrice,
+        lineTotal,
+        profit: subtractMoney(lineTotal, lineCost),
+        currency: targetCurrency,
+      };
+    });
+
+    if (patch.items) {
       for (const item of patch.items) {
         if (!Number.isFinite(item.unitPrice) || item.unitPrice < 0) throw badRequest("Unit price cannot be negative");
         if (!Number.isFinite(item.discount) || item.discount < 0) throw badRequest("Discount cannot be negative");
-        if (item.discount > item.unitPrice) throw badRequest("Discount cannot exceed unit price");
+        if (money(item.discount) > money(item.unitPrice)) throw badRequest("Discount cannot exceed unit price");
       }
-      newItems = existingItems.map((item) => {
-        const itemPatch = patch.items!.find((candidate) => candidate.productId === item.productId);
-        if (!itemPatch) return { ...item, currency: targetCurrency };
-        const lineTotal = (itemPatch.unitPrice - itemPatch.discount) * item.quantity;
-        const lineProfit = lineTotal - (item.costPrice ?? 0) * item.quantity;
-        return { ...item, unitPrice: itemPatch.unitPrice, discount: itemPatch.discount, lineTotal, profit: lineProfit, currency: targetCurrency };
-      });
-      totalAmount = newItems.reduce((sum, item) => sum + (item.lineTotal ?? 0), 0);
-      totalDiscount = newItems.reduce((sum, item) => sum + (item.discount ?? 0) * item.quantity, 0);
-      totalCost = newItems.reduce((sum, item) => sum + (item.costPrice ?? 0) * item.quantity, 0);
-      totalProfit = totalAmount - totalCost;
-    } else if (patch.currency) {
-      newItems = existingItems.map((item) => ({ ...item, currency: targetCurrency }));
     }
 
-    const paymentAmount = patch.paymentAmount ?? existing.paymentAmount ?? 0;
+    const newItems = convertedBaseItems.map((item) => {
+      const itemPatch = patch.items?.find((candidate) => candidate.productId === item.productId);
+      if (!itemPatch) return item;
+      const unitPrice = money(itemPatch.unitPrice);
+      const discount = money(itemPatch.discount);
+      const lineTotal = multiplyMoney(subtractMoney(unitPrice, discount), item.quantity);
+      const lineCost = multiplyMoney(item.costPrice, item.quantity);
+      return { ...item, unitPrice, discount, lineTotal, profit: subtractMoney(lineTotal, lineCost) };
+    });
+
+    const totalAmount = newItems.reduce((sum, item) => addMoney(sum, item.lineTotal ?? 0), 0);
+    const totalDiscount = newItems.reduce((sum, item) => addMoney(sum, multiplyMoney(item.discount ?? 0, item.quantity)), 0);
+    const totalCost = newItems.reduce((sum, item) => addMoney(sum, multiplyMoney(item.costPrice ?? 0, item.quantity)), 0);
+    const totalProfit = subtractMoney(totalAmount, totalCost);
+    const totalAmountUsd = toUsdCdf(totalAmount, targetCurrency, lockedRate).amountUsd;
+    const totalCostUsd = toUsdCdf(totalCost, targetCurrency, lockedRate).amountUsd;
+    const totalProfitUsd = subtractMoney(totalAmountUsd, totalCostUsd);
+    const paymentAmount = patch.paymentAmount !== undefined
+      ? money(patch.paymentAmount)
+      : convertCurrencyAmount(existing.paymentAmount ?? 0, oldCurrency, targetCurrency, lockedRate);
     if (paymentAmount < 0) throw badRequest("Payment amount cannot be negative");
-    const changeDue = Math.max(0, paymentAmount - totalAmount);
-    const totalAmountUsd = targetCurrency === "CDF" ? totalAmount / rate : totalAmount;
-    const totalCostUsd = targetCurrency === "CDF" ? totalCost / rate : totalCost;
-    const totalProfitUsd = targetCurrency === "CDF" ? totalProfit / rate : totalProfit;
+    const changeDue = money(Math.max(0, subtractMoney(paymentAmount, totalAmount)));
 
     const [updated] = await tx.update(salesTable).set({
       items: newItems,
@@ -283,19 +350,19 @@ export async function patchSale(id: number, patch: PatchSaleInput, actor: string
       totalAmountUsd,
       totalCostUsd,
       totalProfitUsd,
-      exchangeRate: rate,
+      exchangeRate: lockedRate,
       paymentAmount,
       changeDue,
-      ...(patch.currency !== undefined && { currency: patch.currency }),
+      ...(patch.currency !== undefined && { currency: targetCurrency }),
       ...(patch.notes !== undefined && { notes: patch.notes }),
       ...(patch.saleDate !== undefined && { saleDate: patch.saleDate }),
     }).where(eq(salesTable.id, id)).returning();
 
-    const { amountUsd, amountCdf } = toUsdCdf(totalAmount, targetCurrency, rate);
+    const { amountUsd, amountCdf } = toUsdCdf(totalAmount, targetCurrency, lockedRate);
     await tx.update(paymentsTable).set({
       amount: totalAmount,
       currency: targetCurrency,
-      exchangeRate: rate,
+      exchangeRate: lockedRate,
       amountUsd,
       amountCdf,
       ...(patch.saleDate !== undefined && { paymentDate: patch.saleDate }),
@@ -303,8 +370,7 @@ export async function patchSale(id: number, patch: PatchSaleInput, actor: string
 
     const financialChanged = patch.currency !== undefined || patch.items !== undefined || patch.saleDate !== undefined;
     if (financialChanged) {
-      const oldRate = existing.exchangeRate ?? rate;
-      if ((existing.totalAmount ?? 0) > 0) {
+      if (money(existing.totalAmount ?? 0) > 0) {
         await appendLedgerEntry({
           sourceType: "sale_correction",
           sourceNumber: existing.saleNumber ?? undefined,
@@ -312,7 +378,7 @@ export async function patchSale(id: number, patch: PatchSaleInput, actor: string
           direction: "out",
           amount: existing.totalAmount ?? 0,
           currency: existing.currency,
-          exchangeRate: oldRate,
+          exchangeRate: lockedRate,
           description: `Correction: reverse sale ${existing.saleNumber}`,
           createdBy: actor,
         }, tx);
@@ -325,31 +391,27 @@ export async function patchSale(id: number, patch: PatchSaleInput, actor: string
           direction: "in",
           amount: totalAmount,
           currency: targetCurrency,
-          exchangeRate: rate,
-          entryDate: patch.saleDate,
+          exchangeRate: lockedRate,
+          entryDate: patch.saleDate ?? existing.saleDate,
           description: `Correction: update sale ${existing.saleNumber}`,
           createdBy: actor,
         }, tx);
       }
 
       await reverseEntries("sale", existing.id, "sale_correction", actor, tx);
-      await postDoubleEntry({
+      await postSaleAccounting({
+        executor: tx,
         sourceType: "sale_correction",
         sourceId: existing.id,
-        sourceNumber: existing.saleNumber ?? undefined,
-        entryDate: patch.saleDate ?? existing.saleDate ?? new Date(),
-        debitName: "Cash",
-        debitType: "asset",
-        creditName: "Sales Revenue",
-        creditType: "income",
-        amount: totalAmount,
-        amountUsd,
-        amountCdf,
+        sourceNumber: existing.saleNumber,
+        entryDate: patch.saleDate ?? existing.saleDate,
+        revenue: totalAmount,
+        cogs: totalCost,
         currency: targetCurrency,
-        exchangeRate: rate,
+        exchangeRate: lockedRate,
         description: `Sale ${existing.saleNumber} correction`,
-        createdBy: actor,
-      }, tx);
+        actor,
+      });
     }
 
     return updated;
@@ -358,12 +420,12 @@ export async function patchSale(id: number, patch: PatchSaleInput, actor: string
 
 export async function voidSale(id: number, reason: string, actor: string) {
   if (!reason.trim()) throw badRequest("Void reason is required");
-  const rate = await getExchangeRate();
 
   return withTransaction(async (tx) => {
-    const [sale] = await tx.select().from(salesTable).where(eq(salesTable.id, id));
+    const [sale] = await tx.select().from(salesTable).where(eq(salesTable.id, id)).for("update");
     if (!sale) throw notFound("Sale not found");
     if (sale.status === "voided") throw badRequest("Sale is already voided");
+    const lockedRate = fxRate(Number(sale.exchangeRate ?? await getExchangeRate(tx)));
 
     const saleItems = (sale.items ?? []) as SaleItem[];
     for (const item of saleItems) {
@@ -385,7 +447,7 @@ export async function voidSale(id: number, reason: string, actor: string) {
       eq(paymentsTable.linkedEntityId, id),
     ));
 
-    if ((sale.totalAmount ?? 0) > 0) {
+    if (money(sale.totalAmount ?? 0) > 0) {
       await appendLedgerEntry({
         sourceType: "sale_void",
         sourceNumber: sale.saleNumber ?? undefined,
@@ -393,7 +455,7 @@ export async function voidSale(id: number, reason: string, actor: string) {
         direction: "out",
         amount: sale.totalAmount ?? 0,
         currency: sale.currency ?? "USD",
-        exchangeRate: sale.exchangeRate ?? rate,
+        exchangeRate: lockedRate,
         description: `Void Sale ${sale.saleNumber}`,
         createdBy: actor,
       }, tx);
