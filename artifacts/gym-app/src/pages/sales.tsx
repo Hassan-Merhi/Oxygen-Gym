@@ -1,11 +1,10 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { useFmtDate } from "@/lib/useFmtDate";
 import { useGetMe } from "@/hooks/use-me";
 import {
   useListSales,
   useGetSettings,
-  useLookupBarcode,
   useCompleteSale,
   useVoidSale,
   useGetSale,
@@ -51,6 +50,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import {
   ShoppingCart,
   Barcode,
@@ -67,10 +67,13 @@ import {
   Ban,
   History,
   Pencil,
+  CalendarDays,
+  CircleDollarSign,
+  CreditCard,
+  RotateCcw,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 interface CartItem {
   productId: number;
   productName: string;
@@ -95,32 +98,53 @@ interface SaleItemData {
   currency: string;
 }
 
-// ─── Receipt helpers ───────────────────────────────────────────────────────────
+type HistoryPeriod = "all" | "today" | "yesterday" | "monthly" | "yearly" | "custom";
+
 function fmtMoney(n: number | null | undefined, sym: string): string {
-  const v = n ?? 0;
-  const s = v % 1 === 0 ? `${v}` : v.toFixed(2);
-  return sym === "FC" ? `FC ${s}` : `${sym}${s}`;
+  const value = Number(n ?? 0);
+  const decimals = value % 1 === 0 ? 0 : 2;
+  const formatted = value.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: 2,
+  });
+  return sym === "FC" ? `FC ${formatted}` : `${sym}${formatted}`;
 }
 
-// ─── Receipt Print ─────────────────────────────────────────────────────────────
-function printReceipt(sale: Record<string, unknown>, settings: Record<string, unknown>, t: (key: string) => string) {
+function localDateInput(date: Date): string {
+  const copy = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return copy.toISOString().slice(0, 10);
+}
+
+function saleDayKey(value: unknown): string {
+  const raw = String(value ?? "");
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (match) return match[1];
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? "unknown" : localDateInput(date);
+}
+
+function printReceipt(
+  sale: Record<string, unknown>,
+  settings: Record<string, unknown>,
+  t: (key: string) => string,
+) {
   const items = (sale.items ?? []) as SaleItemData[];
   const currency = sale.currency as string;
   const sym = currency === "CDF" ? "FC" : "$";
   const fmt = (n: number | null | undefined) => fmtMoney(n, sym);
   const saleNum = (sale.saleNumber as string) ?? `SALE-${sale.id}`;
 
-  const rows = items.map((item: SaleItemData) => {
+  const rows = items.map((item) => {
     const lineTotal = item.lineTotal ?? ((item.unitPrice - (item.discount ?? 0)) * item.quantity);
     return `
-    <tr>
-      <td style="padding:6px 0">${item.productName}</td>
-      <td style="padding:6px 8px;text-align:center;color:#666">${item.quantity}</td>
-      <td style="padding:6px 0;text-align:right;color:#666">${fmt(item.unitPrice)}</td>
-      <td style="padding:6px 0;text-align:right;color:#e53e3e">${item.discount > 0 ? `-${fmt(item.discount * item.quantity)}` : ""}</td>
-      <td style="padding:6px 0;text-align:right;font-weight:600">${fmt(lineTotal)}</td>
-    </tr>
-  `;
+      <tr>
+        <td style="padding:6px 0">${item.productName}</td>
+        <td style="padding:6px 8px;text-align:center;color:#666">${item.quantity}</td>
+        <td style="padding:6px 0;text-align:right;color:#666">${fmt(item.unitPrice)}</td>
+        <td style="padding:6px 0;text-align:right;color:#e53e3e">${item.discount > 0 ? `-${fmt(item.discount * item.quantity)}` : ""}</td>
+        <td style="padding:6px 0;text-align:right;font-weight:600">${fmt(lineTotal)}</td>
+      </tr>
+    `;
   }).join("");
 
   const html = `
@@ -132,7 +156,7 @@ function printReceipt(sale: Record<string, unknown>, settings: Record<string, un
       <style>
         @page { size: 80mm auto; margin: 3mm 6mm; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 68mm; padding: 0; font-size: 11px; color: #111; background: #fff; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; width: 68mm; font-size: 11px; color: #111; background: #fff; }
         .gym-name { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
         .gym-sub { font-size: 10px; color: #666; margin-top: 2px; }
         .divider { border: none; border-top: 1px solid #e5e7eb; margin: 8px 0; }
@@ -141,10 +165,9 @@ function printReceipt(sale: Record<string, unknown>, settings: Record<string, un
         .meta-label { color: #6b7280; }
         .meta-val { font-weight: 500; }
         table { width: 100%; border-collapse: collapse; font-size: 11px; }
-        thead th { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #9ca3af; font-weight: 600; padding: 0 0 6px; border-bottom: 1px solid #e5e7eb; }
-        thead th:last-child { text-align: right; }
+        thead th { font-size: 9px; text-transform: uppercase; letter-spacing: .05em; color: #9ca3af; font-weight: 600; padding: 0 0 6px; border-bottom: 1px solid #e5e7eb; }
+        thead th:last-child, thead th:nth-child(3), thead th:nth-child(4) { text-align: right; }
         thead th:nth-child(2) { text-align: center; }
-        thead th:nth-child(3), thead th:nth-child(4) { text-align: right; }
         tbody tr { border-bottom: 1px solid #f3f4f6; }
         .summary { margin-top: 10px; }
         .summary-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 11px; }
@@ -199,8 +222,10 @@ function printReceipt(sale: Record<string, unknown>, settings: Record<string, un
   iframe.id = "__gym_print_frame__";
   iframe.style.cssText = "position:fixed;top:0;left:-9999px;width:400px;height:1000px;border:none;";
   document.body.appendChild(iframe);
-  const doc = (iframe.contentDocument ?? (iframe.contentWindow as Window).document);
-  doc.open(); doc.write(html); doc.close();
+  const doc = iframe.contentDocument ?? (iframe.contentWindow as Window).document;
+  doc.open();
+  doc.write(html);
+  doc.close();
   setTimeout(() => {
     (iframe.contentWindow as Window).focus();
     (iframe.contentWindow as Window).print();
@@ -208,7 +233,6 @@ function printReceipt(sale: Record<string, unknown>, settings: Record<string, un
   }, 500);
 }
 
-// ─── Cart Item Row ─────────────────────────────────────────────────────────────
 function CartRow({
   item,
   canViewCost,
@@ -243,52 +267,62 @@ function CartRow({
   const profit = lineTotal - costInSale * item.quantity;
 
   return (
-    <TableRow>
-      <TableCell className="font-medium">{item.productName}</TableCell>
-      <TableCell>
-        <div className="flex items-center gap-1">
+    <TableRow className="group">
+      <TableCell className="py-3.5 font-medium">{item.productName}</TableCell>
+      <TableCell className="py-3.5">
+        <div className="inline-flex items-center rounded-lg border border-border/60 bg-muted/20 p-0.5">
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6"
+            className="h-7 w-7 rounded-md"
             onClick={() => onQtyChange(item.productId, item.quantity - 1)}
             disabled={item.quantity <= 1}
           >
-            <Minus className="h-3 w-3" />
+            <Minus className="h-3.5 w-3.5" />
           </Button>
-          <span className="w-6 text-center text-sm">{item.quantity}</span>
+          <span className="w-8 text-center text-sm font-semibold tabular-nums">{item.quantity}</span>
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6"
+            className="h-7 w-7 rounded-md"
             onClick={() => onQtyChange(item.productId, item.quantity + 1)}
             disabled={item.quantity >= item.availableQty}
           >
-            <Plus className="h-3 w-3" />
+            <Plus className="h-3.5 w-3.5" />
           </Button>
         </div>
       </TableCell>
-      <TableCell className="text-right">{unitInSale.toFixed(2)}</TableCell>
-      <TableCell>
+      <TableCell className="py-3.5 text-right tabular-nums">{unitInSale.toFixed(2)}</TableCell>
+      <TableCell className="py-3.5">
         <Input
           type="number"
           min={0}
           max={unitInSale}
           step={0.01}
           value={item.discount}
-          onChange={(e) => onDiscountChange(item.productId, parseFloat(e.target.value) || 0)}
-          className="w-20 h-7 text-sm text-right"
+          onChange={(event) => onDiscountChange(item.productId, parseFloat(event.target.value) || 0)}
+          className="h-8 w-20 text-right text-sm"
         />
       </TableCell>
-      <TableCell className="text-right font-semibold">{lineTotal.toFixed(2)}</TableCell>
-      {canViewCost && <TableCell className="text-right text-muted-foreground text-xs">{(costInSale * item.quantity).toFixed(2)}</TableCell>}
+      <TableCell className="py-3.5 text-right font-semibold tabular-nums">{lineTotal.toFixed(2)}</TableCell>
+      {canViewCost && (
+        <TableCell className="py-3.5 text-right text-xs tabular-nums text-muted-foreground">
+          {(costInSale * item.quantity).toFixed(2)}
+        </TableCell>
+      )}
       {canViewProfit && (
-        <TableCell className={`text-right text-xs font-medium ${profit >= 0 ? "text-green-600" : "text-red-600"}`}>
+        <TableCell className={cn("py-3.5 text-right text-xs font-semibold tabular-nums", profit >= 0 ? "text-emerald-500" : "text-red-500")}>
           {profit.toFixed(2)}
         </TableCell>
       )}
-      <TableCell>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => onRemove(item.productId)}>
+      <TableCell className="py-3.5 text-right">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+          onClick={() => onRemove(item.productId)}
+          aria-label={`Remove ${item.productName}`}
+        >
           <XCircle className="h-4 w-4" />
         </Button>
       </TableCell>
@@ -296,7 +330,6 @@ function CartRow({
   );
 }
 
-// ─── Sale Detail Dialog ────────────────────────────────────────────────────────
 function SaleDetailDialog({
   saleId,
   open,
@@ -314,8 +347,9 @@ function SaleDetailDialog({
   canViewProfit: boolean;
   t: (k: string) => string;
 }) {
-  const { data: sale } = useGetSale(saleId ?? 0, { query: { enabled: !!saleId && open, queryKey: ["getSale", saleId] } });
-  const { toast } = useToast();
+  const { data: sale } = useGetSale(saleId ?? 0, {
+    query: { enabled: !!saleId && open, queryKey: ["getSale", saleId] },
+  });
   const { locale } = useFmtDate();
 
   if (!sale) return null;
@@ -326,8 +360,8 @@ function SaleDetailDialog({
   const fmt = (n: number | null | undefined) => fmtMoney(n, sym);
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="w-[95vw] max-w-2xl max-h-[85vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <DialogContent className="max-h-[85vh] w-[95vw] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ReceiptText className="h-5 w-5" />
@@ -336,10 +370,9 @@ function SaleDetailDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Meta */}
-          <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="grid grid-cols-1 gap-3 rounded-xl border border-border/60 bg-muted/20 p-4 text-sm sm:grid-cols-2">
             <div><span className="text-muted-foreground">{t("sales.history.date")}:</span> {new Date(saleData.saleDate as string).toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" })}</div>
-            <div><span className="text-muted-foreground">{t("sales.receipt.cashier")}:</span> {saleData.createdBy as string ?? "—"}</div>
+            <div><span className="text-muted-foreground">{t("sales.receipt.cashier")}:</span> {(saleData.createdBy as string) ?? "—"}</div>
             <div><span className="text-muted-foreground">{t("sales.currency")}:</span> {currency}</div>
             <div>
               <Badge variant={saleData.status === "voided" ? "destructive" : "default"}>
@@ -349,12 +382,11 @@ function SaleDetailDialog({
           </div>
 
           {saleData.status === "voided" && (
-            <div className="rounded-md bg-destructive/10 text-destructive p-3 text-sm">
+            <div className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
               <strong>{t("sales.void")}:</strong> {saleData.voidedBy as string} — {saleData.voidReason as string}
             </div>
           )}
 
-          {/* Items */}
           <Table>
             <TableHeader>
               <TableRow>
@@ -368,36 +400,33 @@ function SaleDetailDialog({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((item, i) => (
-                <TableRow key={i}>
+              {items.map((item, index) => (
+                <TableRow key={`${item.productId}-${index}`}>
                   <TableCell>{item.productName}</TableCell>
                   <TableCell className="text-center">{item.quantity}</TableCell>
                   <TableCell className="text-right">{fmt(item.unitPrice)}</TableCell>
                   <TableCell className="text-right">{item.discount > 0 ? `-${fmt(item.discount * item.quantity)}` : "—"}</TableCell>
                   <TableCell className="text-right font-semibold">{fmt(item.lineTotal ?? ((item.unitPrice - (item.discount ?? 0)) * item.quantity))}</TableCell>
-                  {canViewCost && <TableCell className="text-right text-muted-foreground text-xs">{fmt(item.costPrice * item.quantity)}</TableCell>}
-                  {canViewProfit && <TableCell className={`text-right text-xs font-medium ${item.profit >= 0 ? "text-green-600" : "text-red-600"}`}>{fmt(item.profit)}</TableCell>}
+                  {canViewCost && <TableCell className="text-right text-xs text-muted-foreground">{fmt(item.costPrice * item.quantity)}</TableCell>}
+                  {canViewProfit && <TableCell className={cn("text-right text-xs font-medium", item.profit >= 0 ? "text-emerald-500" : "text-red-500")}>{fmt(item.profit)}</TableCell>}
                 </TableRow>
               ))}
             </TableBody>
           </Table>
 
-          {/* Totals */}
-          <div className="flex flex-col gap-1 items-end text-sm border-t pt-3">
+          <div className="ml-auto flex max-w-xs flex-col gap-1 border-t pt-3 text-sm">
             {(saleData.totalDiscount as number) > 0 && (
-              <div className="flex gap-8"><span className="text-muted-foreground">{t("sales.receipt.discount")}:</span><span className="text-destructive">-{fmt(saleData.totalDiscount as number)}</span></div>
+              <div className="flex justify-between gap-8"><span className="text-muted-foreground">{t("sales.receipt.discount")}</span><span className="text-destructive">-{fmt(saleData.totalDiscount as number)}</span></div>
             )}
-            <div className="flex gap-8 font-bold text-base"><span>{t("sales.receipt.total")}:</span><span>{fmt(saleData.totalAmount as number)}</span></div>
-            <div className="flex gap-8"><span className="text-muted-foreground">{t("sales.receipt.paid")}:</span><span>{fmt(saleData.paymentAmount as number)}</span></div>
-            <div className="flex gap-8"><span className="text-muted-foreground">{t("sales.receipt.change")}:</span><span>{fmt(saleData.changeDue as number)}</span></div>
+            <div className="flex justify-between gap-8 text-base font-bold"><span>{t("sales.receipt.total")}</span><span>{fmt(saleData.totalAmount as number)}</span></div>
+            <div className="flex justify-between gap-8"><span className="text-muted-foreground">{t("sales.receipt.paid")}</span><span>{fmt(saleData.paymentAmount as number)}</span></div>
+            <div className="flex justify-between gap-8"><span className="text-muted-foreground">{t("sales.receipt.change")}</span><span>{fmt(saleData.changeDue as number)}</span></div>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => {
-            if (settings) printReceipt(saleData, settings as Record<string, unknown>, t);
-          }}>
-            <Printer className="h-4 w-4 mr-2" />{t("sales.printReceipt")}
+          <Button variant="outline" onClick={() => { if (settings) printReceipt(saleData, settings, t); }}>
+            <Printer className="mr-2 h-4 w-4" />{t("sales.printReceipt")}
           </Button>
           <Button onClick={onClose}>{t("common.cancel")}</Button>
         </DialogFooter>
@@ -406,7 +435,6 @@ function SaleDetailDialog({
   );
 }
 
-// ─── Sale Edit Dialog ──────────────────────────────────────────────────────────
 function SaleEditDialog({
   saleId,
   open,
@@ -420,48 +448,49 @@ function SaleEditDialog({
   onSaved: () => void;
   t: (k: string) => string;
 }) {
-  const { data: saleRaw } = useGetSale(saleId ?? 0, { query: { enabled: !!saleId && open, queryKey: ["getSaleEdit", saleId] } });
+  const { data: saleRaw } = useGetSale(saleId ?? 0, {
+    query: { enabled: !!saleId && open, queryKey: ["getSaleEdit", saleId] },
+  });
   const patchSaleMut = usePatchSale();
   const { toast } = useToast();
 
   const sale = saleRaw as unknown as Record<string, unknown> | undefined;
-  const originalItems = ((sale?.items ?? []) as SaleItemData[]);
-
+  const originalItems = (sale?.items ?? []) as SaleItemData[];
   const [currency, setCurrency] = useState<"USD" | "CDF">("CDF");
-  // After 9 PM, new sales default to tomorrow's business date
-  function businessDateStr() {
-    const d = new Date();
-    if (d.getHours() >= 21) d.setDate(d.getDate() + 1);
-    return d.toLocaleDateString("en-CA");
-  }
-  const [saleDate, setSaleDate] = useState(businessDateStr());
+  const [saleDate, setSaleDate] = useState("");
   const [notes, setNotes] = useState("");
-  const [paymentAmount, setPaymentAmount] = useState<number>(0);
-  const [editItems, setEditItems] = useState<Array<{ productId: number; productName: string; quantity: number; unitPrice: number; discount: number; costPrice: number }>>([]);
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [editItems, setEditItems] = useState<Array<{
+    productId: number;
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    discount: number;
+    costPrice: number;
+  }>>([]);
 
   const sym = currency === "CDF" ? "FC" : "$";
-  const fmt = (n: number) => currency === "CDF" ? `FC ${n % 1 === 0 ? n : n.toFixed(2)}` : `$${n % 1 === 0 ? n : n.toFixed(2)}`;
+  const fmt = (n: number) => fmtMoney(n, sym);
 
-  // Populate form when sale data loads
   useEffect(() => {
     if (!sale) return;
     setCurrency((sale.currency as "USD" | "CDF") ?? "USD");
-    setSaleDate(sale.saleDate ? new Date(sale.saleDate as string).toISOString().slice(0, 10) : "");
+    setSaleDate(sale.saleDate ? String(sale.saleDate).slice(0, 10) : "");
     setNotes((sale.notes as string) ?? "");
     setPaymentAmount((sale.paymentAmount as number) ?? 0);
-    setEditItems(originalItems.map((i) => ({
-      productId: i.productId,
-      productName: i.productName,
-      quantity: i.quantity,
-      unitPrice: i.unitPrice,
-      discount: i.discount ?? 0,
-      costPrice: i.costPrice ?? 0,
+    setEditItems(originalItems.map((item) => ({
+      productId: item.productId,
+      productName: item.productName,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      discount: item.discount ?? 0,
+      costPrice: item.costPrice ?? 0,
     })));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saleRaw]);
 
-  const liveTotal = editItems.reduce((s, i) => s + (i.unitPrice - i.discount) * i.quantity, 0);
-  const liveDiscount = editItems.reduce((s, i) => s + i.discount * i.quantity, 0);
+  const liveTotal = editItems.reduce((sum, item) => sum + (item.unitPrice - item.discount) * item.quantity, 0);
+  const liveDiscount = editItems.reduce((sum, item) => sum + item.discount * item.quantity, 0);
   const liveChange = Math.max(0, paymentAmount - liveTotal);
 
   const handleSave = async () => {
@@ -474,7 +503,11 @@ function SaleEditDialog({
           notes: notes || null,
           saleDate: saleDate || null,
           paymentAmount,
-          items: editItems.map((i) => ({ productId: i.productId, unitPrice: i.unitPrice, discount: i.discount })),
+          items: editItems.map((item) => ({
+            productId: item.productId,
+            unitPrice: item.unitPrice,
+            discount: item.discount,
+          })),
         },
       });
       toast({ title: "Sale updated" });
@@ -488,8 +521,8 @@ function SaleEditDialog({
   if (!sale) return null;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <DialogContent className="max-h-[90vh] w-[95vw] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Pencil className="h-5 w-5" />
@@ -498,11 +531,10 @@ function SaleEditDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Meta fields */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>{t("sales.currency")}</Label>
-              <Select value={currency} onValueChange={(v) => setCurrency(v as "USD" | "CDF")}>
+              <Select value={currency} onValueChange={(value) => setCurrency(value as "USD" | "CDF")}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="USD">USD ($)</SelectItem>
@@ -512,30 +544,29 @@ function SaleEditDialog({
             </div>
             <div className="space-y-1.5">
               <Label>Date</Label>
-              <Input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} />
+              <Input type="date" value={saleDate} onChange={(event) => setSaleDate(event.target.value)} />
             </div>
           </div>
 
           <div className="space-y-1.5">
             <Label>Notes</Label>
-            <Textarea rows={2} value={notes} placeholder="Optional notes…" onChange={(e) => setNotes(e.target.value)} />
+            <Textarea rows={2} value={notes} placeholder="Optional notes…" onChange={(event) => setNotes(event.target.value)} />
           </div>
 
-          {/* Items */}
           <div>
             <Label className="mb-2 block font-semibold">Items</Label>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Product</TableHead>
-                  <TableHead className="text-center w-12">Qty</TableHead>
-                  <TableHead className="text-right w-32">Unit Price ({sym})</TableHead>
-                  <TableHead className="text-right w-32">Discount ({sym})</TableHead>
-                  <TableHead className="text-right w-24">Line Total</TableHead>
+                  <TableHead className="w-12 text-center">Qty</TableHead>
+                  <TableHead className="w-32 text-right">Unit Price ({sym})</TableHead>
+                  <TableHead className="w-32 text-right">Discount ({sym})</TableHead>
+                  <TableHead className="w-24 text-right">Line Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {editItems.map((item, idx) => {
+                {editItems.map((item, index) => {
                   const lineTotal = (item.unitPrice - item.discount) * item.quantity;
                   return (
                     <TableRow key={item.productId}>
@@ -546,11 +577,11 @@ function SaleEditDialog({
                           type="number"
                           min="0"
                           step="0.01"
-                          className="text-right h-8 w-full"
+                          className="h-8 w-full text-right"
                           value={item.unitPrice}
-                          onChange={(e) => {
+                          onChange={(event) => {
                             const updated = [...editItems];
-                            updated[idx] = { ...item, unitPrice: parseFloat(e.target.value) || 0 };
+                            updated[index] = { ...item, unitPrice: parseFloat(event.target.value) || 0 };
                             setEditItems(updated);
                           }}
                         />
@@ -559,17 +590,19 @@ function SaleEditDialog({
                         <Input
                           type="number"
                           min="0"
+                          max={item.unitPrice}
                           step="0.01"
-                          className="text-right h-8 w-full"
+                          className="h-8 w-full text-right"
                           value={item.discount}
-                          onChange={(e) => {
+                          onChange={(event) => {
+                            const next = Math.max(0, Math.min(parseFloat(event.target.value) || 0, item.unitPrice));
                             const updated = [...editItems];
-                            updated[idx] = { ...item, discount: parseFloat(e.target.value) || 0 };
+                            updated[index] = { ...item, discount: next };
                             setEditItems(updated);
                           }}
                         />
                       </TableCell>
-                      <TableCell className="text-right font-semibold text-sm">{fmt(lineTotal)}</TableCell>
+                      <TableCell className="text-right text-sm font-semibold">{fmt(lineTotal)}</TableCell>
                     </TableRow>
                   );
                 })}
@@ -577,8 +610,7 @@ function SaleEditDialog({
             </Table>
           </div>
 
-          {/* Payment received & change */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Payment Received ({sym})</Label>
               <Input
@@ -586,25 +618,22 @@ function SaleEditDialog({
                 min="0"
                 step="0.01"
                 value={paymentAmount}
-                onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                onChange={(event) => setPaymentAmount(parseFloat(event.target.value) || 0)}
               />
             </div>
             <div className="space-y-1.5">
               <Label>Change Due ({sym})</Label>
-              <div className="flex items-center h-9 px-3 rounded-md border bg-muted/40 text-sm font-semibold">
+              <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm font-semibold">
                 {fmt(liveChange)}
               </div>
             </div>
           </div>
 
-          {/* Live totals preview */}
-          <div className="flex flex-col items-end gap-1 text-sm border-t pt-3">
+          <div className="ml-auto flex max-w-xs flex-col gap-1 border-t pt-3 text-sm">
             {liveDiscount > 0 && (
-              <div className="flex gap-6"><span className="text-muted-foreground">Discount:</span><span className="text-destructive">-{fmt(liveDiscount)}</span></div>
+              <div className="flex justify-between gap-6"><span className="text-muted-foreground">Discount</span><span className="text-destructive">-{fmt(liveDiscount)}</span></div>
             )}
-            <div className="flex gap-6 font-bold text-base">
-              <span>Total:</span><span>{fmt(liveTotal)}</span>
-            </div>
+            <div className="flex justify-between gap-6 text-base font-bold"><span>Total</span><span>{fmt(liveTotal)}</span></div>
           </div>
         </div>
 
@@ -619,7 +648,6 @@ function SaleEditDialog({
   );
 }
 
-// ─── Main Component ────────────────────────────────────────────────────────────
 export default function Sales() {
   const { t } = useI18n();
   const { locale } = useFmtDate();
@@ -629,48 +657,52 @@ export default function Sales() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Permissions
   const isAdmin = me?.role === "admin";
   const canAccess = isAdmin || Boolean(me?.permissions?.sales);
   const canViewCost = isAdmin || Boolean(me?.permissions?.viewCost);
   const canViewProfit = isAdmin || Boolean(me?.permissions?.viewProfit);
   const canManage = isAdmin || Boolean(me?.permissions?.manageInventory);
 
-  // Cart state
   const [cart, setCart] = useState<CartItem[]>([]);
   const [saleCurrency, setSaleCurrency] = useState<"USD" | "CDF">("CDF");
-
-  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentAmount, setPaymentAmount] = useState(0);
   const [notes, setNotes] = useState("");
   const [completing, setCompleting] = useState(false);
 
-  // Barcode
   const barcodeRef = useRef<HTMLInputElement>(null);
+  const barcodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [barcodeInput, setBarcodeInput] = useState("");
-  const [barcodeTimer, setBarcodeTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
-  // Product search
   const [productSearch, setProductSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const searchSequenceRef = useRef(0);
+  const [searchResults, setSearchResults] = useState<Array<{
+    id: number;
+    name: string;
+    currency: string;
+    sellingPrice: number;
+    costPrice: number;
+    quantity: number;
+    status: string;
+  }>>([]);
 
-  // History tab
   const [historyPage, setHistoryPage] = useState(1);
   const [historySearch, setHistorySearch] = useState("");
   const [historyStatus, setHistoryStatus] = useState("");
   const [historyCurrency, setHistoryCurrency] = useState("");
   const [historyDateFrom, setHistoryDateFrom] = useState("");
   const [historyDateTo, setHistoryDateTo] = useState("");
+  const [historyPeriod, setHistoryPeriod] = useState<HistoryPeriod>("all");
 
-  // Modals
   const [viewSaleId, setViewSaleId] = useState<number | null>(null);
   const [voidSaleId, setVoidSaleId] = useState<number | null>(null);
   const [voidReason, setVoidReason] = useState("");
   const [voidingSale, setVoidingSale] = useState<Record<string, unknown> | null>(null);
   const [editSaleId, setEditSaleId] = useState<number | null>(null);
+  const [printingSaleId, setPrintingSaleId] = useState<number | null>(null);
 
-  const exchangeRate = (settings?.usdToCdfRate as number) ?? 2800;
+  const exchangeRate = Number(settings?.usdToCdfRate) > 0 ? Number(settings?.usdToCdfRate) : 2800;
 
-  // Queries
   const { data: historyData } = useListSales({
     page: String(historyPage),
     limit: "100",
@@ -681,11 +713,9 @@ export default function Sales() {
     dateTo: historyDateTo || undefined,
   });
 
-  // Mutations
   const completeSaleMut = useCompleteSale();
   const voidSaleMut = useVoidSale();
 
-  // Computed cart totals
   const toSaleCurrency = useCallback((price: number, fromCurrency: string) => {
     if (fromCurrency === saleCurrency) return price;
     if (saleCurrency === "USD" && fromCurrency === "CDF") return price / exchangeRate;
@@ -693,7 +723,7 @@ export default function Sales() {
     return price;
   }, [saleCurrency, exchangeRate]);
 
-  const cartTotals = cart.reduce((acc, item) => {
+  const cartTotals = useMemo(() => cart.reduce((acc, item) => {
     const unitInSale = toSaleCurrency(item.unitPrice, item.currency);
     const costInSale = toSaleCurrency(item.costPrice, item.currency);
     const lineTotal = (unitInSale - item.discount) * item.quantity;
@@ -703,48 +733,55 @@ export default function Sales() {
     acc.cost += lineCost;
     acc.profit += lineTotal - lineCost;
     return acc;
-  }, { total: 0, discount: 0, cost: 0, profit: 0 });
+  }, { total: 0, discount: 0, cost: 0, profit: 0 }), [cart, toSaleCurrency]);
 
   const changeDue = Math.max(0, paymentAmount - cartTotals.total);
-  const cartSym = saleCurrency === "USD" ? "$" : saleCurrency;
-  const fmt = (n: number | null | undefined) => `${cartSym} ${(n ?? 0).toFixed(2)}`;
+  const cartSym = saleCurrency === "USD" ? "$" : "FC";
+  const fmt = (n: number | null | undefined) => fmtMoney(n, cartSym);
 
-  // ── Barcode scanning (treat rapid keystrokes as scanner) ─────────────────
   const addProductToCart = useCallback(async (barcode: string) => {
-    if (!barcode.trim()) return;
+    const trimmed = barcode.trim();
+    if (!trimmed) return;
+
     try {
-      // Call the barcode lookup directly via fetch since useLookupBarcode is a query
-      const authHeaders = { "Authorization": `Bearer ${localStorage.getItem("gym_token") ?? ""}` };
-      const res = await fetch(`/api/sales/lookup-barcode?barcode=${encodeURIComponent(barcode.trim())}`, { headers: authHeaders });
+      const authHeaders = { Authorization: `Bearer ${localStorage.getItem("gym_token") ?? ""}` };
+      const res = await fetch(`/api/sales/lookup-barcode?barcode=${encodeURIComponent(trimmed)}`, { headers: authHeaders });
       if (!res.ok) {
         toast({ title: t("sales.toast.barcodeNotFound"), variant: "destructive" });
-        await fetch(`/api/activity-logs`, { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders }, body: JSON.stringify({ action: "barcode_not_found", entity: "product", details: { barcode } }) }).catch(() => null);
+        void fetch("/api/activity-logs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          body: JSON.stringify({ action: "barcode_not_found", entity: "product", details: { barcode: trimmed } }),
+        }).catch(() => null);
         return;
       }
+
       const product = await res.json() as {
-        id: number; name: string; currency: string; sellingPrice: number;
-        costPrice: number; quantity: number; status: string;
+        id: number;
+        name: string;
+        currency: string;
+        sellingPrice: number;
+        costPrice: number;
+        quantity: number;
+        status: string;
       };
 
-      if (product.status !== "active") {
-        toast({ title: `"${product.name}" is not available for sale`, variant: "destructive" });
+      if (product.status !== "active" || product.quantity < 1) {
+        toast({ title: product.quantity < 1 ? t("sales.toast.insufficientStock") : `"${product.name}" is not available for sale`, variant: "destructive" });
         return;
       }
 
-      setCart((prev) => {
-        const existing = prev.find((c) => c.productId === product.id);
+      setCart((previous) => {
+        const existing = previous.find((item) => item.productId === product.id);
         if (existing) {
           if (existing.quantity >= product.quantity) {
             toast({ title: t("sales.toast.insufficientStock"), variant: "destructive" });
-            return prev;
+            return previous;
           }
-          return prev.map((c) => c.productId === product.id ? { ...c, quantity: c.quantity + 1 } : c);
+          return previous.map((item) => item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item);
         }
-        if (product.quantity < 1) {
-          toast({ title: t("sales.toast.insufficientStock"), variant: "destructive" });
-          return prev;
-        }
-        return [...prev, {
+
+        return [...previous, {
           productId: product.id,
           productName: product.name,
           currency: product.currency,
@@ -761,50 +798,66 @@ export default function Sales() {
     }
   }, [toast, t]);
 
-  const handleBarcodeChange = (val: string) => {
-    setBarcodeInput(val);
-    if (barcodeTimer) clearTimeout(barcodeTimer);
-    const timer = setTimeout(() => {
-      if (val.trim()) {
-        addProductToCart(val.trim());
-        setBarcodeInput("");
-      }
-    }, 150); // scanners send chars fast; 150ms debounce
-    setBarcodeTimer(timer);
+  const handleBarcodeChange = (value: string) => {
+    setBarcodeInput(value);
+    if (barcodeTimerRef.current) clearTimeout(barcodeTimerRef.current);
+    barcodeTimerRef.current = setTimeout(() => {
+      if (!value.trim()) return;
+      void addProductToCart(value);
+      setBarcodeInput("");
+    }, 150);
   };
 
-  // ── Product search (text input → server lookup by barcode or name) ────────
-  // We use the products list API by proxying through barcode lookup + simple text
-  // The actual product search uses the /api/stock endpoint with search param
-  const [searchResults, setSearchResults] = useState<Array<{
-    id: number; name: string; currency: string; sellingPrice: number;
-    costPrice: number; quantity: number; status: string;
-  }>>([]);
+  useEffect(() => () => {
+    if (barcodeTimerRef.current) clearTimeout(barcodeTimerRef.current);
+  }, []);
 
-  const searchProducts = useCallback(async (q: string) => {
-    if (!q.trim()) { setSearchResults([]); return; }
-    const res = await fetch(`/api/stock?search=${encodeURIComponent(q)}&limit=10`, { headers: { "Authorization": `Bearer ${localStorage.getItem("gym_token") ?? ""}` } }).catch(() => null);
-    if (!res?.ok) return;
-    const data = await res.json() as { items: Array<{ id: number; name: string; currency: string; sellingPrice: number; costPrice: number; quantity: number; status: string }> };
-    setSearchResults(data.items.filter((p) => p.status === "active" && p.quantity > 0));
+  const searchProducts = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      return;
+    }
+
+    const sequence = ++searchSequenceRef.current;
+    try {
+      const res = await fetch(`/api/stock?search=${encodeURIComponent(trimmed)}&limit=10`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("gym_token") ?? ""}` },
+      });
+      if (!res.ok || sequence !== searchSequenceRef.current) return;
+      const data = await res.json() as { items: Array<{
+        id: number;
+        name: string;
+        currency: string;
+        sellingPrice: number;
+        costPrice: number;
+        quantity: number;
+        status: string;
+      }> };
+      setSearchResults(data.items.filter((product) => product.status === "active" && product.quantity > 0));
+    } catch {
+      if (sequence === searchSequenceRef.current) setSearchResults([]);
+    }
   }, []);
 
   useEffect(() => {
-    const timeout = setTimeout(() => { if (searchOpen) searchProducts(productSearch); }, 300);
+    const timeout = setTimeout(() => {
+      if (searchOpen) void searchProducts(productSearch);
+    }, 250);
     return () => clearTimeout(timeout);
   }, [productSearch, searchOpen, searchProducts]);
 
-  const addFromSearch = (product: typeof searchResults[0]) => {
-    setCart((prev) => {
-      const existing = prev.find((c) => c.productId === product.id);
+  const addFromSearch = (product: typeof searchResults[number]) => {
+    setCart((previous) => {
+      const existing = previous.find((item) => item.productId === product.id);
       if (existing) {
         if (existing.quantity >= product.quantity) {
           toast({ title: t("sales.toast.insufficientStock"), variant: "destructive" });
-          return prev;
+          return previous;
         }
-        return prev.map((c) => c.productId === product.id ? { ...c, quantity: c.quantity + 1 } : c);
+        return previous.map((item) => item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item);
       }
-      return [...prev, {
+      return [...previous, {
         productId: product.id,
         productName: product.name,
         currency: product.currency,
@@ -821,20 +874,24 @@ export default function Sales() {
     setSearchOpen(false);
   };
 
-  const updateQty = (productId: number, qty: number) => {
-    if (qty <= 0) {
-      setCart((prev) => prev.filter((c) => c.productId !== productId));
-    } else {
-      setCart((prev) => prev.map((c) => c.productId === productId ? { ...c, quantity: qty } : c));
-    }
+  const updateQty = (productId: number, quantity: number) => {
+    setCart((previous) => previous.flatMap((item) => {
+      if (item.productId !== productId) return [item];
+      if (quantity <= 0) return [];
+      return [{ ...item, quantity: Math.min(quantity, item.availableQty) }];
+    }));
   };
 
   const updateDiscount = (productId: number, discount: number) => {
-    setCart((prev) => prev.map((c) => c.productId === productId ? { ...c, discount } : c));
+    setCart((previous) => previous.map((item) => {
+      if (item.productId !== productId) return item;
+      const maxDiscount = toSaleCurrency(item.unitPrice, item.currency);
+      return { ...item, discount: Math.max(0, Math.min(discount, maxDiscount)) };
+    }));
   };
 
   const removeItem = (productId: number) => {
-    setCart((prev) => prev.filter((c) => c.productId !== productId));
+    setCart((previous) => previous.filter((item) => item.productId !== productId));
   };
 
   const clearCart = () => {
@@ -844,7 +901,6 @@ export default function Sales() {
     toast({ title: t("sales.toast.cartCleared") });
   };
 
-  // ── Complete sale ─────────────────────────────────────────────────────────
   const handleCompleteSale = async () => {
     if (cart.length === 0) return;
     if (paymentAmount < cartTotals.total) {
@@ -854,19 +910,14 @@ export default function Sales() {
 
     setCompleting(true);
     try {
-      const items = cart.map((item) => {
-        const unitInSale = toSaleCurrency(item.unitPrice, item.currency);
-        return {
-          productId: item.productId,
-          quantity: item.quantity,
-          unitPrice: unitInSale,
-          discount: item.discount,
-        };
-      });
-
       const result = await completeSaleMut.mutateAsync({
         data: {
-          items,
+          items: cart.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            unitPrice: toSaleCurrency(item.unitPrice, item.currency),
+            discount: item.discount,
+          })),
           currency: saleCurrency,
           paymentAmount,
           notes: notes || undefined,
@@ -874,33 +925,29 @@ export default function Sales() {
       });
 
       toast({ title: t("sales.toast.completed") });
-      queryClient.invalidateQueries();
+      void queryClient.invalidateQueries();
 
-      // Auto-print receipt
       const saleData = result as unknown as Record<string, unknown>;
-      if (settings) {
-        setTimeout(() => printReceipt(saleData, settings, t), 500);
-      }
+      if (settings) setTimeout(() => printReceipt(saleData, settings, t), 500);
 
       setCart([]);
       setPaymentAmount(0);
       setNotes("");
       barcodeRef.current?.focus();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to complete sale";
-      toast({ title: msg, variant: "destructive" });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to complete sale";
+      toast({ title: message, variant: "destructive" });
     } finally {
       setCompleting(false);
     }
   };
 
-  // ── Void sale ─────────────────────────────────────────────────────────────
   const handleVoid = async () => {
     if (!voidSaleId || !voidReason.trim()) return;
     try {
-      await voidSaleMut.mutateAsync({ id: voidSaleId, data: { reason: voidReason } });
+      await voidSaleMut.mutateAsync({ id: voidSaleId, data: { reason: voidReason.trim() } });
       toast({ title: t("sales.toast.voided") });
-      queryClient.invalidateQueries();
+      void queryClient.invalidateQueries();
       setVoidSaleId(null);
       setVoidReason("");
       setVoidingSale(null);
@@ -909,24 +956,84 @@ export default function Sales() {
     }
   };
 
+  const handlePrintSale = async (saleId: number) => {
+    if (!settings || printingSaleId) return;
+    setPrintingSaleId(saleId);
+    try {
+      const response = await fetch(`/api/sales/${saleId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("gym_token") ?? ""}` },
+      });
+      if (!response.ok) throw new Error("Failed to load receipt");
+      const sale = await response.json() as Record<string, unknown>;
+      printReceipt(sale, settings, t);
+    } catch {
+      toast({ title: "Could not load this receipt for printing", variant: "destructive" });
+    } finally {
+      setPrintingSaleId(null);
+    }
+  };
+
+  const applyHistoryPeriod = (period: HistoryPeriod) => {
+    setHistoryPeriod(period);
+    setHistoryPage(1);
+
+    if (period === "all") {
+      setHistoryDateFrom("");
+      setHistoryDateTo("");
+      return;
+    }
+    if (period === "custom") return;
+
+    const today = new Date();
+    let from = new Date(today);
+    let to = new Date(today);
+
+    if (period === "yesterday") {
+      from.setDate(from.getDate() - 1);
+      to = new Date(from);
+    } else if (period === "monthly") {
+      from = new Date(today.getFullYear(), today.getMonth(), 1);
+    } else if (period === "yearly") {
+      from = new Date(today.getFullYear(), 0, 1);
+    }
+
+    setHistoryDateFrom(localDateInput(from));
+    setHistoryDateTo(localDateInput(to));
+  };
+
+  const clearHistoryFilters = () => {
+    setHistorySearch("");
+    setHistoryStatus("");
+    setHistoryCurrency("");
+    setHistoryDateFrom("");
+    setHistoryDateTo("");
+    setHistoryPeriod("all");
+    setHistoryPage(1);
+  };
+
   if (!canAccess) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-2 text-muted-foreground">
+      <div className="flex h-64 flex-col items-center justify-center gap-2 text-muted-foreground">
         <Ban className="h-12 w-12" />
         <p>{t("sales.restricted")}</p>
       </div>
     );
   }
 
-  const historyItems = (historyData as unknown as { items: Record<string, unknown>[]; total: number; page: number; limit: number } | undefined);
+  const historyItems = historyData as unknown as {
+    items: Record<string, unknown>[];
+    total: number;
+    page: number;
+    limit: number;
+  } | undefined;
   const totalHistoryPages = historyItems ? Math.max(1, Math.ceil(historyItems.total / 100)) : 1;
+  const hasHistoryFilters = Boolean(historySearch || historyStatus || historyCurrency || historyDateFrom || historyDateTo);
 
-  // Group sales by calendar day, then by currency within each day
   const groupedByDay = useMemo(() => {
     const items = historyItems?.items ?? [];
     const byDay: Record<string, { usd: typeof items; cdf: typeof items }> = {};
     for (const sale of items) {
-      const day = new Date(sale.saleDate as string).toISOString().split("T")[0];
+      const day = saleDayKey(sale.saleDate);
       if (!byDay[day]) byDay[day] = { usd: [], cdf: [] };
       if ((sale.currency as string) === "USD") byDay[day].usd.push(sale);
       else byDay[day].cdf.push(sale);
@@ -935,120 +1042,165 @@ export default function Sales() {
   }, [historyItems]);
 
   return (
-    <div className="flex flex-col h-full gap-4">
+    <div className="flex h-full flex-col gap-5">
       <PageHeader
         icon={ShoppingCart}
-        iconClass="bg-emerald-500/10 text-emerald-600"
+        iconClass="bg-emerald-500/10 text-emerald-500"
         title={t("sales.title")}
+        subtitle="Fast checkout and a cleaner view of every sale"
       />
 
-      <Tabs defaultValue="pos" className="flex-1 flex flex-col">
-        <TabsList className="w-fit">
-          <TabsTrigger value="pos" className="gap-2">
+      <Tabs defaultValue="pos" className="flex flex-1 flex-col">
+        <TabsList className="h-11 w-fit rounded-xl border border-border/60 bg-card p-1 shadow-sm">
+          <TabsTrigger value="pos" className="h-8 gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
             <ShoppingCart className="h-4 w-4" />{t("sales.pos")}
           </TabsTrigger>
-          <TabsTrigger value="history" className="gap-2">
+          <TabsTrigger value="history" className="h-8 gap-2 rounded-lg px-4 data-[state=active]:shadow-sm">
             <History className="h-4 w-4" />{t("sales.history")}
           </TabsTrigger>
         </TabsList>
 
-        {/* ── POS Tab ──────────────────────────────────────────────────── */}
-        <TabsContent value="pos" className="flex-1 flex flex-col lg:flex-row gap-4 mt-4">
-
-          {/* Left panel — barcode + product search */}
-          <div className="flex flex-col gap-4 lg:w-80 flex-shrink-0">
-            {/* Barcode scanner */}
-            <div className="rounded-lg border bg-card p-4 space-y-3">
-              <Label className="font-semibold flex items-center gap-2">
-                <Barcode className="h-4 w-4" />{t("sales.barcode")}
-              </Label>
-              <Input
-                ref={barcodeRef}
-                value={barcodeInput}
-                onChange={(e) => handleBarcodeChange(e.target.value)}
-                placeholder={t("sales.barcodePlaceholder")}
-                className="font-mono"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && barcodeInput.trim()) {
-                    if (barcodeTimer) clearTimeout(barcodeTimer);
-                    addProductToCart(barcodeInput.trim());
-                    setBarcodeInput("");
-                  }
-                }}
-              />
-            </div>
-
-            {/* Product search */}
-            <div className="rounded-lg border bg-card p-4 space-y-3 relative">
-              <Label className="font-semibold flex items-center gap-2">
-                <Search className="h-4 w-4" />{t("sales.searchProduct")}
-              </Label>
-              <Input
-                value={productSearch}
-                onChange={(e) => { setProductSearch(e.target.value); setSearchOpen(true); }}
-                onFocus={() => setSearchOpen(true)}
-                placeholder={t("sales.searchProduct")}
-              />
-              {searchOpen && searchResults.length > 0 && (
-                <div className="absolute left-4 right-4 top-full z-50 mt-1 rounded-md border bg-popover shadow-md">
-                  {searchResults.map((p) => (
-                    <button
-                      key={p.id}
-                      className="w-full text-left px-3 py-2 hover:bg-accent text-sm flex justify-between gap-2"
-                      onClick={() => addFromSearch(p)}
-                    >
-                      <span>{p.name}</span>
-                      <span className="text-muted-foreground">{p.currency} {p.sellingPrice.toFixed(2)} · {p.quantity} left</span>
-                    </button>
-                  ))}
+        <TabsContent value="pos" className="mt-4 flex flex-1 flex-col gap-4 xl:flex-row">
+          <div className="flex shrink-0 flex-col gap-4 xl:w-[340px]">
+            <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+                  <Barcode className="h-5 w-5" />
                 </div>
-              )}
+                <div>
+                  <p className="font-semibold">Add products</p>
+                  <p className="text-xs text-muted-foreground">Scan a barcode or search by name</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("sales.barcode")}</Label>
+                  <div className="relative">
+                    <Barcode className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      ref={barcodeRef}
+                      value={barcodeInput}
+                      onChange={(event) => handleBarcodeChange(event.target.value)}
+                      placeholder={t("sales.barcodePlaceholder")}
+                      className="h-11 pl-9 font-mono"
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" || !barcodeInput.trim()) return;
+                        if (barcodeTimerRef.current) clearTimeout(barcodeTimerRef.current);
+                        void addProductToCart(barcodeInput);
+                        setBarcodeInput("");
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="relative space-y-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("sales.searchProduct")}</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={productSearch}
+                      onChange={(event) => { setProductSearch(event.target.value); setSearchOpen(true); }}
+                      onFocus={() => setSearchOpen(true)}
+                      placeholder={t("sales.searchProduct")}
+                      className="h-11 pl-9"
+                    />
+                  </div>
+
+                  {searchOpen && searchResults.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-border/70 bg-popover shadow-xl">
+                      {searchResults.map((product) => (
+                        <button
+                          key={product.id}
+                          type="button"
+                          className="flex w-full items-center justify-between gap-3 border-b border-border/40 px-3 py-3 text-left text-sm last:border-0 hover:bg-accent"
+                          onClick={() => addFromSearch(product)}
+                        >
+                          <span className="min-w-0 truncate font-medium">{product.name}</span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {fmtMoney(product.sellingPrice, product.currency === "CDF" ? "FC" : "$")} · {product.quantity} left
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
-            {/* Currency selector */}
-            <div className="rounded-lg border bg-card p-4 space-y-3">
-              <Label className="font-semibold">{t("sales.currency")}</Label>
-              <Select value={saleCurrency} onValueChange={(v) => setSaleCurrency(v as "USD" | "CDF")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="USD">USD</SelectItem>
-                  <SelectItem value="CDF">CDF</SelectItem>
-                </SelectContent>
-              </Select>
-              {saleCurrency === "CDF" && (
-                <p className="text-xs text-muted-foreground">Rate: 1 USD = {exchangeRate.toLocaleString()} CDF</p>
-              )}
+            <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CircleDollarSign className="h-4 w-4 text-primary" />
+                  <Label className="font-semibold">{t("sales.currency")}</Label>
+                </div>
+                <Badge variant="outline" className="font-mono">1 USD = {exchangeRate.toLocaleString()} CDF</Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {(["CDF", "USD"] as const).map((currency) => (
+                  <button
+                    key={currency}
+                    type="button"
+                    onClick={() => setSaleCurrency(currency)}
+                    className={cn(
+                      "rounded-xl border px-3 py-3 text-left transition-colors",
+                      saleCurrency === currency
+                        ? "border-primary/50 bg-primary/10 text-foreground"
+                        : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40",
+                    )}
+                  >
+                    <p className="font-semibold">{currency === "CDF" ? "FC / CDF" : "$ / USD"}</p>
+                    <p className="mt-0.5 text-xs">{saleCurrency === currency ? "Selected" : "Use currency"}</p>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Right panel — cart + checkout */}
-          <div className="flex flex-col gap-4 flex-1 min-w-0">
-            {/* Cart table */}
-            <div className="rounded-lg border bg-card flex-1 flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between p-3 border-b">
-                <h2 className="font-semibold flex items-center gap-2">
-                  <ShoppingCart className="h-4 w-4" />
-                  {t("sales.cart")}
-                  {cart.length > 0 && <Badge variant="secondary">{cart.length}</Badge>}
-                </h2>
+          <div className="flex min-w-0 flex-1 flex-col gap-4">
+            <div className="flex min-h-[440px] flex-1 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+              <div className="flex items-center justify-between border-b border-border/60 px-5 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <ShoppingCart className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-semibold">{t("sales.cart")}</h2>
+                      {cart.length > 0 && <Badge variant="secondary">{cart.length}</Badge>}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Review quantities and discounts before checkout</p>
+                  </div>
+                </div>
+
                 {cart.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={clearCart} className="text-muted-foreground gap-1 text-xs">
-                    <Trash2 className="h-3 w-3" />{t("sales.clearCart")}
-                  </Button>
+                  <div className="flex items-center gap-3">
+                    <div className="hidden text-right sm:block">
+                      <p className="text-xs text-muted-foreground">Current total</p>
+                      <p className="font-bold tabular-nums">{fmt(cartTotals.total)}</p>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={clearCart} className="gap-1.5 text-muted-foreground hover:text-destructive">
+                      <Trash2 className="h-3.5 w-3.5" />{t("sales.clearCart")}
+                    </Button>
+                  </div>
                 )}
               </div>
 
               {cart.length === 0 ? (
-                <div className="flex flex-col items-center justify-center flex-1 gap-2 py-12 text-muted-foreground">
-                  <ShoppingCart className="h-12 w-12 opacity-30" />
-                  <p className="font-medium">{t("sales.cartEmpty")}</p>
-                  <p className="text-sm text-center max-w-xs">{t("sales.cartEmptyHint")}</p>
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+                  <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-muted/50">
+                    <ShoppingCart className="h-9 w-9 text-muted-foreground/35" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground">{t("sales.cartEmpty")}</p>
+                    <p className="mt-1 max-w-sm text-sm text-muted-foreground">{t("sales.cartEmptyHint")}</p>
+                  </div>
                 </div>
               ) : (
-                <div className="overflow-auto flex-1">
-                  <Table>
+                <div className="flex-1 overflow-auto">
+                  <Table className="min-w-[760px]">
                     <TableHeader>
-                      <TableRow>
+                      <TableRow className="hover:bg-transparent">
                         <TableHead>{t("sales.col.product")}</TableHead>
                         <TableHead>{t("sales.col.qty")}</TableHead>
                         <TableHead className="text-right">{t("sales.col.price")}</TableHead>
@@ -1056,7 +1208,7 @@ export default function Sales() {
                         <TableHead className="text-right">{t("sales.col.total")}</TableHead>
                         {canViewCost && <TableHead className="text-right text-xs">{t("sales.col.cost")}</TableHead>}
                         {canViewProfit && <TableHead className="text-right text-xs">{t("sales.col.profit")}</TableHead>}
-                        <TableHead></TableHead>
+                        <TableHead className="w-12" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1080,167 +1232,253 @@ export default function Sales() {
               )}
             </div>
 
-            {/* Checkout panel — sticky on mobile when cart has items */}
             {cart.length > 0 && (
-              <div className="rounded-lg border bg-card p-4 space-y-4 md:static sticky bottom-0 z-10 shadow-lg md:shadow-none">
-                <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                  {cartTotals.discount > 0 && (
-                    <>
-                      <span className="text-muted-foreground">{t("sales.totalDiscount")}</span>
-                      <span className="text-right text-destructive font-medium">-{fmt(cartTotals.discount)}</span>
-                    </>
-                  )}
-                  {canViewCost && (
-                    <>
-                      <span className="text-muted-foreground">{t("sales.col.cost")}</span>
-                      <span className="text-right">{fmt(cartTotals.cost)}</span>
-                    </>
-                  )}
-                  {canViewProfit && (
-                    <>
-                      <span className="text-muted-foreground">{t("sales.col.profit")}</span>
-                      <span className={`text-right font-medium ${cartTotals.profit >= 0 ? "text-green-600" : "text-red-600"}`}>{fmt(cartTotals.profit)}</span>
-                    </>
-                  )}
-                  <span className="font-bold text-base">{t("sales.grandTotal")}</span>
-                  <span className="text-right font-bold text-base">{fmt(cartTotals.total)}</span>
-                </div>
+              <div className="sticky bottom-0 z-10 rounded-2xl border border-border/60 bg-card p-4 shadow-xl md:static md:shadow-sm">
+                <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">{t("sales.paymentAmount")}</Label>
+                      <div className="relative">
+                        <CreditCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={paymentAmount || ""}
+                          onChange={(event) => setPaymentAmount(parseFloat(event.target.value) || 0)}
+                          className="h-10 pl-9 text-right font-semibold"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">{t("sales.changeDue")}</Label>
+                      <Input readOnly value={fmt(changeDue)} className="h-10 bg-muted/40 text-right font-semibold" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">{t("sales.notes")}</Label>
+                      <Input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Optional note…" className="h-10" />
+                    </div>
+                  </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <Label>{t("sales.paymentAmount")}</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={paymentAmount || ""}
-                      onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
-                      className="text-right"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>{t("sales.changeDue")}</Label>
-                    <Input readOnly value={fmt(changeDue)} className="text-right font-semibold bg-muted" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>{t("sales.notes")}</Label>
-                    <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="..." />
+                  <div className="flex flex-col gap-2 lg:min-w-[280px]">
+                    <div className="flex items-end justify-between gap-4 px-1">
+                      <div className="space-y-0.5 text-xs text-muted-foreground">
+                        {cartTotals.discount > 0 && <p>Discount: <span className="font-medium text-destructive">-{fmt(cartTotals.discount)}</span></p>}
+                        {canViewCost && <p>Cost: <span className="font-medium text-foreground">{fmt(cartTotals.cost)}</span></p>}
+                        {canViewProfit && <p>Profit: <span className={cn("font-medium", cartTotals.profit >= 0 ? "text-emerald-500" : "text-red-500")}>{fmt(cartTotals.profit)}</span></p>}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">{t("sales.grandTotal")}</p>
+                        <p className="text-2xl font-bold tracking-tight tabular-nums">{fmt(cartTotals.total)}</p>
+                      </div>
+                    </div>
+                    <Button
+                      className="h-11 w-full font-semibold"
+                      onClick={handleCompleteSale}
+                      disabled={completing || paymentAmount < cartTotals.total}
+                    >
+                      {completing ? t("common.loading") : t("sales.completeSale")}
+                    </Button>
                   </div>
                 </div>
-
-                <Button
-                  className="w-full h-12 text-base font-bold"
-                  onClick={handleCompleteSale}
-                  disabled={completing || cart.length === 0 || paymentAmount < cartTotals.total}
-                >
-                  {completing ? t("common.loading") : `✓ ${t("sales.completeSale")} — ${fmt(cartTotals.total)}`}
-                </Button>
               </div>
             )}
           </div>
         </TabsContent>
 
-        {/* ── History Tab ───────────────────────────────────────────────── */}
-        <TabsContent value="history" className="flex-1 flex flex-col gap-4 mt-4">
-          {/* Filter bar */}
-          <div className="flex flex-wrap gap-2">
-            <div className="relative flex-1 min-w-[180px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                className="pl-9"
-                placeholder={t("sales.history.number") + " / " + t("sales.history.by")}
-                value={historySearch}
-                onChange={(e) => { setHistorySearch(e.target.value); setHistoryPage(1); }}
-              />
+        <TabsContent value="history" className="mt-4 flex flex-1 flex-col gap-4">
+          <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="font-semibold">Sales history</p>
+                <p className="text-xs text-muted-foreground">Find sales quickly by period, currency, status, or receipt number</p>
+              </div>
+
+              <div className="relative w-full lg:w-80">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="h-10 pl-9"
+                  placeholder={`${t("sales.history.number")} / ${t("sales.history.by")}`}
+                  value={historySearch}
+                  onChange={(event) => { setHistorySearch(event.target.value); setHistoryPage(1); }}
+                />
+              </div>
             </div>
 
-            {/* Currency pills */}
-            <div className="flex rounded-md border overflow-hidden shrink-0">
-              {(["", "USD", "CDF"] as const).map((cur) => (
-                <button
-                  key={cur || "all"}
-                  className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-                    historyCurrency === cur
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted text-muted-foreground"
-                  }`}
-                  onClick={() => { setHistoryCurrency(cur); setHistoryPage(1); }}
-                >
-                  {cur === "" ? "All" : cur}
-                </button>
-              ))}
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap gap-1 rounded-xl bg-muted/50 p-1">
+                  {([
+                    ["today", "Today"],
+                    ["yesterday", "Yesterday"],
+                    ["all", "All"],
+                    ["monthly", "Monthly"],
+                    ["yearly", "Yearly"],
+                  ] as Array<[HistoryPeriod, string]>).map(([period, label]) => (
+                    <button
+                      key={period}
+                      type="button"
+                      onClick={() => applyHistoryPeriod(period)}
+                      className={cn(
+                        "rounded-lg px-3 py-1.5 text-sm font-medium transition-all",
+                        historyPeriod === period
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex overflow-hidden rounded-xl border border-border/60 bg-background">
+                  {(["", "USD", "CDF"] as const).map((currency) => (
+                    <button
+                      key={currency || "all-currency"}
+                      type="button"
+                      className={cn(
+                        "px-3 py-2 text-sm font-medium transition-colors",
+                        historyCurrency === currency
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted",
+                      )}
+                      onClick={() => { setHistoryCurrency(currency); setHistoryPage(1); }}
+                    >
+                      {currency === "" ? "All currencies" : currency}
+                    </button>
+                  ))}
+                </div>
+
+                <Select value={historyStatus || "all"} onValueChange={(value) => { setHistoryStatus(value === "all" ? "" : value); setHistoryPage(1); }}>
+                  <SelectTrigger className="h-10 w-40 shrink-0 rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    <SelectItem value="completed">{t("sales.status.completed")}</SelectItem>
+                    <SelectItem value="voided">{t("sales.status.voided")}</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {hasHistoryFilters && (
+                  <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={clearHistoryFilters}>
+                    <RotateCcw className="h-3.5 w-3.5" />Reset
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-end gap-2 border-t border-border/50 pt-3">
+                <div className="space-y-1">
+                  <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">From</Label>
+                  <Input
+                    type="date"
+                    value={historyDateFrom}
+                    onChange={(event) => { setHistoryDateFrom(event.target.value); setHistoryPeriod("custom"); setHistoryPage(1); }}
+                    className="h-9 w-40 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">To</Label>
+                  <Input
+                    type="date"
+                    value={historyDateTo}
+                    onChange={(event) => { setHistoryDateTo(event.target.value); setHistoryPeriod("custom"); setHistoryPage(1); }}
+                    className="h-9 w-40 rounded-xl"
+                  />
+                </div>
+                <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+                  <CalendarDays className="h-4 w-4" />
+                  <span>{historyItems?.total ?? 0} sale{(historyItems?.total ?? 0) === 1 ? "" : "s"} found</span>
+                </div>
+              </div>
             </div>
-
-            {/* Status */}
-            <Select value={historyStatus || "all"} onValueChange={(v) => { setHistoryStatus(v === "all" ? "" : v); setHistoryPage(1); }}>
-              <SelectTrigger className="w-36 shrink-0"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="completed">{t("sales.status.completed")}</SelectItem>
-                <SelectItem value="voided">{t("sales.status.voided")}</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Date range */}
-            <input
-              type="date"
-              value={historyDateFrom}
-              onChange={(e) => { setHistoryDateFrom(e.target.value); setHistoryPage(1); }}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground shrink-0"
-            />
-            <input
-              type="date"
-              value={historyDateTo}
-              onChange={(e) => { setHistoryDateTo(e.target.value); setHistoryPage(1); }}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground shrink-0"
-            />
           </div>
 
-          {/* Grouped sales list */}
           {!historyItems || historyItems.items.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground rounded-lg border">
-              <ReceiptText className="h-10 w-10 opacity-30" />
-              <p>{t("sales.empty")}</p>
-              <p className="text-sm">{t("sales.emptyHint")}</p>
+            <div className="flex min-h-72 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/70 bg-card/40 px-6 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+                <ReceiptText className="h-7 w-7 text-muted-foreground/40" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">{t("sales.empty")}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{hasHistoryFilters ? "No sales match the selected filters." : t("sales.emptyHint")}</p>
+              </div>
+              {hasHistoryFilters && <Button variant="outline" size="sm" onClick={clearHistoryFilters}>Clear filters</Button>}
             </div>
           ) : (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-4">
               {groupedByDay.map(([dayKey, { usd, cdf }]) => {
-                const dayLabel = new Date(dayKey + "T12:00:00").toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+                const dayLabel = dayKey === "unknown"
+                  ? "Unknown date"
+                  : new Date(`${dayKey}T12:00:00`).toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
                 const showBothCurrencies = historyCurrency === "" && usd.length > 0 && cdf.length > 0;
 
                 const renderSaleRow = (sale: Record<string, unknown>) => {
-                  const cur = sale.currency as string;
-                  const curSym = cur === "USD" ? "$" : "FC";
-                  const fmtS = (n: number) => `${curSym} ${Number(n).toFixed(2)}`;
+                  const currency = sale.currency as string;
+                  const sym = currency === "USD" ? "$" : "FC";
+                  const formatSaleMoney = (value: number) => fmtMoney(Number(value), sym);
+                  const saleNumber = (sale.saleNumber as string) || `#${sale.id as number}`;
+                  const time = sale.saleDate
+                    ? new Date(sale.saleDate as string).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
+                    : "";
+
                   return (
-                    <div key={sale.id as number} className={`flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40 transition-colors ${sale.status === "voided" ? "opacity-50" : ""}`}>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-muted-foreground">#{sale.id as number}</p>
-                        <p className="font-semibold tabular-nums text-sm">{fmtS(sale.totalAmount as number)}</p>
+                    <div
+                      key={sale.id as number}
+                      className={cn(
+                        "grid grid-cols-[minmax(130px,1.2fr)_minmax(110px,1fr)_minmax(120px,1fr)_auto] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/30 lg:grid-cols-[minmax(150px,1.4fr)_1fr_1fr_minmax(120px,1fr)_auto]",
+                        sale.status === "voided" && "opacity-55",
+                      )}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{saleNumber}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{time || (sale.createdBy as string) || "—"}</p>
                       </div>
-                      <div className="hidden sm:flex flex-col items-end text-xs text-muted-foreground">
-                        <span>Paid: {fmtS(sale.paymentAmount as number)}</span>
-                        <span>Change: {fmtS(sale.changeDue as number)}</span>
+
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Total</p>
+                        <p className="font-semibold tabular-nums">{formatSaleMoney(sale.totalAmount as number)}</p>
                       </div>
-                      <Badge variant={sale.status === "voided" ? "destructive" : "default"} className="text-xs shrink-0">
-                        {t(`sales.status.${sale.status as string}`)}
-                      </Badge>
-                      <div className="flex gap-0.5 shrink-0">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setViewSaleId(sale.id as number)}>
-                          <Eye className="h-3.5 w-3.5" />
+
+                      <div className="hidden sm:block">
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Paid / change</p>
+                        <p className="text-sm tabular-nums">{formatSaleMoney(sale.paymentAmount as number)}</p>
+                        <p className="text-xs tabular-nums text-muted-foreground">Change {formatSaleMoney(sale.changeDue as number)}</p>
+                      </div>
+
+                      <div className="hidden lg:block">
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Status</p>
+                        <Badge variant={sale.status === "voided" ? "destructive" : "default"} className="mt-1 text-xs">
+                          {t(`sales.status.${sale.status as string}`)}
+                        </Badge>
+                      </div>
+
+                      <div className="flex justify-end gap-0.5">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setViewSaleId(sale.id as number)} aria-label={`View ${saleNumber}`}>
+                          <Eye className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { if (settings) printReceipt(sale, settings, t); toast({ title: t("sales.toast.printed") }); }}>
-                          <Printer className="h-3.5 w-3.5" />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => void handlePrintSale(sale.id as number)}
+                          disabled={printingSaleId === sale.id}
+                          aria-label={`Print ${saleNumber}`}
+                        >
+                          <Printer className="h-4 w-4" />
                         </Button>
                         {isAdmin && sale.status !== "voided" && (
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditSaleId(sale.id as number)}>
-                            <Pencil className="h-3.5 w-3.5" />
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditSaleId(sale.id as number)} aria-label={`Edit ${saleNumber}`}>
+                            <Pencil className="h-4 w-4" />
                           </Button>
                         )}
                         {sale.status !== "voided" && canManage && (
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => { setVoidSaleId(sale.id as number); setVoidingSale(sale); }}>
-                            <Ban className="h-3.5 w-3.5" />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => { setVoidSaleId(sale.id as number); setVoidingSale(sale); }}
+                            aria-label={`Void ${saleNumber}`}
+                          >
+                            <Ban className="h-4 w-4" />
                           </Button>
                         )}
                       </div>
@@ -1249,40 +1487,38 @@ export default function Sales() {
                 };
 
                 return (
-                  <div key={dayKey} className="rounded-lg border overflow-hidden">
-                    {/* Day header */}
-                    <div className="px-4 py-2 bg-muted/50 border-b flex items-center justify-between">
-                      <span className="font-semibold text-sm">{dayLabel}</span>
-                      <span className="text-xs text-muted-foreground">{usd.length + cdf.length} sales</span>
+                  <div key={dayKey} className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+                    <div className="flex items-center justify-between border-b border-border/60 bg-muted/30 px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-background text-muted-foreground shadow-sm">
+                          <CalendarDays className="h-4 w-4" />
+                        </div>
+                        <span className="text-sm font-semibold">{dayLabel}</span>
+                      </div>
+                      <Badge variant="secondary">{usd.length + cdf.length} sale{usd.length + cdf.length === 1 ? "" : "s"}</Badge>
                     </div>
 
-                    {/* USD group */}
                     {usd.length > 0 && (
                       <>
                         {showBothCurrencies && (
-                          <div className="px-4 py-1.5 bg-green-500/5 border-b flex items-center gap-2">
-                            <span className="text-xs font-semibold text-green-700 dark:text-green-400">$ USD</span>
-                            <span className="text-xs text-muted-foreground">{usd.length} {usd.length === 1 ? "sale" : "sales"}</span>
+                          <div className="flex items-center gap-2 border-b border-border/40 bg-emerald-500/5 px-4 py-2">
+                            <span className="text-xs font-semibold text-emerald-500">$ USD</span>
+                            <span className="text-xs text-muted-foreground">{usd.length} sale{usd.length === 1 ? "" : "s"}</span>
                           </div>
                         )}
-                        <div className="divide-y divide-border/40">
-                          {usd.map(renderSaleRow)}
-                        </div>
+                        <div className="divide-y divide-border/40">{usd.map(renderSaleRow)}</div>
                       </>
                     )}
 
-                    {/* CDF group */}
                     {cdf.length > 0 && (
                       <>
                         {showBothCurrencies && (
-                          <div className="px-4 py-1.5 bg-blue-500/5 border-b border-t flex items-center gap-2">
-                            <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">FC CDF</span>
-                            <span className="text-xs text-muted-foreground">{cdf.length} {cdf.length === 1 ? "sale" : "sales"}</span>
+                          <div className="flex items-center gap-2 border-y border-border/40 bg-blue-500/5 px-4 py-2">
+                            <span className="text-xs font-semibold text-blue-500">FC CDF</span>
+                            <span className="text-xs text-muted-foreground">{cdf.length} sale{cdf.length === 1 ? "" : "s"}</span>
                           </div>
                         )}
-                        <div className="divide-y divide-border/40">
-                          {cdf.map(renderSaleRow)}
-                        </div>
+                        <div className="divide-y divide-border/40">{cdf.map(renderSaleRow)}</div>
                       </>
                     )}
                   </div>
@@ -1291,16 +1527,15 @@ export default function Sales() {
             </div>
           )}
 
-          {/* Pagination */}
           {historyItems && historyItems.total > 100 && (
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>{historyItems.total} total</span>
+            <div className="flex items-center justify-between rounded-xl border border-border/60 bg-card px-4 py-3 text-sm text-muted-foreground">
+              <span>{historyItems.total} total sales</span>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon" disabled={historyPage <= 1} onClick={() => setHistoryPage((p) => p - 1)}>
+                <Button variant="outline" size="icon" className="h-8 w-8" disabled={historyPage <= 1} onClick={() => setHistoryPage((page) => page - 1)}>
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <span>{t("common.page")} {historyPage} {t("common.of")} {totalHistoryPages}</span>
-                <Button variant="outline" size="icon" disabled={historyPage >= totalHistoryPages} onClick={() => setHistoryPage((p) => p + 1)}>
+                <Button variant="outline" size="icon" className="h-8 w-8" disabled={historyPage >= totalHistoryPages} onClick={() => setHistoryPage((page) => page + 1)}>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -1309,7 +1544,6 @@ export default function Sales() {
         </TabsContent>
       </Tabs>
 
-      {/* ── Sale Detail Modal ──────────────────────────────────────────────── */}
       <SaleDetailDialog
         saleId={viewSaleId}
         open={!!viewSaleId}
@@ -1320,17 +1554,21 @@ export default function Sales() {
         t={t}
       />
 
-      {/* ── Edit Sale Dialog (admin only) ──────────────────────────────────── */}
       <SaleEditDialog
         saleId={editSaleId}
         open={!!editSaleId}
         onClose={() => setEditSaleId(null)}
-        onSaved={() => queryClient.invalidateQueries()}
+        onSaved={() => { void queryClient.invalidateQueries(); }}
         t={t}
       />
 
-      {/* ── Void Confirm Dialog ────────────────────────────────────────────── */}
-      <AlertDialog open={!!voidSaleId} onOpenChange={(o) => { if (!o) { setVoidSaleId(null); setVoidReason(""); setVoidingSale(null); } }}>
+      <AlertDialog open={!!voidSaleId} onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          setVoidSaleId(null);
+          setVoidReason("");
+          setVoidingSale(null);
+        }
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
@@ -1338,9 +1576,7 @@ export default function Sales() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {t("sales.voidConfirm")}
-              {voidingSale && (
-                <span className="block mt-1 font-semibold">{voidingSale.saleNumber as string}</span>
-              )}
+              {voidingSale && <span className="mt-1 block font-semibold">{(voidingSale.saleNumber as string) || `#${voidingSale.id as number}`}</span>}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="px-1 py-2">
@@ -1349,7 +1585,7 @@ export default function Sales() {
               className="mt-1"
               rows={2}
               value={voidReason}
-              onChange={(e) => setVoidReason(e.target.value)}
+              onChange={(event) => setVoidReason(event.target.value)}
               placeholder={t("sales.voidReason")}
             />
           </div>
