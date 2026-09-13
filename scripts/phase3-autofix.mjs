@@ -136,6 +136,7 @@ const generatedContracts = fs.readFileSync(generatedContractsPath, "utf8");
 const unresolved = [];
 let changedFiles = 0;
 let changedAssertions = 0;
+let narrowedUsers = 0;
 
 for (const file of files(routesDir)) {
   const fileName = path.relative(routesDir, file).replaceAll(path.sep, "/");
@@ -155,9 +156,7 @@ for (const file of files(routesDir)) {
 
   const replacements = [];
   const usedHelpers = new Set();
-  let searchFrom = 0;
   const assertionPattern = /req\.(body|query|params)\s+as\s+/g;
-  assertionPattern.lastIndex = searchFrom;
 
   for (const match of text.matchAll(assertionPattern)) {
     const index = match.index ?? 0;
@@ -218,6 +217,15 @@ for (const file of files(routesDir)) {
     }
   }
 
+  const userMatches = text.match(/const user = req\.__gymproUser;/g)?.length ?? 0;
+  if (userMatches > 0) {
+    text = text.replaceAll("const user = req.__gymproUser;", "const user = authenticatedUser(req);");
+    narrowedUsers += userMatches;
+    if (!text.includes('import { authenticatedUser } from "../middlewares/auth";')) {
+      text = `import { authenticatedUser } from "../middlewares/auth";\n${text}`;
+    }
+  }
+
   if (text !== before) {
     fs.writeFileSync(file, text);
     changedFiles += 1;
@@ -230,4 +238,4 @@ if (unresolved.length > 0) {
   process.exit(1);
 }
 
-console.log(`Phase 3 request-contract codemod complete: ${changedAssertions} assertions across ${changedFiles} files.`);
+console.log(`Phase 3 request-contract codemod complete: ${changedAssertions} assertions, ${narrowedUsers} authenticated-user narrowings across ${changedFiles} files.`);
