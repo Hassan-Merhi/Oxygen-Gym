@@ -9,6 +9,8 @@ on:
       - scripts/phase3-any-cleanup.mjs
       - scripts/phase3-openapi-sync.mjs
       - scripts/src/architecture-audit.ts
+      - scripts/src/request-boundary-audit.ts
+      - scripts/package.json
       - artifacts/api-server/src/http/contracts.ts
       - artifacts/api-server/src/app.ts
       - artifacts/api-server/src/lib/sql-rows.ts
@@ -62,3 +64,5 @@ jobs:
           fi
       - name: Validate full Phase 3 architecture gate
         run: pnpm run architecture:check
+      - name: Validate production build
+        run: pnpm run build
