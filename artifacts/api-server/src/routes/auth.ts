@@ -1,7 +1,14 @@
 import { authenticatedUser } from "../middlewares/auth";
 import { Router, type Request, type Response } from "express";
 import bcrypt from "bcryptjs";
-import { db, usersTable, defaultAdminPermissions, activityLogsTable } from "@workspace/db";
+import {
+  db,
+  usersTable,
+  defaultAdminPermissions,
+  defaultManagerPermissions,
+  defaultStaffPermissions,
+  activityLogsTable,
+} from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import {
   ChangePasswordBody,
@@ -224,6 +231,27 @@ router.post("/change-password", requireAuth(), async (req: Request, res: Respons
   res.json({ ok: true });
 });
 
+function roleDefaultPermissions(role: string) {
+  if (role === "admin") return defaultAdminPermissions;
+  if (role === "manager") return defaultManagerPermissions;
+  return defaultStaffPermissions;
+}
+
+function normalizedPermissions(user: UserRecord) {
+  const defaults = roleDefaultPermissions(user.role);
+  const stored = user.permissions && typeof user.permissions === "object"
+    ? user.permissions as Record<string, unknown>
+    : {};
+  const normalized = { ...defaults };
+
+  for (const key of Object.keys(defaults) as Array<keyof typeof defaults>) {
+    const value = stored[key];
+    if (typeof value === "boolean") normalized[key] = value;
+  }
+
+  return normalized;
+}
+
 function safeUser(user: UserRecord) {
   return {
     id: user.id,
@@ -232,7 +260,7 @@ function safeUser(user: UserRecord) {
     email: user.email,
     role: user.role,
     status: user.status,
-    permissions: user.permissions,
+    permissions: normalizedPermissions(user),
     lastLoginAt: user.lastLoginAt,
   };
 }
