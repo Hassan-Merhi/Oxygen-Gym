@@ -401,6 +401,20 @@ export default function AccountsPage() {
     const isDebitNormal = selected.type === "asset" || selected.type === "expense";
     const effectiveRows = collapseAccountingRows(statement?.rows ?? []);
 
+    // Build the true all-time account balance first. Date and currency filters below
+    // must never change this canonical balance. The account ledger is denominated
+    // in USD for its running/current balance, while each transaction keeps both
+    // native and converted values for the currency tabs.
+    let allTimeBalanceUsd = 0;
+    const balanceAfterRow = new Map<number, number>();
+    for (const row of effectiveRows) {
+      const deltaUsd = isDebitNormal
+        ? row.debitUsd - row.creditUsd
+        : row.creditUsd - row.debitUsd;
+      allTimeBalanceUsd += deltaUsd;
+      balanceAfterRow.set(row.id, allTimeBalanceUsd);
+    }
+
     const periodRows = effectiveRows.filter((row) => withinDateRange(row, dateFrom, dateTo));
     const nativeRows = periodRows.filter((row) => {
       const nativeCurrency = (row.currency ?? "USD").toUpperCase();
@@ -410,19 +424,22 @@ export default function AccountsPage() {
     });
 
     const displayCurrency: "USD" | "CDF" = currencyView === "CDF" ? "CDF" : "USD";
-    let runningBalance = 0;
     const rows: DisplayRow[] = nativeRows.map((row) => {
       const debit = displayCurrency === "CDF" ? row.debitCdf : row.debitUsd;
       const credit = displayCurrency === "CDF" ? row.creditCdf : row.creditUsd;
       const inAmount = isDebitNormal ? debit : credit;
       const outAmount = isDebitNormal ? credit : debit;
-      runningBalance += isDebitNormal ? debit - credit : credit - debit;
-      return { ...row, inAmount, outAmount, balance: runningBalance };
+      return {
+        ...row,
+        inAmount,
+        outAmount,
+        balance: balanceAfterRow.get(row.id) ?? allTimeBalanceUsd,
+      };
     });
 
     const totalIn = rows.reduce((sum, row) => sum + row.inAmount, 0);
     const totalOut = rows.reduce((sum, row) => sum + row.outAmount, 0);
-    const balance = rows.at(-1)?.balance ?? 0;
+    const balance = allTimeBalanceUsd;
 
     return (
       <div className="mx-auto max-w-6xl space-y-5">
@@ -465,11 +482,14 @@ export default function AccountsPage() {
           </div>
           <div className="flex min-h-[112px] flex-col justify-between rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-muted-foreground">Balance</span>
+              <div>
+                <span className="text-sm font-medium text-muted-foreground">Balance</span>
+                <p className="mt-0.5 text-[11px] text-muted-foreground/70">Current · all time · USD</p>
+              </div>
               <BarChart3 className="h-4 w-4 text-blue-500" />
             </div>
             <p className={cn("mt-3 text-right text-2xl font-bold tabular-nums", balance < 0 ? "text-rose-500" : "text-blue-500")}>
-              {formatMoney(balance, displayCurrency)}
+              {formatMoney(balance, "USD")}
             </p>
           </div>
         </div>
@@ -532,9 +552,9 @@ export default function AccountsPage() {
           )}
 
           <p className="mt-2 text-xs text-muted-foreground">
-            {currencyView === "USD" && "Showing only transactions originally paid in USD."}
-            {currencyView === "CDF" && "Showing only transactions originally paid in FC/CDF, with no USD conversion."}
-            {currencyView === "BOTH" && "Showing USD and FC/CDF transactions together in USD using each transaction's saved exchange rate."}
+            {currencyView === "USD" && "Showing only transactions originally paid in USD. Current balance remains the all-time account balance."}
+            {currencyView === "CDF" && "Showing only transactions originally paid in FC/CDF, with no USD conversion. Current balance remains the all-time account balance in USD."}
+            {currencyView === "BOTH" && "Showing USD and FC/CDF transactions together in USD using each transaction's saved exchange rate. Current balance is always all time."}
           </p>
         </div>
 
@@ -547,7 +567,7 @@ export default function AccountsPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Description</th>
                   <th className="w-[150px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">In</th>
                   <th className="w-[150px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Out</th>
-                  <th className="w-[170px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Balance</th>
+                  <th className="w-[170px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Balance (USD)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
@@ -576,7 +596,7 @@ export default function AccountsPage() {
                       {row.outAmount > 0 ? <span className="font-semibold text-rose-500">{formatMoney(row.outAmount, displayCurrency)}</span> : <span className="text-muted-foreground/30">—</span>}
                     </td>
                     <td className={cn("px-4 py-3.5 text-right align-middle font-semibold tabular-nums", row.balance < 0 && "text-rose-500")}>
-                      {formatMoney(row.balance, displayCurrency)}
+                      {formatMoney(row.balance, "USD")}
                     </td>
                   </tr>
                 ))}
@@ -589,7 +609,7 @@ export default function AccountsPage() {
               <span className="mr-auto text-muted-foreground">{rows.length.toLocaleString()} transactions</span>
               <span className="font-medium text-emerald-500">In {formatMoney(totalIn, displayCurrency)}</span>
               <span className="font-medium text-rose-500">Out {formatMoney(totalOut, displayCurrency)}</span>
-              <span className="font-bold">Balance {formatMoney(balance, displayCurrency)}</span>
+              <span className="font-bold">Current balance {formatMoney(balance, "USD")}</span>
             </div>
           )}
         </div>
