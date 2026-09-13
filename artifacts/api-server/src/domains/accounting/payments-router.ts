@@ -23,7 +23,6 @@ import {
   updatePayment,
   type UpdatePaymentInput,
 } from "./payment-service";
-import { cashCleanup } from "./cash-cleanup-service";
 
 const router = Router();
 router.use(requireAuth());
@@ -99,10 +98,12 @@ router.post("/", async (req, res) => {
   res.status(201).json(payment);
 });
 
-router.all("/admin/cash-cleanup", requireAdmin(), async (req, res) => {
-  const body = req.body && typeof req.body === "object" ? req.body as Record<string, unknown> : {};
-  const dryRun = req.method === "GET" || body.dry_run !== false;
-  res.json(await cashCleanup(dryRun, getCurrentUser(req).name));
+// Historical cleanup is intentionally unavailable in the running service.
+// It now lives behind the guarded offline DB repair scripts.
+router.all("/admin/cash-cleanup", requireAdmin(), async (_req, res) => {
+  res.status(410).json({
+    error: "Cash cleanup is an offline admin operation. Run the guarded repair:legacy-financials database script explicitly.",
+  });
 });
 
 router.post("/:id/send-receipt", async (req, res) => {

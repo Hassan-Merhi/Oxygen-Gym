@@ -1,4 +1,4 @@
-import { db, systemCountersTable } from "@workspace/db";
+import { db, systemCountersTable, type DbExecutor } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
 const PREFIXES: Record<string, string> = {
@@ -13,17 +13,17 @@ const PREFIXES: Record<string, string> = {
 };
 
 /**
- * Atomically increment a document counter in one PostgreSQL statement.
- *
- * The previous select-then-update implementation allowed two concurrent
- * requests to read the same counter and issue the same financial document
- * number. The upsert below is serialized by PostgreSQL's row-level conflict
- * handling and returns the committed next value.
+ * Allocate a sequential business number with a single atomic UPSERT.
+ * Passing a transaction executor keeps number allocation in the same unit of
+ * work as the record being created and avoids nested transactions.
  */
-export async function getNextNumber(entity: string): Promise<string> {
+export async function getNextNumber(
+  entity: string,
+  executor: DbExecutor = db,
+): Promise<string> {
   const prefix = PREFIXES[entity] ?? entity.toUpperCase().slice(0, 3);
 
-  const [counter] = await db
+  const [counter] = await executor
     .insert(systemCountersTable)
     .values({ entity, currentCount: 1 })
     .onConflictDoUpdate({
@@ -35,6 +35,9 @@ export async function getNextNumber(entity: string): Promise<string> {
     })
     .returning({ currentCount: systemCountersTable.currentCount });
 
-  if (!counter) throw new Error(`Failed to allocate document number for ${entity}`);
+  if (!counter) {
+    throw new Error(`Unable to allocate sequence number for ${entity}`);
+  }
+
   return `${prefix}-${String(counter.currentCount).padStart(6, "0")}`;
 }

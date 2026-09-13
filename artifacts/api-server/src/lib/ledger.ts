@@ -1,9 +1,6 @@
-import { db } from "@workspace/db";
+import { db, withTransaction, type DbExecutor } from "@workspace/db";
 import { cashLedgerTable } from "@workspace/db/schema";
 import { desc, sql } from "drizzle-orm";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Executor = any;
 
 export interface LedgerEntryInput {
   entryDate?: Date;
@@ -18,28 +15,23 @@ export interface LedgerEntryInput {
   createdBy?: string;
 }
 
-export async function appendLedgerEntry(
+async function appendLedgerEntryWithExecutor(
   input: LedgerEntryInput,
-  executor: Executor = db,
+  executor: DbExecutor,
 ): Promise<void> {
-  // A standalone append still gets a real transaction so the advisory lock spans
-  // both the previous-balance read and the new row insert.
-  if (executor === db) {
-    await db.transaction(async (tx) => appendLedgerEntry(input, tx));
-    return;
-  }
-
-  if (!Number.isFinite(input.amount) || input.amount < 0) {
-    throw new Error("Ledger amount must be a non-negative finite number");
-  }
   if (!Number.isFinite(input.exchangeRate) || input.exchangeRate <= 0) {
-    throw new Error("Ledger exchange rate must be greater than zero");
+    throw new Error("Ledger exchangeRate must be greater than zero");
   }
 
-  await executor.execute(sql`select pg_advisory_xact_lock(hashtextextended('oxygen-gym:cash-ledger', 0))`);
+  // Serialize running-balance writes inside the surrounding transaction. This
+  // prevents two concurrent cash movements from reading the same previous row
+  // and persisting conflicting running balances.
+  await executor.execute(sql`SELECT pg_advisory_xact_lock(hashtext('oxygen_gym_cash_ledger'))`);
 
-  const amountUsd = input.currency === "USD" ? input.amount : input.amount / input.exchangeRate;
-  const amountCdf = input.currency === "CDF" ? input.amount : input.amount * input.exchangeRate;
+  const amountUsd =
+    input.currency === "USD" ? input.amount : input.amount / input.exchangeRate;
+  const amountCdf =
+    input.currency === "CDF" ? input.amount : input.amount * input.exchangeRate;
 
   const [lastEntry] = await executor
     .select({ balanceUsd: cashLedgerTable.balanceUsd, balanceCdf: cashLedgerTable.balanceCdf })
@@ -49,24 +41,48 @@ export async function appendLedgerEntry(
 
   const prevUsd = lastEntry?.balanceUsd ?? 0;
   const prevCdf = lastEntry?.balanceCdf ?? 0;
-  const balanceUsd = input.direction === "in" ? prevUsd + amountUsd : prevUsd - amountUsd;
-  const balanceCdf = input.direction === "in" ? prevCdf + amountCdf : prevCdf - amountCdf;
+
+  const balanceUsd =
+    input.direction === "in" ? prevUsd + amountUsd : prevUsd - amountUsd;
+  const balanceCdf =
+    input.direction === "in" ? prevCdf + amountCdf : prevCdf - amountCdf;
 
   await executor.insert(cashLedgerTable).values({
-    entryDate: input.entryDate ?? new Date(),
-    sourceType: input.sourceType,
+    entryDate:    input.entryDate ?? new Date(),
+    sourceType:   input.sourceType,
     sourceNumber: input.sourceNumber,
-    sourceId: input.sourceId,
-    direction: input.direction,
-    amount: input.amount,
-    currency: input.currency,
+    sourceId:     input.sourceId,
+    direction:    input.direction,
+    amount:       input.amount,
+    currency:     input.currency,
     exchangeRate: input.exchangeRate,
     amountUsd,
     amountCdf,
     balanceUsd,
     balanceCdf,
-    description: input.description,
-    createdBy: input.createdBy,
+    description:  input.description,
+    createdBy:    input.createdBy,
+  });
+}
+
+/**
+ * Append a cash-ledger row.
+ *
+ * When a transaction executor is supplied, this joins that transaction. When
+ * called standalone it opens a transaction automatically, so the advisory lock,
+ * previous-balance read, and insert always share one atomic unit of work.
+ */
+export async function appendLedgerEntry(
+  input: LedgerEntryInput,
+  executor?: DbExecutor,
+): Promise<void> {
+  if (executor) {
+    await appendLedgerEntryWithExecutor(input, executor);
+    return;
+  }
+
+  await withTransaction(async (tx) => {
+    await appendLedgerEntryWithExecutor(input, tx);
   });
 }
 
@@ -80,9 +96,11 @@ export async function appendLedgerEntry(
  * Reconstruct the balance from the authoritative business records that actually
  * move physical cash. The append-only ledger is used only for explicit opening
  * balance adjustments, because those may pre-date the accounting_entries table.
+ * This preserves legitimate historical opening cash without reintroducing old
+ * ledger drift or correction duplicates.
  */
-export async function getCurrentBalance(executor: Executor = db): Promise<{ balanceUsd: number; balanceCdf: number }> {
-  const result = await executor.execute(sql`
+export async function getCurrentBalance(): Promise<{ balanceUsd: number; balanceCdf: number }> {
+  const result = await db.execute(sql`
     WITH payment_values AS (
       SELECT
         p.*,
@@ -218,7 +236,7 @@ export async function getCurrentBalance(executor: Executor = db): Promise<{ bala
               cl.amount_cdf,
               CASE
                 WHEN cl.currency = 'CDF' THEN cl.amount
-                WHEN COALESCE(cl.exchange_rate, 0) > 0 THEN cl.amount / NULLIF(1 / cl.exchange_rate, 0)
+                WHEN COALESCE(cl.exchange_rate, 0) > 0 THEN cl.amount * cl.exchange_rate
                 ELSE 0
               END
             )
