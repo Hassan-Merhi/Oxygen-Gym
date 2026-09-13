@@ -55,6 +55,23 @@ export function contractQuery<T>(req: Request, schema: ContractSchema<T>): T {
   return requireContract(req.query, schema);
 }
 
+/**
+ * Transitional view helpers let legacy route logic keep its local shape while
+ * the request is still validated and normalized by the generated OpenAPI/Zod
+ * contract first. New code should prefer contractBody/contractQuery directly.
+ */
+export function contractBodyAs<TView>(req: Request, schema: ContractSchema<unknown>): TView {
+  return requireContract(req.body, schema) as TView;
+}
+
+export function contractQueryAs<TView>(req: Request, schema: ContractSchema<unknown>): TView {
+  return requireContract(req.query, schema) as TView;
+}
+
+export function contractParamsAs<TView>(req: Request, schema: ContractSchema<unknown>): TView {
+  return requireContract(req.params, schema) as TView;
+}
+
 export function parseBody<T>(req: Request, res: Response, schema: ContractSchema<T>): T | null {
   const parsed = schema.safeParse(req.body);
   return parsed.success ? parsed.data : invalidInput(res, parsed.error.issues);
