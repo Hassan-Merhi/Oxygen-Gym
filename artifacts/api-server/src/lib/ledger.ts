@@ -66,32 +66,69 @@ export async function appendLedgerEntry(
  * payments and sales, so using only the double-entry Cash account can produce a
  * false negative balance until every legacy transaction is backfilled.
  *
- * The balance below is therefore reconstructed from the authoritative business
- * records that actually move physical cash:
- *   - completed cash payments (membership, POS sales, payroll/expenses, etc.)
- *   - recorded cash vouchers
- *   - stock purchases explicitly marked paid from cash
- *   - explicit opening-balance adjustments posted to accounting
- *
- * Auto-generated member Cash Receipt vouchers are excluded when a completed
- * membership payment already exists for that member; otherwise the same receipt
- * would be counted twice.
+ * Reconstruct the balance from the authoritative business records that actually
+ * move physical cash. The append-only ledger is used only for explicit opening
+ * balance adjustments, because those may pre-date the accounting_entries table.
+ * This preserves legitimate historical opening cash without reintroducing old
+ * ledger drift or correction duplicates.
  */
 export async function getCurrentBalance(): Promise<{ balanceUsd: number; balanceCdf: number }> {
   const result = await db.execute(sql`
-    WITH payment_cash AS (
+    WITH payment_values AS (
       SELECT
-        COALESCE(SUM(CASE WHEN p.direction = 'in' THEN COALESCE(p.amount_usd, 0) ELSE -COALESCE(p.amount_usd, 0) END), 0) AS usd,
-        COALESCE(SUM(CASE WHEN p.direction = 'in' THEN COALESCE(p.amount_cdf, 0) ELSE -COALESCE(p.amount_cdf, 0) END), 0) AS cdf
+        p.*,
+        COALESCE(
+          p.amount_usd,
+          CASE
+            WHEN p.currency = 'USD' THEN p.amount
+            WHEN COALESCE(p.exchange_rate, 0) > 0 THEN p.amount / p.exchange_rate
+            ELSE 0
+          END
+        ) AS effective_usd,
+        COALESCE(
+          p.amount_cdf,
+          CASE
+            WHEN p.currency = 'CDF' THEN p.amount
+            WHEN COALESCE(p.exchange_rate, 0) > 0 THEN p.amount * p.exchange_rate
+            ELSE 0
+          END
+        ) AS effective_cdf
       FROM payments p
+    ),
+    payment_cash AS (
+      SELECT
+        COALESCE(SUM(CASE WHEN p.direction = 'in' THEN p.effective_usd ELSE -p.effective_usd END), 0) AS usd,
+        COALESCE(SUM(CASE WHEN p.direction = 'in' THEN p.effective_cdf ELSE -p.effective_cdf END), 0) AS cdf
+      FROM payment_values p
       WHERE p.status = 'completed'
         AND LOWER(REPLACE(TRIM(COALESCE(p.account, 'cash')), '_', ' ')) = 'cash'
     ),
+    voucher_values AS (
+      SELECT
+        v.*,
+        COALESCE(
+          v.amount_usd,
+          CASE
+            WHEN v.currency = 'USD' THEN v.amount
+            WHEN COALESCE(v.exchange_rate, 0) > 0 THEN v.amount / v.exchange_rate
+            ELSE 0
+          END
+        ) AS effective_usd,
+        COALESCE(
+          v.amount_cdf,
+          CASE
+            WHEN v.currency = 'CDF' THEN v.amount
+            WHEN COALESCE(v.exchange_rate, 0) > 0 THEN v.amount * v.exchange_rate
+            ELSE 0
+          END
+        ) AS effective_cdf
+      FROM vouchers v
+    ),
     voucher_cash AS (
       SELECT
-        COALESCE(SUM(CASE WHEN v.direction = 'in' THEN COALESCE(v.amount_usd, 0) ELSE -COALESCE(v.amount_usd, 0) END), 0) AS usd,
-        COALESCE(SUM(CASE WHEN v.direction = 'in' THEN COALESCE(v.amount_cdf, 0) ELSE -COALESCE(v.amount_cdf, 0) END), 0) AS cdf
-      FROM vouchers v
+        COALESCE(SUM(CASE WHEN v.direction = 'in' THEN v.effective_usd ELSE -v.effective_usd END), 0) AS usd,
+        COALESCE(SUM(CASE WHEN v.direction = 'in' THEN v.effective_cdf ELSE -v.effective_cdf END), 0) AS cdf
+      FROM voucher_values v
       WHERE v.status = 'recorded'
         AND v.deleted_at IS NULL
         AND LOWER(REPLACE(TRIM(COALESCE(v.account, 'cash')), '_', ' ')) = 'cash'
@@ -109,8 +146,22 @@ export async function getCurrentBalance(): Promise<{ balanceUsd: number; balance
     ),
     stock_cash AS (
       SELECT
-        -COALESCE(SUM(COALESCE(sp.total_cost_usd, 0)), 0) AS usd,
-        -COALESCE(SUM(COALESCE(sp.total_cost_cdf, 0)), 0) AS cdf
+        -COALESCE(SUM(COALESCE(
+          sp.total_cost_usd,
+          CASE
+            WHEN sp.currency = 'USD' THEN sp.total_cost
+            WHEN COALESCE(sp.exchange_rate, 0) > 0 THEN sp.total_cost / sp.exchange_rate
+            ELSE 0
+          END
+        )), 0) AS usd,
+        -COALESCE(SUM(COALESCE(
+          sp.total_cost_cdf,
+          CASE
+            WHEN sp.currency = 'CDF' THEN sp.total_cost
+            WHEN COALESCE(sp.exchange_rate, 0) > 0 THEN sp.total_cost * sp.exchange_rate
+            ELSE 0
+          END
+        )), 0) AS cdf
       FROM stock_purchases sp
       WHERE sp.paid_from_cash = 1
         AND (
@@ -124,11 +175,48 @@ export async function getCurrentBalance(): Promise<{ balanceUsd: number; balance
     ),
     opening_adjustments AS (
       SELECT
-        COALESCE(SUM(ae.debit_usd - ae.credit_usd), 0) AS usd,
-        COALESCE(SUM(ae.debit_cdf - ae.credit_cdf), 0) AS cdf
-      FROM accounting_entries ae
-      WHERE ae.account_name_snapshot = 'Cash'
-        AND ae.source_type = 'opening_balance'
+        COALESCE(SUM(
+          CASE WHEN cl.direction = 'in' THEN
+            COALESCE(
+              cl.amount_usd,
+              CASE
+                WHEN cl.currency = 'USD' THEN cl.amount
+                WHEN COALESCE(cl.exchange_rate, 0) > 0 THEN cl.amount / cl.exchange_rate
+                ELSE 0
+              END
+            )
+          ELSE -COALESCE(
+              cl.amount_usd,
+              CASE
+                WHEN cl.currency = 'USD' THEN cl.amount
+                WHEN COALESCE(cl.exchange_rate, 0) > 0 THEN cl.amount / cl.exchange_rate
+                ELSE 0
+              END
+            )
+          END
+        ), 0) AS usd,
+        COALESCE(SUM(
+          CASE WHEN cl.direction = 'in' THEN
+            COALESCE(
+              cl.amount_cdf,
+              CASE
+                WHEN cl.currency = 'CDF' THEN cl.amount
+                WHEN COALESCE(cl.exchange_rate, 0) > 0 THEN cl.amount * cl.exchange_rate
+                ELSE 0
+              END
+            )
+          ELSE -COALESCE(
+              cl.amount_cdf,
+              CASE
+                WHEN cl.currency = 'CDF' THEN cl.amount
+                WHEN COALESCE(cl.exchange_rate, 0) > 0 THEN cl.amount * cl.exchange_rate
+                ELSE 0
+              END
+            )
+          END
+        ), 0) AS cdf
+      FROM cash_ledger cl
+      WHERE cl.source_type = 'opening_balance'
     )
     SELECT
       payment_cash.usd + voucher_cash.usd + stock_cash.usd + opening_adjustments.usd AS balance_usd,
