@@ -243,7 +243,7 @@ router.get("/list", async (req: Request, res: Response) => {
   ]);
 
   const total = Number(sqlRows<AttendanceSqlRow>(countResult)[0]?.cnt ?? 0);
-  res.json({ items: rows.rows as any[], total, page: pageNum, limit: limitNum });
+  res.json({ items: sqlRows<AttendanceSqlRow>(rows), total, page: pageNum, limit: limitNum });
 });
 
 // ── Available plan names (for filter dropdown) ────────────────────────────────
