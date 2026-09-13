@@ -5,6 +5,7 @@ import { appendLedgerEntry } from "../../lib/ledger";
 import { categoryAccountNames, postDoubleEntry, reverseEntries } from "../../lib/accounting";
 import { getNextNumber } from "../../lib/numbering";
 import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
+import { fxRate, money } from "../../shared/accounting/decimal";
 import { withTransaction } from "../../shared/db/transaction";
 import { badRequest, notFound } from "../../shared/http/errors";
 
@@ -54,6 +55,12 @@ export function voucherDirection(voucherType: string): "in" | "out" {
   return ["cash_receipt", "customer_payment"].includes(voucherType) ? "in" : "out";
 }
 
+function normalizedCurrency(value: string): "USD" | "CDF" {
+  const normalized = value.toUpperCase();
+  if (normalized !== "USD" && normalized !== "CDF") throw badRequest("currency must be USD or CDF");
+  return normalized;
+}
+
 export async function listVouchers(input: VoucherListInput) {
   const conditions: ReturnType<typeof eq>[] = [
     isNull(vouchersTable.deletedAt) as ReturnType<typeof eq>,
@@ -92,13 +99,15 @@ export async function getVoucher(id: number) {
 
 export async function createVoucher(input: CreateVoucherInput, actor: string) {
   if (input.amount < 0) throw badRequest("Amount cannot be negative");
-  const rate = input.exchangeRate ?? await getExchangeRate();
-  if (rate <= 0) throw badRequest("Exchange rate must be greater than zero");
-  const voucherNumber = await getNextNumber("VCH");
-  const direction = voucherDirection(input.voucherType);
-  const converted = toUsdCdf(input.amount, input.currency, rate);
+  const currency = normalizedCurrency(input.currency);
 
   return withTransaction(async (tx) => {
+    const rate = fxRate(input.exchangeRate ?? await getExchangeRate(tx));
+    const amount = money(input.amount);
+    const voucherNumber = await getNextNumber("VCH", tx);
+    const direction = voucherDirection(input.voucherType);
+    const converted = toUsdCdf(amount, currency, rate);
+
     const [voucher] = await tx.insert(vouchersTable).values({
       voucherNumber,
       voucherType: input.voucherType,
@@ -109,8 +118,8 @@ export async function createVoucher(input: CreateVoucherInput, actor: string) {
       linkedEntity: input.linkedEntity,
       linkedEntityId: input.linkedEntityId,
       linkedEntityName: input.linkedEntityName,
-      amount: input.amount,
-      currency: input.currency,
+      amount,
+      currency,
       exchangeRate: rate,
       ...converted,
       account: input.account ?? "cash",
@@ -120,14 +129,14 @@ export async function createVoucher(input: CreateVoucherInput, actor: string) {
       createdBy: actor,
     }).returning();
 
-    if (input.amount > 0) {
+    if (amount > 0) {
       await appendLedgerEntry({
         sourceType: "voucher",
         sourceNumber: voucherNumber,
         sourceId: voucher.id,
         direction,
-        amount: input.amount,
-        currency: input.currency,
+        amount,
+        currency,
         exchangeRate: rate,
         description: input.description,
         createdBy: actor,
@@ -142,9 +151,9 @@ export async function createVoucher(input: CreateVoucherInput, actor: string) {
         sourceNumber: voucherNumber,
         entryDate: input.voucherDate,
         ...names,
-        amount: input.amount,
+        amount,
         ...converted,
-        currency: input.currency,
+        currency,
         exchangeRate: rate,
         description: input.description,
         createdBy: actor,
@@ -163,12 +172,16 @@ export async function updateVoucher(id: number, input: UpdateVoucherInput, actor
     const [existing] = await tx.select().from(vouchersTable).where(and(
       eq(vouchersTable.id, id),
       isNull(vouchersTable.deletedAt),
-    ));
+    )).for("update");
     if (!existing) throw notFound("Voucher not found");
 
-    const amount = input.amount ?? existing.amount ?? 0;
-    const currency = input.currency ?? existing.currency;
-    const rate = input.exchangeRate ?? await getExchangeRate();
+    const storedRate = Number(existing.exchangeRate ?? 0);
+    if (input.exchangeRate !== undefined && storedRate > 0 && fxRate(input.exchangeRate) !== fxRate(storedRate)) {
+      throw badRequest("Exchange rate is locked after a voucher is posted");
+    }
+    const rate = fxRate(storedRate > 0 ? storedRate : (input.exchangeRate ?? await getExchangeRate(tx)));
+    const amount = money(input.amount ?? existing.amount ?? 0);
+    const currency = normalizedCurrency(input.currency ?? existing.currency);
     const voucherType = input.voucherType ?? existing.voucherType;
     const direction = voucherDirection(voucherType);
     const converted = toUsdCdf(amount, currency, rate);
@@ -185,28 +198,27 @@ export async function updateVoucher(id: number, input: UpdateVoucherInput, actor
       ...(input.linkedEntity !== undefined && { linkedEntity: input.linkedEntity }),
       ...(input.linkedEntityId !== undefined && { linkedEntityId: input.linkedEntityId }),
       ...(input.linkedEntityName !== undefined && { linkedEntityName: input.linkedEntityName }),
-      ...(input.amount !== undefined && { amount: input.amount }),
-      ...(input.currency !== undefined && { currency: input.currency }),
+      amount,
+      currency,
       exchangeRate: rate,
       ...converted,
-      ...(input.account !== undefined && { account: input.account }),
+      account,
       ...(input.category !== undefined && { category: input.category }),
       ...(input.description !== undefined && { description: input.description }),
     }).where(eq(vouchersTable.id, id)).returning();
 
     const oldDirection = voucherDirection(existing.voucherType);
     const financialsChanged = existing.status === "recorded" && (
-      (existing.amount ?? 0) !== amount
+      money(existing.amount ?? 0) !== amount
       || oldDirection !== direction
-      || existing.currency !== currency
-      || Math.abs((existing.exchangeRate ?? 1) - rate) > 0.0001
+      || existing.currency.toUpperCase() !== currency
       || existing.account !== account
       || existing.category !== category
       || (input.voucherDate !== undefined && input.voucherDate.getTime() !== existing.voucherDate.getTime())
     );
 
     if (financialsChanged) {
-      if ((existing.amount ?? 0) > 0) {
+      if (money(existing.amount ?? 0) > 0) {
         await appendLedgerEntry({
           sourceType: "voucher_correction",
           sourceNumber: existing.voucherNumber ?? undefined,
@@ -214,7 +226,7 @@ export async function updateVoucher(id: number, input: UpdateVoucherInput, actor
           direction: oldDirection === "in" ? "out" : "in",
           amount: existing.amount ?? 0,
           currency: existing.currency,
-          exchangeRate: existing.exchangeRate ?? rate,
+          exchangeRate: rate,
           description: `Correction: reversed voucher ${existing.voucherNumber ?? id}`,
           createdBy: actor,
         }, tx);
@@ -230,7 +242,7 @@ export async function updateVoucher(id: number, input: UpdateVoucherInput, actor
           exchangeRate: rate,
           description: `Correction: updated voucher ${existing.voucherNumber ?? id}`,
           createdBy: actor,
-          entryDate: input.voucherDate,
+          entryDate: input.voucherDate ?? existing.voucherDate,
         }, tx);
       }
 
@@ -263,7 +275,7 @@ export async function cancelVoucher(id: number, actor: string) {
     const [existing] = await tx.select().from(vouchersTable).where(and(
       eq(vouchersTable.id, id),
       isNull(vouchersTable.deletedAt),
-    ));
+    )).for("update");
     if (!existing) throw notFound("Voucher not found");
 
     const [voucher] = await tx.update(vouchersTable)
@@ -271,8 +283,9 @@ export async function cancelVoucher(id: number, actor: string) {
       .where(eq(vouchersTable.id, id))
       .returning();
 
-    if (existing.status === "recorded" && (existing.amount ?? 0) > 0) {
-      const rate = existing.exchangeRate ?? await getExchangeRate();
+    if (existing.status === "recorded" && money(existing.amount ?? 0) > 0) {
+      const storedRate = Number(existing.exchangeRate ?? 0);
+      const rate = fxRate(storedRate > 0 ? storedRate : await getExchangeRate(tx));
       const direction = existing.direction as "in" | "out";
       await appendLedgerEntry({
         sourceType: "voucher_reversal",
