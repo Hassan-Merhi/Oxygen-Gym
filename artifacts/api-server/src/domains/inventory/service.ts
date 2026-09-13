@@ -7,8 +7,9 @@ import {
 import { and, asc, desc, eq, ilike, not, or } from "drizzle-orm";
 import { appendLedgerEntry } from "../../lib/ledger";
 import { getNextNumber } from "../../lib/numbering";
-import { postDoubleEntry } from "../../lib/accounting";
-import { getExchangeRate } from "../../shared/accounting/currency";
+import { ACCOUNTS, postDoubleEntry } from "../../lib/accounting";
+import { convertCurrencyAmount, getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
+import { addMoney, divideMoney, fxRate, money, multiplyMoney, subtractMoney } from "../../shared/accounting/decimal";
 import { withTransaction } from "../../shared/db/transaction";
 import { badRequest, conflict, notFound } from "../../shared/http/errors";
 
@@ -68,15 +69,13 @@ function validateNonNegative(value: number | undefined, field: string): void {
 }
 
 function enrichProduct(product: typeof productsTable.$inferSelect, rate: number) {
-  const safeRate = Number.isFinite(rate) && rate > 0 ? rate : 2800;
-  const sellingUsd = product.currency === "USD" ? product.sellingPrice : product.sellingPrice / safeRate;
-  const costUsd = product.currency === "USD" ? product.costPrice : product.costPrice / safeRate;
-
-  // Inventory is an asset and is valued at weighted-average cost, not retail price.
-  const stockValueUsd = costUsd * product.quantity;
-  const stockValueCdf = stockValueUsd * safeRate;
-  const retailValueUsd = sellingUsd * product.quantity;
-  const retailValueCdf = retailValueUsd * safeRate;
+  const safeRate = fxRate(Number.isFinite(rate) && rate > 0 ? rate : 2800);
+  const sellingUsd = convertCurrencyAmount(product.sellingPrice, product.currency, "USD", safeRate);
+  const costUsd = convertCurrencyAmount(product.costPrice, product.currency, "USD", safeRate);
+  const stockValueUsd = multiplyMoney(costUsd, product.quantity);
+  const stockValueCdf = convertCurrencyAmount(stockValueUsd, "USD", "CDF", safeRate);
+  const retailValueUsd = multiplyMoney(sellingUsd, product.quantity);
+  const retailValueCdf = convertCurrencyAmount(retailValueUsd, "USD", "CDF", safeRate);
 
   return {
     ...product,
@@ -86,19 +85,18 @@ function enrichProduct(product: typeof productsTable.$inferSelect, rate: number)
     costValueCdf: stockValueCdf,
     retailValueUsd,
     retailValueCdf,
-    profitPerUnit: sellingUsd - costUsd,
+    profitPerUnit: subtractMoney(sellingUsd, costUsd),
     isLowStock: product.quantity <= product.alertQuantity,
   };
 }
 
 export async function getInventorySummary() {
   const rate = await getExchangeRate();
-  const safeRate = Number.isFinite(rate) && rate > 0 ? rate : 2800;
   const all = await db.select().from(productsTable).where(not(eq(productsTable.status, "deleted")));
   const active = all.filter((product) => product.status === "active");
   const totalValueUsd = active.reduce((sum, product) => {
-    const costUsd = product.currency === "USD" ? product.costPrice : product.costPrice / safeRate;
-    return sum + costUsd * product.quantity;
+    const costUsd = convertCurrencyAmount(product.costPrice, product.currency, "USD", rate);
+    return addMoney(sum, multiplyMoney(costUsd, product.quantity));
   }, 0);
 
   return {
@@ -107,7 +105,7 @@ export async function getInventorySummary() {
     lowStockCount: active.filter((product) => product.quantity <= product.alertQuantity).length,
     totalQuantity: active.reduce((sum, product) => sum + product.quantity, 0),
     totalValueUsd,
-    totalValueCdf: totalValueUsd * safeRate,
+    totalValueCdf: convertCurrencyAmount(totalValueUsd, "USD", "CDF", rate),
   };
 }
 
@@ -164,9 +162,9 @@ export async function createProduct(input: CreateProductInput) {
     notes: input.notes || null,
     quantity: input.quantity ?? 0,
     alertQuantity: input.alertQuantity ?? 5,
-    costPrice: input.costPrice ?? 0,
-    sellingPrice: input.sellingPrice ?? 0,
-    currency: input.currency ?? "USD",
+    costPrice: money(input.costPrice ?? 0),
+    sellingPrice: money(input.sellingPrice ?? 0),
+    currency: (input.currency ?? "USD").toUpperCase(),
     status: input.status ?? "active",
   }).returning();
 
@@ -207,9 +205,9 @@ export async function updateProduct(id: number, input: UpdateProductInput) {
   if (input.notes !== undefined) patch.notes = input.notes || null;
   if (input.quantity !== undefined) patch.quantity = input.quantity;
   if (input.alertQuantity !== undefined) patch.alertQuantity = input.alertQuantity;
-  if (input.costPrice !== undefined) patch.costPrice = input.costPrice;
-  if (input.sellingPrice !== undefined) patch.sellingPrice = input.sellingPrice;
-  if (input.currency !== undefined) patch.currency = input.currency;
+  if (input.costPrice !== undefined) patch.costPrice = money(input.costPrice);
+  if (input.sellingPrice !== undefined) patch.sellingPrice = money(input.sellingPrice);
+  if (input.currency !== undefined) patch.currency = input.currency.toUpperCase();
   if (input.status !== undefined) {
     patch.status = input.status;
     patch.deletedAt = input.status === "deleted" ? new Date() : null;
@@ -238,23 +236,18 @@ export async function addStockPurchase(productId: number, input: AddStockPurchas
   validateNonNegative(input.costPerUnit, "costPerUnit");
   validateNonNegative(input.totalCost, "totalCost");
 
-  const defaultRate = await getExchangeRate();
-  const rate = input.exchangeRate && Number.isFinite(input.exchangeRate) && input.exchangeRate > 0
-    ? input.exchangeRate
-    : defaultRate;
-  if (!Number.isFinite(rate) || rate <= 0) throw badRequest("A valid exchange rate is required");
-  const purchaseNumber = await getNextNumber("purchase");
-
   return withTransaction(async (tx) => {
-    const [product] = await tx.select().from(productsTable).where(eq(productsTable.id, productId));
+    const rate = fxRate(input.exchangeRate ?? await getExchangeRate(tx));
+    const purchaseNumber = await getNextNumber("purchase", tx);
+    const [product] = await tx.select().from(productsTable).where(eq(productsTable.id, productId)).for("update");
     if (!product) throw notFound("Product not found");
 
-    const currency = input.currency ?? product.currency ?? "USD";
+    const currency = (input.currency ?? product.currency ?? "USD").toUpperCase();
     if (currency !== "USD" && currency !== "CDF") throw badRequest("currency must be USD or CDF");
 
-    const totalCost = input.totalCost ?? input.costPerUnit * input.quantityAdded;
-    const totalCostUsd = currency === "USD" ? totalCost : totalCost / rate;
-    const totalCostCdf = currency === "CDF" ? totalCost : totalCost * rate;
+    const costPerUnit = money(input.costPerUnit);
+    const totalCost = money(input.totalCost ?? multiplyMoney(costPerUnit, input.quantityAdded));
+    const { amountUsd: totalCostUsd, amountCdf: totalCostCdf } = toUsdCdf(totalCost, currency, rate);
     const entryDate = input.purchaseDate ?? new Date();
     if (Number.isNaN(entryDate.getTime())) throw badRequest("Invalid purchase date");
 
@@ -263,7 +256,7 @@ export async function addStockPurchase(productId: number, input: AddStockPurchas
       productId,
       productName: product.name,
       quantityAdded: input.quantityAdded,
-      costPerUnit: input.costPerUnit,
+      costPerUnit,
       totalCost,
       currency,
       exchangeRate: rate,
@@ -277,18 +270,19 @@ export async function addStockPurchase(productId: number, input: AddStockPurchas
     }).returning();
 
     const newQuantity = product.quantity + input.quantityAdded;
-    const oldTotalCostUsd = (product.currency === "USD" ? product.costPrice : product.costPrice / rate) * product.quantity;
+    const oldUnitCostUsd = convertCurrencyAmount(product.costPrice, product.currency, "USD", rate);
+    const oldTotalCostUsd = multiplyMoney(oldUnitCostUsd, product.quantity);
     const newAverageCostUsd = newQuantity > 0
-      ? (oldTotalCostUsd + totalCostUsd) / newQuantity
-      : totalCostUsd / input.quantityAdded;
-    const newCostPrice = product.currency === "USD" ? newAverageCostUsd : newAverageCostUsd * rate;
+      ? divideMoney(addMoney(oldTotalCostUsd, totalCostUsd), newQuantity)
+      : divideMoney(totalCostUsd, input.quantityAdded);
+    const newCostPrice = convertCurrencyAmount(newAverageCostUsd, "USD", product.currency, rate);
 
     await tx.update(productsTable)
       .set({ quantity: newQuantity, costPrice: newCostPrice })
       .where(eq(productsTable.id, productId));
 
+    const description = `Stock purchase: ${product.name} (${input.quantityAdded} units)${input.supplier ? ` — ${input.supplier}` : ""}`;
     if (input.paidFromCash) {
-      const description = `Stock purchase: ${product.name} (${input.quantityAdded} units)`;
       await appendLedgerEntry({
         entryDate,
         sourceType: "stock_purchase",
@@ -301,25 +295,25 @@ export async function addStockPurchase(productId: number, input: AddStockPurchas
         description,
         createdBy: actor,
       }, tx);
-
-      await postDoubleEntry({
-        entryDate,
-        sourceType: "stock_purchase",
-        sourceId: purchase.id,
-        sourceNumber: purchaseNumber,
-        debitName: "Inventory",
-        debitType: "asset",
-        creditName: "Cash",
-        creditType: "asset",
-        amount: totalCost,
-        amountUsd: totalCostUsd,
-        amountCdf: totalCostCdf,
-        currency,
-        exchangeRate: rate,
-        description,
-        createdBy: actor,
-      }, tx);
     }
+
+    await postDoubleEntry({
+      entryDate,
+      sourceType: "stock_purchase",
+      sourceId: purchase.id,
+      sourceNumber: purchaseNumber,
+      debitName: ACCOUNTS.INVENTORY,
+      debitType: "asset",
+      creditName: input.paidFromCash ? ACCOUNTS.CASH : ACCOUNTS.SUPPLIER_PAYABLES,
+      creditType: input.paidFromCash ? "asset" : "liability",
+      amount: totalCost,
+      amountUsd: totalCostUsd,
+      amountCdf: totalCostCdf,
+      currency,
+      exchangeRate: rate,
+      description,
+      createdBy: actor,
+    }, tx);
 
     return purchase;
   });
