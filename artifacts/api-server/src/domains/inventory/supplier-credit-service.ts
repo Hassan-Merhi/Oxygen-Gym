@@ -259,6 +259,7 @@ export async function addSupplierPayment(creditId: number, input: SupplierPaymen
       amount,
       currency,
       exchangeRate: rate,
+      ...converted,
       account,
       paymentDate,
       notes: input.notes,
