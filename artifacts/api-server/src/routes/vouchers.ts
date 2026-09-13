@@ -1,23 +1,19 @@
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
-import { db } from "@workspace/db";
-import { vouchersTable, settingsTable } from "@workspace/db/schema";
+import { db, withTransaction } from "@workspace/db";
+import { vouchersTable } from "@workspace/db/schema";
 import { eq, and, ilike, or, gte, lte, count, isNull, desc } from "drizzle-orm";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 import { appendLedgerEntry } from "../lib/ledger";
 import { postDoubleEntry, reverseEntries, categoryAccountNames } from "../lib/accounting";
+import { getExchangeRate } from "../repositories/settings";
 
 const router = Router();
 router.use(requireAuth());
 
 function callerName(req: Request): string {
   return (req as unknown as { __gymproUserName?: string }).__gymproUserName ?? "System";
-}
-
-async function getExchangeRate(): Promise<number> {
-  const [s] = await db.select({ rate: settingsTable.usdToCdfRate }).from(settingsTable);
-  return s?.rate ?? 2800;
 }
 
 function voucherDirection(voucherType: string): "in" | "out" {
@@ -83,51 +79,54 @@ router.post("/", async (req: Request, res: Response) => {
     res.status(400).json({ error: "voucherType, amount, currency, description required" });
     return;
   }
+  if (body.amount < 0) {
+    res.status(400).json({ error: "amount cannot be negative" });
+    return;
+  }
 
   const exchangeRate = body.exchangeRate ?? (await getExchangeRate());
   const amountUsd = body.currency === "USD" ? body.amount : body.amount / exchangeRate;
   const amountCdf = body.currency === "CDF" ? body.amount : body.amount * exchangeRate;
   const direction = voucherDirection(body.voucherType);
-
-  const voucherNumber = await getNextNumber("VCH");
   const createdBy = callerName(req);
 
-  const [voucher] = await db.insert(vouchersTable).values({
-    voucherNumber,
-    voucherType: body.voucherType,
-    direction,
-    voucherDate: body.voucherDate ? new Date(body.voucherDate) : new Date(),
-    paidTo: body.paidTo,
-    receivedFrom: body.receivedFrom,
-    linkedEntity: body.linkedEntity,
-    linkedEntityId: body.linkedEntityId,
-    linkedEntityName: body.linkedEntityName,
-    amount: body.amount,
-    currency: body.currency,
-    exchangeRate,
-    amountUsd,
-    amountCdf,
-    account: body.account ?? "cash",
-    category: body.category,
-    description: body.description,
-    status: "recorded",
-    createdBy,
-  }).returning();
+  const voucher = await withTransaction(async (tx) => {
+    const voucherNumber = await getNextNumber("VCH", tx);
+    const [created] = await tx.insert(vouchersTable).values({
+      voucherNumber,
+      voucherType: body.voucherType,
+      direction,
+      voucherDate: body.voucherDate ? new Date(body.voucherDate) : new Date(),
+      paidTo: body.paidTo,
+      receivedFrom: body.receivedFrom,
+      linkedEntity: body.linkedEntity,
+      linkedEntityId: body.linkedEntityId,
+      linkedEntityName: body.linkedEntityName,
+      amount: body.amount,
+      currency: body.currency,
+      exchangeRate,
+      amountUsd,
+      amountCdf,
+      account: body.account ?? "cash",
+      category: body.category,
+      description: body.description,
+      status: "recorded",
+      createdBy,
+    }).returning();
+    if (!created) throw new Error("Unable to create voucher");
 
-  await appendLedgerEntry({
-    sourceType: "voucher",
-    sourceNumber: voucherNumber,
-    sourceId: voucher.id,
-    direction,
-    amount: body.amount,
-    currency: body.currency,
-    exchangeRate,
-    description: body.description,
-    createdBy,
-  });
+    await appendLedgerEntry({
+      sourceType: "voucher",
+      sourceNumber: voucherNumber,
+      sourceId: created.id,
+      direction,
+      amount: body.amount,
+      currency: body.currency,
+      exchangeRate,
+      description: body.description,
+      createdBy,
+    }, tx);
 
-  // ── Double-entry accounting ──────────────────────────────────────────────
-  try {
     const voucherCategory = direction === "in" ? "other" : "expense";
     const { debitName, debitType, creditName, creditType } = categoryAccountNames(
       voucherCategory,
@@ -137,7 +136,7 @@ router.post("/", async (req: Request, res: Response) => {
     );
     await postDoubleEntry({
       sourceType: "voucher",
-      sourceId: voucher.id,
+      sourceId: created.id,
       sourceNumber: voucherNumber,
       debitName,
       debitType,
@@ -150,11 +149,13 @@ router.post("/", async (req: Request, res: Response) => {
       exchangeRate,
       description: body.description,
       createdBy,
-    });
-  } catch { /* non-fatal */ }
+    }, tx);
+
+    return created;
+  });
 
   await logActivity(req, "voucher_created", "voucher", voucher.id, {
-    number: voucherNumber,
+    number: voucher.voucherNumber,
     type: body.voucherType,
     amount: body.amount,
     currency: body.currency,
@@ -176,74 +177,78 @@ router.get("/:id", async (req: Request, res: Response) => {
 router.patch("/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   const body = req.body as Record<string, unknown>;
-
-  const [existing] = await db.select().from(vouchersTable).where(and(eq(vouchersTable.id, id), isNull(vouchersTable.deletedAt)));
-  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
-
-  const allowed = ["voucherType","voucherDate","paidTo","receivedFrom","linkedEntity","linkedEntityId","linkedEntityName","amount","currency","exchangeRate","account","category","description"];
-  const update: Record<string, unknown> = {};
-  for (const k of allowed) { if (body[k] !== undefined) update[k] = body[k]; }
-  if (update.voucherDate) update.voucherDate = new Date(update.voucherDate as string);
-
-  // Recompute derived USD/CDF columns whenever amount, currency, or rate changes
-  if (update.amount !== undefined || update.currency !== undefined || update.exchangeRate !== undefined) {
-    const amt = (update.amount as number) ?? existing.amount ?? 0;
-    const cur = (update.currency as string) ?? existing.currency;
-    // Always use current settings rate when none is explicitly provided,
-    // so that editing any voucher picks up a global rate change.
-    const rate = (update.exchangeRate as number) ?? await getExchangeRate();
-    update.exchangeRate = rate;
-    update.amountUsd = cur === "USD" ? amt : amt / rate;
-    update.amountCdf = cur === "CDF" ? amt : amt * rate;
+  if (body.amount !== undefined && Number(body.amount) < 0) {
+    res.status(400).json({ error: "Amount cannot be negative" });
+    return;
   }
 
-  const [voucher] = await db.update(vouchersTable).set(update).where(eq(vouchersTable.id, id)).returning();
-  if (!voucher) { res.status(404).json({ error: "Not found" }); return; }
+  const result = await withTransaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(vouchersTable)
+      .where(and(eq(vouchersTable.id, id), isNull(vouchersTable.deletedAt)))
+      .for("update");
+    if (!existing) return { kind: "not_found" as const };
 
-  // ── Ledger + accounting correction ──────────────────────────────────────
-  const oldAmount = existing.amount ?? 0;
-  const newAmount = (update.amount as number) ?? oldAmount;
-  const newVoucherType = (update.voucherType as string) ?? existing.voucherType;
-  const oldDir = voucherDirection(existing.voucherType);
-  const newDir = voucherDirection(newVoucherType);
-  const newCurrency = (update.currency as string) ?? existing.currency;
-  const newExchangeRate = (update.exchangeRate as number) ?? existing.exchangeRate ?? await getExchangeRate();
+    const allowed = ["voucherType","voucherDate","paidTo","receivedFrom","linkedEntity","linkedEntityId","linkedEntityName","amount","currency","exchangeRate","account","category","description"];
+    const update: Record<string, unknown> = {};
+    for (const k of allowed) { if (body[k] !== undefined) update[k] = body[k]; }
+    if (update.voucherDate) update.voucherDate = new Date(update.voucherDate as string);
 
-  const financialsChanged =
-    existing.status === "recorded" &&
-    (oldAmount !== newAmount ||
-     oldDir !== newDir ||
-     existing.currency !== newCurrency ||
-     Math.abs((existing.exchangeRate ?? 1) - newExchangeRate) > 0.0001);
-
-  if (financialsChanged) {
-    if (oldAmount > 0) {
-      await appendLedgerEntry({
-        sourceType: "voucher_correction",
-        sourceNumber: existing.voucherNumber ?? undefined,
-        sourceId: id,
-        direction: oldDir === "in" ? "out" : "in",
-        amount: oldAmount,
-        currency: existing.currency,
-        exchangeRate: existing.exchangeRate ?? newExchangeRate,
-        description: `Correction: reversed voucher ${existing.voucherNumber ?? id}`,
-      });
+    if (update.amount !== undefined || update.currency !== undefined || update.exchangeRate !== undefined) {
+      const amt = Number(update.amount ?? existing.amount ?? 0);
+      const cur = String(update.currency ?? existing.currency);
+      const rate = Number(update.exchangeRate ?? await getExchangeRate(tx));
+      update.exchangeRate = rate;
+      update.amountUsd = cur === "USD" ? amt : amt / rate;
+      update.amountCdf = cur === "CDF" ? amt : amt * rate;
     }
-    if (newAmount > 0) {
-      await appendLedgerEntry({
-        sourceType: "voucher_correction",
-        sourceNumber: existing.voucherNumber ?? undefined,
-        sourceId: id,
-        direction: newDir,
-        amount: newAmount,
-        currency: newCurrency,
-        exchangeRate: newExchangeRate,
-        description: `Correction: updated voucher ${existing.voucherNumber ?? id}`,
-      });
-    }
-    // Reverse and repost accounting entries
-    try {
-      await reverseEntries("voucher", id, "voucher_correction", callerName(req));
+
+    const [voucher] = await tx.update(vouchersTable).set(update).where(eq(vouchersTable.id, id)).returning();
+    if (!voucher) throw new Error("Unable to update voucher");
+
+    const oldAmount = existing.amount ?? 0;
+    const newAmount = Number(update.amount ?? oldAmount);
+    const newVoucherType = String(update.voucherType ?? existing.voucherType);
+    const oldDir = voucherDirection(existing.voucherType);
+    const newDir = voucherDirection(newVoucherType);
+    const newCurrency = String(update.currency ?? existing.currency);
+    const newExchangeRate = Number(update.exchangeRate ?? existing.exchangeRate ?? await getExchangeRate(tx));
+
+    const financialsChanged =
+      existing.status === "recorded" &&
+      (oldAmount !== newAmount ||
+       oldDir !== newDir ||
+       existing.currency !== newCurrency ||
+       Math.abs((existing.exchangeRate ?? 1) - newExchangeRate) > 0.0001);
+
+    if (financialsChanged) {
+      if (oldAmount > 0) {
+        await appendLedgerEntry({
+          sourceType: "voucher_correction",
+          sourceNumber: existing.voucherNumber ?? undefined,
+          sourceId: id,
+          direction: oldDir === "in" ? "out" : "in",
+          amount: oldAmount,
+          currency: existing.currency,
+          exchangeRate: existing.exchangeRate ?? newExchangeRate,
+          description: `Correction: reversed voucher ${existing.voucherNumber ?? id}`,
+        }, tx);
+      }
+      if (newAmount > 0) {
+        await appendLedgerEntry({
+          sourceType: "voucher_correction",
+          sourceNumber: existing.voucherNumber ?? undefined,
+          sourceId: id,
+          direction: newDir,
+          amount: newAmount,
+          currency: newCurrency,
+          exchangeRate: newExchangeRate,
+          description: `Correction: updated voucher ${existing.voucherNumber ?? id}`,
+        }, tx);
+      }
+
+      await reverseEntries("voucher", id, "voucher_correction", callerName(req), tx);
       if (newAmount > 0) {
         const newAmountUsd = newCurrency === "USD" ? newAmount : newAmount / newExchangeRate;
         const newAmountCdf = newCurrency === "CDF" ? newAmount : newAmount * newExchangeRate;
@@ -251,8 +256,8 @@ router.patch("/:id", async (req: Request, res: Response) => {
         const { debitName, debitType, creditName, creditType } = categoryAccountNames(
           voucherCategory,
           newDir,
-          ((update.account as string) ?? existing.account) || "cash",
-          ((update.category as string) ?? existing.category) ?? undefined,
+          String(update.account ?? existing.account ?? "cash"),
+          (update.category as string | undefined) ?? existing.category ?? undefined,
         );
         await postDoubleEntry({
           sourceType: "voucher_correction",
@@ -269,43 +274,57 @@ router.patch("/:id", async (req: Request, res: Response) => {
           exchangeRate: newExchangeRate,
           description: `Corrected voucher ${existing.voucherNumber ?? id}`,
           createdBy: callerName(req),
-        });
+        }, tx);
       }
-    } catch { /* non-fatal */ }
-  }
+    }
 
-  await logActivity(req, "voucher_edited", "voucher", id, { number: voucher.voucherNumber });
-  res.json(voucher);
+    return { kind: "ok" as const, voucher };
+  });
+
+  if (result.kind === "not_found") { res.status(404).json({ error: "Not found" }); return; }
+  await logActivity(req, "voucher_edited", "voucher", id, { number: result.voucher.voucherNumber });
+  res.json(result.voucher);
 });
 
 // ─── Delete / cancel ─────────────────────────────────────────────────────────
 router.delete("/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const [existing] = await db.select().from(vouchersTable).where(and(eq(vouchersTable.id, id), isNull(vouchersTable.deletedAt)));
-  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
-  const [voucher] = await db.update(vouchersTable)
-    .set({ status: "cancelled", deletedAt: new Date() })
-    .where(and(eq(vouchersTable.id, id), isNull(vouchersTable.deletedAt)))
-    .returning();
-  if (!voucher) { res.status(404).json({ error: "Not found" }); return; }
-  if (existing.status === "recorded" && (existing.amount ?? 0) > 0) {
-    const rate = existing.exchangeRate ?? await getExchangeRate();
-    const dir = existing.direction as "in" | "out";
-    await appendLedgerEntry({
-      sourceType: "voucher_reversal",
-      sourceNumber: existing.voucherNumber ?? undefined,
-      sourceId: id,
-      direction: dir === "in" ? "out" : "in",
-      amount: existing.amount!,
-      currency: existing.currency,
-      exchangeRate: rate,
-      description: `Cancelled voucher ${existing.voucherNumber ?? id}`,
-    });
-    try {
-      await reverseEntries("voucher", id, "voucher_reversal", callerName(req));
-    } catch { /* non-fatal */ }
-  }
-  await logActivity(req, "voucher_archived", "voucher", id, { number: voucher.voucherNumber });
+
+  const result = await withTransaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(vouchersTable)
+      .where(and(eq(vouchersTable.id, id), isNull(vouchersTable.deletedAt)))
+      .for("update");
+    if (!existing) return { kind: "not_found" as const };
+
+    const [voucher] = await tx.update(vouchersTable)
+      .set({ status: "cancelled", deletedAt: new Date() })
+      .where(and(eq(vouchersTable.id, id), isNull(vouchersTable.deletedAt)))
+      .returning();
+    if (!voucher) throw new Error("Unable to cancel voucher");
+
+    if (existing.status === "recorded" && (existing.amount ?? 0) > 0) {
+      const rate = existing.exchangeRate ?? await getExchangeRate(tx);
+      const dir = existing.direction as "in" | "out";
+      await appendLedgerEntry({
+        sourceType: "voucher_reversal",
+        sourceNumber: existing.voucherNumber ?? undefined,
+        sourceId: id,
+        direction: dir === "in" ? "out" : "in",
+        amount: existing.amount!,
+        currency: existing.currency,
+        exchangeRate: rate,
+        description: `Cancelled voucher ${existing.voucherNumber ?? id}`,
+      }, tx);
+      await reverseEntries("voucher", id, "voucher_reversal", callerName(req), tx);
+    }
+
+    return { kind: "ok" as const, voucher };
+  });
+
+  if (result.kind === "not_found") { res.status(404).json({ error: "Not found" }); return; }
+  await logActivity(req, "voucher_archived", "voucher", id, { number: result.voucher.voucherNumber });
   res.json({ ok: true });
 });
 
