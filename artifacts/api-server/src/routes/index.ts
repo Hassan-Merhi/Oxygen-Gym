@@ -23,8 +23,13 @@ import attendanceRouter from "./attendance";
 import notificationsRouter from "./notifications";
 import auditRouter from "./audit";
 import whatsappRouter from "./whatsapp";
+import { enforceApiAuthorization } from "../shared/auth/authorization-gate";
 
 const router: IRouter = Router();
+
+// This is intentionally before every API router. Public endpoints are explicit
+// matrix entries; all unclassified endpoints are authenticated and denied.
+router.use(enforceApiAuthorization());
 
 router.use(healthRouter);
 router.use("/auth", authRouter);

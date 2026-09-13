@@ -51,6 +51,14 @@ export function authenticatedUser(req: Request): NonNullable<Request["__gymproUs
 
 export function requireAuth() {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    // The global authorization gate authenticates protected API requests first.
+    // Existing route-level requireAuth calls remain as defense in depth without
+    // repeating the database lookup.
+    if (req.__gymproUser?.status === "active") {
+      next();
+      return;
+    }
+
     const header = req.headers.authorization;
     const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
 
@@ -86,6 +94,11 @@ export function requireAuth() {
 
 export function optionalAuth() {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+    if (req.__gymproUser?.status === "active") {
+      next();
+      return;
+    }
+
     const header = req.headers.authorization;
     const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
 

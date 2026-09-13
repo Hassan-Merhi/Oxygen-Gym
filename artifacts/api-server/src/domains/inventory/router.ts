@@ -4,6 +4,7 @@ import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { logActivity } from "../../lib/activity";
 import { getCurrentUser } from "../../shared/auth/permissions";
+import { redactFinancialFieldsForRequest } from "../../shared/auth/response-redaction";
 import {
   asRecord,
   nonNegativeNumber,
@@ -39,20 +40,21 @@ function asBoolean(value: unknown): boolean {
   return value === true || value === 1 || value === "1" || value === "true";
 }
 
-router.get("/summary", async (_req, res) => {
-  res.json(await getInventorySummary());
+router.get("/summary", async (req, res) => {
+  res.json(redactFinancialFieldsForRequest(req, await getInventorySummary()));
 });
 
 router.get("/", async (req, res) => {
   const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListProductsQueryParams);
-  res.json(await listProducts({
+  const result = await listProducts({
     page: parsePage(query.page),
     limit: parseLimit(query.limit),
     search: optionalString(query.search),
     category: optionalString(query.category),
     status: optionalString(query.status),
     lowStock: query.lowStock === "true",
-  }));
+  });
+  res.json(redactFinancialFieldsForRequest(req, result));
 });
 
 router.post("/", async (req, res) => {
@@ -81,7 +83,8 @@ router.post("/", async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  res.json(await getProduct(parseId(contractParams(req, ApiContracts.GetProductParams).id, "product id")));
+  const product = await getProduct(parseId(contractParams(req, ApiContracts.GetProductParams).id, "product id"));
+  res.json(redactFinancialFieldsForRequest(req, product));
 });
 
 router.patch("/:id", async (req, res) => {
@@ -107,7 +110,8 @@ router.patch("/:id", async (req, res) => {
 });
 
 router.get("/:id/purchases", async (req, res) => {
-  res.json(await listStockPurchases(parseId(contractParams(req, ApiContracts.ListProductPurchasesParams).id, "product id")));
+  const purchases = await listStockPurchases(parseId(contractParams(req, ApiContracts.ListProductPurchasesParams).id, "product id"));
+  res.json(redactFinancialFieldsForRequest(req, purchases));
 });
 
 router.post("/:id/purchases", async (req, res) => {
@@ -138,7 +142,8 @@ router.post("/:id/purchases", async (req, res) => {
 });
 
 router.get("/:id/history", async (req, res) => {
-  res.json(await getProductHistory(parseId(contractParams(req, ApiContracts.GetProductHistoryParams).id, "product id")));
+  const history = await getProductHistory(parseId(contractParams(req, ApiContracts.GetProductHistoryParams).id, "product id"));
+  res.json(redactFinancialFieldsForRequest(req, history));
 });
 
 export default router;

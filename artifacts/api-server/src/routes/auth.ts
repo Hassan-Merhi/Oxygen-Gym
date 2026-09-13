@@ -5,8 +5,6 @@ import {
   db,
   usersTable,
   defaultAdminPermissions,
-  defaultManagerPermissions,
-  defaultStaffPermissions,
   activityLogsTable,
 } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
@@ -22,6 +20,7 @@ import {
 import { signToken, requireAuth } from "../middlewares/auth";
 import { logActivity } from "../lib/activity";
 import { parseBody, sendContract } from "../http/contracts";
+import { normalizePermissions } from "../shared/auth/permissions";
 
 const router = Router();
 type UserRecord = typeof usersTable.$inferSelect;
@@ -178,11 +177,11 @@ router.post("/login", async (req: Request, res: Response) => {
 router.post("/logout", requireAuth(), async (req: Request, res: Response) => {
   const user = authenticatedUser(req);
   await db.insert(activityLogsTable).values({
-    userId: user?.id,
-    userName: user?.name ?? "Unknown",
+    userId: user.id,
+    userName: user.name,
     action: "user_logout",
     entity: "user",
-    entityId: user?.id,
+    entityId: user.id,
     details: {},
   }).catch(() => undefined);
   res.json({ ok: true });
@@ -190,19 +189,11 @@ router.post("/logout", requireAuth(), async (req: Request, res: Response) => {
 
 router.get("/me", requireAuth(), async (req: Request, res: Response) => {
   const user = authenticatedUser(req);
-  if (!user) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
   sendContract(req, res, GetMeResponse, safeUser(user));
 });
 
 router.post("/change-password", requireAuth(), async (req: Request, res: Response) => {
   const user = authenticatedUser(req);
-  if (!user) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
   const body = parseBody(req, res, ChangePasswordBody);
   if (!body) return;
 
@@ -231,27 +222,6 @@ router.post("/change-password", requireAuth(), async (req: Request, res: Respons
   res.json({ ok: true });
 });
 
-function roleDefaultPermissions(role: string) {
-  if (role === "admin") return defaultAdminPermissions;
-  if (role === "manager") return defaultManagerPermissions;
-  return defaultStaffPermissions;
-}
-
-function normalizedPermissions(user: UserRecord) {
-  const defaults = roleDefaultPermissions(user.role);
-  const stored = user.permissions && typeof user.permissions === "object"
-    ? user.permissions as Record<string, unknown>
-    : {};
-  const normalized = { ...defaults };
-
-  for (const key of Object.keys(defaults) as Array<keyof typeof defaults>) {
-    const value = stored[key];
-    if (typeof value === "boolean") normalized[key] = value;
-  }
-
-  return normalized;
-}
-
 function safeUser(user: UserRecord) {
   return {
     id: user.id,
@@ -260,7 +230,7 @@ function safeUser(user: UserRecord) {
     email: user.email,
     role: user.role,
     status: user.status,
-    permissions: normalizedPermissions(user),
+    permissions: normalizePermissions(user.role, user.permissions),
     lastLoginAt: user.lastLoginAt,
   };
 }
