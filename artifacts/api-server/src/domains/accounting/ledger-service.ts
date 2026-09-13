@@ -13,17 +13,19 @@ export async function getLedgerBalance() {
 
 export async function setOpeningBalance(input: { targetAmountUsd: number; date?: Date; notes?: string }, actor: string) {
   if (!Number.isFinite(input.targetAmountUsd) || input.targetAmountUsd < 0) throw badRequest("targetAmountUsd must be a non-negative number");
-  const currentBalance = await getCurrentBalance();
   const exchangeRate = await getExchangeRate();
-  const delta = input.targetAmountUsd - currentBalance.balanceUsd;
-  if (Math.abs(delta) < 0.001) return { ok: true, skipped: true, balance: currentBalance };
 
-  const entryDate = input.date ?? new Date();
-  const amount = Math.abs(delta);
-  const description = input.notes ?? "Opening balance adjustment";
-  const sourceNumber = `OPENING-${Date.now()}`;
+  const result = await withTransaction(async (tx) => {
+    // Calculate the delta only after the financial transaction lock is held.
+    const currentBalance = await getCurrentBalance(tx);
+    const delta = input.targetAmountUsd - currentBalance.balanceUsd;
+    if (Math.abs(delta) < 0.001) return { skipped: true };
 
-  await withTransaction(async (tx) => {
+    const entryDate = input.date ?? new Date();
+    const amount = Math.abs(delta);
+    const description = input.notes ?? "Opening balance adjustment";
+    const sourceNumber = `OPENING-${Date.now()}`;
+
     await appendLedgerEntry({
       entryDate,
       sourceType: "opening_balance",
@@ -51,9 +53,10 @@ export async function setOpeningBalance(input: { targetAmountUsd: number; date?:
       description,
       createdBy: actor,
     }, tx);
+    return { skipped: false };
   });
 
-  return { ok: true, skipped: false, balance: await getCurrentBalance() };
+  return { ok: true, ...result, balance: await getCurrentBalance() };
 }
 
 export async function listLedger(input: {

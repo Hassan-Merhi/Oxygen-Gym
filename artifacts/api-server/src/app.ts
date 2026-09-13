@@ -5,6 +5,7 @@ import path from "path";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { errorHandler } from "./shared/http/errors";
+import { mutationRequestContext } from "./shared/http/idempotency-context";
 
 const app: Express = express();
 
@@ -31,6 +32,7 @@ app.use(
 app.use(cors({ credentials: true, origin: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(mutationRequestContext);
 
 // Serve uploaded files
 const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
