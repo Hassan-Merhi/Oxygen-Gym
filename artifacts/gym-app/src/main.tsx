@@ -13,9 +13,25 @@ if (apiBase) {
 
 // Some pages still use the browser fetch API directly instead of the generated
 // API client. Keep those /api requests consistent with the authenticated client:
-// route them through the configured API base and attach the current bearer token.
+// route them through the configured API base, attach auth, and protect mutation
+// retries with an Idempotency-Key understood by the backend transaction layer.
 const nativeFetch = window.fetch.bind(window);
-window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+const mutationKeys = new Map<string, { key: string; expiresAt: number }>();
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+function newIdempotencyKey(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function releaseMutationKey(fingerprint: string, key: string, delayMs: number): void {
+  window.setTimeout(() => {
+    const current = mutationKeys.get(fingerprint);
+    if (current?.key === key) mutationKeys.delete(fingerprint);
+  }, delayMs);
+}
+
+window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const inputIsRequest = typeof Request !== "undefined" && input instanceof Request;
   const rawUrl = typeof input === "string"
     ? input
@@ -37,12 +53,53 @@ window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
     headers.set("authorization", `Bearer ${token}`);
   }
 
-  if (inputIsRequest) {
-    return nativeFetch(input, { ...init, headers });
+  const method = (init?.method ?? (inputIsRequest ? input.method : "GET")).toUpperCase();
+  let fingerprint: string | undefined;
+  let idempotencyKey: string | undefined;
+
+  if (MUTATING_METHODS.has(method) && !headers.has("idempotency-key")) {
+    let body = typeof init?.body === "string" ? init.body : "";
+    if (!body && inputIsRequest) {
+      try {
+        body = await input.clone().text();
+      } catch {
+        body = "";
+      }
+    }
+
+    fingerprint = `${method}\n${rawUrl}\n${body}`;
+    const now = Date.now();
+    const existing = mutationKeys.get(fingerprint);
+    if (existing && existing.expiresAt > now) {
+      idempotencyKey = existing.key;
+    } else {
+      idempotencyKey = newIdempotencyKey();
+      mutationKeys.set(fingerprint, { key: idempotencyKey, expiresAt: now + 5 * 60_000 });
+    }
+    headers.set("Idempotency-Key", idempotencyKey);
   }
 
   const resolvedUrl = relativeApiRequest && apiBase ? `${apiBase}${rawUrl}` : rawUrl;
-  return nativeFetch(resolvedUrl, { ...init, headers });
+
+  try {
+    const response = inputIsRequest
+      ? await nativeFetch(input, { ...init, method, headers })
+      : await nativeFetch(resolvedUrl, { ...init, method, headers });
+
+    if (fingerprint && idempotencyKey) {
+      // Keep a short grace window so a double-click that lands just after the
+      // first response still reuses the committed event instead of posting twice.
+      releaseMutationKey(fingerprint, idempotencyKey, 5_000);
+    }
+    return response;
+  } catch (error) {
+    if (fingerprint && idempotencyKey) {
+      // A network failure is ambiguous: the server may already have committed.
+      // Retain the key so a retry can safely recover the committed result.
+      releaseMutationKey(fingerprint, idempotencyKey, 5 * 60_000);
+    }
+    throw error;
+  }
 };
 
 createRoot(document.getElementById("root")!).render(<App />);
