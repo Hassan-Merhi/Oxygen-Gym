@@ -29,6 +29,22 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Normalize migrated member check-in contract
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const file = 'artifacts/api-server/src/domains/members/router.ts';
+          let text = fs.readFileSync(file, 'utf8');
+          text = text.replace(
+            'import { contractBody, contractBodyAs, contractParams, contractQueryAs } from "../../http/contracts";',
+            'import { contractBody, contractParams, contractQueryAs } from "../../http/contracts";',
+          );
+          text = text.replace(
+            '  const body = contractBody(req, ApiContracts.CheckInMemberBody) && typeof contractBody(req, ApiContracts.CheckInMemberBody) === "object" ? contractBodyAs<Record<string, unknown> : {}>(req, ApiContracts.CheckInMemberBody);',
+            '  const body = contractBody(req, ApiContracts.CheckInMemberBody);',
+          );
+          fs.writeFileSync(file, text);
+          NODE
       - name: Apply generated request contracts to mounted domain routers
         run: node scripts/phase3-domain-contracts.mjs
       - name: Commit domain contract migration
@@ -39,7 +55,7 @@ jobs:
             git config user.name "Phase 3 Architecture Bot"
             git config user.email "actions@users.noreply.github.com"
             git add artifacts/api-server/src
-            git commit -m "Phase 3: enforce generated contracts in domain routers"
+            git commit -m "Phase 3: finalize generated contracts in domain routers"
             git push origin HEAD:phase-3/contracts-boundaries-architecture
           fi
       - name: Validate Phase 3 gate
