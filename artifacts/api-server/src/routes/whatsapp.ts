@@ -10,7 +10,7 @@ router.use(requireAuth());
 
 // All WhatsApp routes require admin role
 function requireAdmin(req: Request, res: Response): boolean {
-  const caller = (req as any).__gymproUser;
+  const caller = req.__gymproUser;
   if (caller?.role !== "admin") {
     res.status(403).json({ error: "Admin only" });
     return false;

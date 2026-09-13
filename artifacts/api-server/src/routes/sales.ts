@@ -19,7 +19,7 @@ const router = Router();
 router.use(requireAuth());
 
 function callerName(req: Request): string {
-  return (req as unknown as { __gymproUserName?: string }).__gymproUserName ?? "System";
+  return req.__gymproUserName ?? "System";
 }
 
 async function getSettings() {
@@ -275,7 +275,7 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ── Patch sale (admin: edit currency, date, notes, item prices) ───────────────
 router.patch("/:id", async (req: Request, res: Response) => {
-  const user = (req as any).__gymproUser as { role?: string } | undefined;
+  const user = req.__gymproUser as { role?: string } | undefined;
   if (user?.role !== "admin") {
     res.status(403).json({ error: "Admin only" });
     return;

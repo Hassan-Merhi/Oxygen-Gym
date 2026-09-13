@@ -12,7 +12,7 @@ const router = Router();
 router.use(requireAuth());
 
 function callerName(req: Request): string {
-  return (req as unknown as { __gymproUserName?: string }).__gymproUserName ?? "System";
+  return req.__gymproUserName ?? "System";
 }
 
 async function getExchangeRate(): Promise<number> {

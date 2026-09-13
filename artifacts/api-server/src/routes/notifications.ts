@@ -153,7 +153,7 @@ async function computeNotifications(userId: number, permissions: any): Promise<N
 
 // ── List notifications ────────────────────────────────────────────────────────
 router.get("/", async (req: Request, res: Response) => {
-  const user = (req as any).__gymproUser;
+  const user = req.__gymproUser;
   const typeFilter = (req.query as any).type as string | undefined;
   const readFilter = (req.query as any).read as string | undefined;
   const permissions = (user?.permissions ?? {}) as Record<string, boolean>;
@@ -169,7 +169,7 @@ router.get("/", async (req: Request, res: Response) => {
 
 // ── Unread count ──────────────────────────────────────────────────────────────
 router.get("/count", async (req: Request, res: Response) => {
-  const user = (req as any).__gymproUser;
+  const user = req.__gymproUser;
   const permissions = (user?.permissions ?? {}) as Record<string, boolean>;
   const isAdmin = user?.role === "admin";
   const items = await computeNotifications(user.id, isAdmin ? null : permissions);
@@ -178,7 +178,7 @@ router.get("/count", async (req: Request, res: Response) => {
 
 // ── Mark one as read ──────────────────────────────────────────────────────────
 router.patch("/:key/read", async (req: Request, res: Response) => {
-  const user = (req as any).__gymproUser;
+  const user = req.__gymproUser;
   const key = req.params.key as string;
 
   await db.insert(notificationReadsTable).values({
@@ -192,7 +192,7 @@ router.patch("/:key/read", async (req: Request, res: Response) => {
 
 // ── Mark all read ─────────────────────────────────────────────────────────────
 router.patch("/read-all", async (req: Request, res: Response) => {
-  const user = (req as any).__gymproUser;
+  const user = req.__gymproUser;
   const permissions = (user?.permissions ?? {}) as Record<string, boolean>;
   const isAdmin = user?.role === "admin";
 

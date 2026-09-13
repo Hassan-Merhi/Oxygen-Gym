@@ -21,7 +21,7 @@ async function getExchangeRate(): Promise<number> {
 
 // ─── Helper: get caller name ─────────────────────────────────────────────────
 function callerName(req: Request): string {
-  return (req as unknown as { __gymproUserName?: string }).__gymproUserName ?? "System";
+  return req.__gymproUserName ?? "System";
 }
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
@@ -450,7 +450,7 @@ void sql;
 // GET  /api/payments/admin/cash-cleanup         → dry run (preview counts)
 // POST /api/payments/admin/cash-cleanup         → apply (dry_run=false in body)
 router.all("/admin/cash-cleanup", async (req: Request, res: Response) => {
-  const caller = (req as any).__gymproUser;
+  const caller = req.__gymproUser;
   if (caller?.role !== "admin") {
     res.status(403).json({ error: "Admin only" });
     return;

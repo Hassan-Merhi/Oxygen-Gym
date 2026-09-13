@@ -22,7 +22,7 @@ router.get("/", async (req, res) => {
       settings = created;
     }
 
-    const caller = (req as any).__gymproUser;
+    const caller = req.__gymproUser;
     const isAdmin = caller?.role === "admin";
 
     // Redact token for non-admin users
@@ -47,7 +47,7 @@ router.patch("/", async (req, res) => {
   }
 
   const data = parsed.data;
-  const caller = (req as any).__gymproUser;
+  const caller = req.__gymproUser;
   const isAdmin = caller?.role === "admin";
 
   // Credential fields require admin
