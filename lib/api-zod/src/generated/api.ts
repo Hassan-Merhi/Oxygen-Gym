@@ -765,87 +765,30 @@ export const UpdateSettingsResponse = zod.object({
 
 
 /**
- * @summary Get all dashboard KPI data and charts
+ * @summary Get dashboard KPIs (active members, revenue, expenses, profit)
  */
 export const GetDashboardKpisResponse = zod.object({
   "activeMembers": zod.object({
   "count": zod.number()
 }),
-  "monthlyRevenue": zod.object({
-  "current": zod.number(),
-  "previous": zod.number(),
-  "changePercent": zod.number()
-}).and(zod.object({
-  "currency": zod.string()
-})),
-  "monthlyExpenses": zod.object({
-  "current": zod.number(),
-  "previous": zod.number(),
-  "changePercent": zod.number()
-}),
-  "todayCheckins": zod.object({
-  "count": zod.number(),
-  "hourly": zod.array(zod.object({
-  "hour": zod.number(),
-  "count": zod.number()
-}))
-}),
-  "expiringSoon": zod.object({
-  "in7Days": zod.array(zod.object({
-  "id": zod.number(),
-  "name": zod.string(),
-  "planName": zod.string().nullish(),
-  "expiryDate": zod.coerce.date().nullish(),
-  "daysRemaining": zod.number()
-})),
-  "in14Days": zod.array(zod.object({
-  "id": zod.number(),
-  "name": zod.string(),
-  "planName": zod.string().nullish(),
-  "expiryDate": zod.coerce.date().nullish(),
-  "daysRemaining": zod.number()
-})),
-  "in30Days": zod.array(zod.object({
-  "id": zod.number(),
-  "name": zod.string(),
-  "planName": zod.string().nullish(),
-  "expiryDate": zod.coerce.date().nullish(),
-  "daysRemaining": zod.number()
-}))
-}),
-  "lowStock": zod.array(zod.object({
-  "id": zod.number(),
-  "name": zod.string(),
-  "quantity": zod.number(),
-  "alertQuantity": zod.number()
-})),
+  "revenue": zod.object({
+  "day": zod.number(),
+  "month": zod.number(),
+  "year": zod.number()
+}).describe('Amount in USD for the current business day, calendar month and calendar year.'),
+  "expenses": zod.object({
+  "day": zod.number(),
+  "month": zod.number(),
+  "year": zod.number()
+}).describe('Amount in USD for the current business day, calendar month and calendar year.'),
   "profit": zod.object({
-  "current": zod.number(),
-  "previous": zod.number(),
-  "changePercent": zod.number()
-}),
-  "revenueChart": zod.array(zod.object({
-  "month": zod.string(),
-  "amount": zod.number()
+  "day": zod.number(),
+  "month": zod.number(),
+  "year": zod.number()
+}).describe('Amount in USD for the current business day, calendar month and calendar year.').and(zod.object({
+  "total": zod.number()
 })),
-  "expenseChart": zod.array(zod.object({
-  "month": zod.string(),
-  "amount": zod.number()
-})),
-  "membershipGrowth": zod.array(zod.object({
-  "month": zod.string(),
-  "count": zod.number()
-})),
-  "recentActivity": zod.array(zod.object({
-  "id": zod.number(),
-  "userId": zod.number().nullish(),
-  "userName": zod.string(),
-  "action": zod.string(),
-  "entity": zod.string().nullish(),
-  "entityId": zod.number().nullish(),
-  "details": zod.unknown().optional(),
-  "createdAt": zod.coerce.date()
-}))
+  "currency": zod.string()
 })
 
 

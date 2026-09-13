@@ -1,46 +1,43 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
+import { db } from "@workspace/db";
+import { membersTable, paymentsTable, vouchersTable } from "@workspace/db/schema";
+import { and, gte, isNull, eq, inArray, lte, sql, count } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
-  db,
-  membersTable,
-  checkInsTable,
-  paymentsTable,
-  expensesTable,
-  productsTable,
-  activityLogsTable,
-  settingsTable,
-} from "@workspace/db";
-import { and, gte, lte, isNull, lt, desc, eq } from "drizzle-orm";
-import { calculateProfit } from "../lib/profit";
-import { lubumbashiTodayStart, lubumbashiTodayEnd } from "../lib/timezone";
+  lubumbashiTodayStart,
+  lubumbashiTodayEnd,
+  lubumbashiMonthBounds,
+  lubumbashiYearBounds,
+} from "../lib/timezone";
 
 const router = Router();
 router.use(requireAuth());
 
-function monthBounds(year: number, month: number): { from: Date; to: Date } {
-  return {
-    from: new Date(year, month - 1, 1),
-    to: new Date(year, month, 0, 23, 59, 59, 999),
-  };
-}
+/**
+ * The dashboard shows four numbers and nothing else:
+ *   1. active members right now
+ *   2. total revenue  — today / this month / this year
+ *   3. total expenses — today / this month / this year
+ *   4. total profit   — today / this month / this year / all time
+ *
+ * Revenue and expenses use the same money-in / money-out definitions as
+ * GET /accounts/summary (the cash page), so the two pages always agree:
+ *   revenue  = completed payments (direction 'in')  + recorded vouchers (direction 'in')
+ *   expenses = completed payments (direction 'out') + recorded vouchers (direction 'out')
+ *   profit   = revenue - expenses
+ *
+ * All amounts are normalized to USD.
+ */
 
-function pctChange(current: number, previous: number): number {
-  if (previous === 0) return current > 0 ? 100 : 0;
-  return Math.round(((current - previous) / previous) * 1000) / 10;
-}
+/** Money-in categories (matches GET /accounts/summary). */
+const REVENUE_CATEGORIES = ["membership", "product_sale", "other"];
+/** Money-out categories (matches GET /accounts/summary). */
+const EXPENSE_CATEGORIES = ["expense", "payroll", "stock_purchase", "other"];
 
-function last12Months(): { year: number; month: number; label: string }[] {
-  const result = [];
-  const now = new Date();
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    result.push({
-      year: d.getFullYear(),
-      month: d.getMonth() + 1,
-      label: d.toLocaleString("en-US", { month: "short", year: "numeric" }),
-    });
-  }
-  return result;
+interface Period {
+  start: Date;
+  end: Date;
 }
 
 async function getRate(): Promise<number> {
@@ -48,243 +45,158 @@ async function getRate(): Promise<number> {
   return s?.usdToCdfRate ?? 2800;
 }
 
-function toUsd(amount: number, currency: string, rate: number): number {
-  return currency === "USD" ? amount : amount / rate;
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * USD value of a row: prefer the stored amount_usd, otherwise convert the raw
+ * amount with the configured CDF rate (legacy rows have no amount_usd).
+ */
+function usdOf(
+  amount: AnyPgColumn,
+  currency: AnyPgColumn,
+  amountUsd: AnyPgColumn,
+  rate: number,
+) {
+  return sql<number>`COALESCE(
+    ${amountUsd},
+    CASE WHEN ${currency} = 'USD'
+      THEN ${amount}
+      ELSE ${amount} / CAST(${rate} AS DOUBLE PRECISION)
+    END
+  )`;
+}
+
+async function sumPaymentsUsd(
+  direction: "in" | "out",
+  categories: string[],
+  rate: number,
+  period?: Period,
+): Promise<number> {
+  const total = sql<number>`COALESCE(SUM(${usdOf(
+    paymentsTable.amount,
+    paymentsTable.currency,
+    paymentsTable.amountUsd,
+    rate,
+  )}), 0)`;
+
+  const conditions = [
+    eq(paymentsTable.direction, direction),
+    eq(paymentsTable.status, "completed"),
+    inArray(paymentsTable.category, categories),
+  ];
+  if (period) {
+    conditions.push(gte(paymentsTable.paymentDate, period.start));
+    conditions.push(lte(paymentsTable.paymentDate, period.end));
+  }
+
+  const rows = await db
+    .select({ total })
+    .from(paymentsTable)
+    .where(and(...conditions));
+
+  return Number(rows[0]?.total ?? 0);
+}
+
+async function sumVouchersUsd(
+  direction: "in" | "out",
+  rate: number,
+  period?: Period,
+): Promise<number> {
+  const total = sql<number>`COALESCE(SUM(${usdOf(
+    vouchersTable.amount,
+    vouchersTable.currency,
+    vouchersTable.amountUsd,
+    rate,
+  )}), 0)`;
+
+  const conditions = [
+    eq(vouchersTable.direction, direction),
+    eq(vouchersTable.status, "recorded"),
+  ];
+  if (period) {
+    conditions.push(gte(vouchersTable.voucherDate, period.start));
+    conditions.push(lte(vouchersTable.voucherDate, period.end));
+  }
+
+  const rows = await db.select({ total }).from(vouchersTable).where(and(...conditions));
+
+  return Number(rows[0]?.total ?? 0);
+}
+
+async function revenueUsd(rate: number, period?: Period): Promise<number> {
+  const [pay, vch] = await Promise.all([
+    sumPaymentsUsd("in", REVENUE_CATEGORIES, rate, period),
+    sumVouchersUsd("in", rate, period),
+  ]);
+  return pay + vch;
+}
+
+async function expensesUsd(rate: number, period?: Period): Promise<number> {
+  const [pay, vch] = await Promise.all([
+    sumPaymentsUsd("out", EXPENSE_CATEGORIES, rate, period),
+    sumVouchersUsd("out", rate, period),
+  ]);
+  return pay + vch;
+}
+
+/** Members whose subscription is still valid right now. */
+async function countActiveMembers(): Promise<number> {
+  const today = lubumbashiTodayStart();
+  const rows = await db
+    .select({ count: count() })
+    .from(membersTable)
+    .where(
+      and(
+        eq(membersTable.status, "active"),
+        isNull(membersTable.deletedAt),
+        gte(membersTable.expiryDate, today),
+      ),
+    );
+  return Number(rows[0]?.count ?? 0);
 }
 
 // GET /api/dashboard/kpis
-router.get("/kpis", async (req, res) => {
+router.get("/kpis", async (req: Request, res: Response) => {
   try {
-    const now = new Date();
-    const curYear = now.getFullYear();
-    const curMonth = now.getMonth() + 1;
-    const prevMonth = curMonth === 1 ? 12 : curMonth - 1;
-    const prevYear = curMonth === 1 ? curYear - 1 : curYear;
     const rate = await getRate();
 
-    // ── 1. Active members ──────────────────────────────────────────────────
-    const today = lubumbashiTodayStart();
+    const day: Period = { start: lubumbashiTodayStart(), end: lubumbashiTodayEnd() };
+    const month: Period = lubumbashiMonthBounds();
+    const year: Period = lubumbashiYearBounds();
 
-    const allActiveMembers = await db
-      .select({
-        id: membersTable.id,
-        name: membersTable.name,
-        planName: membersTable.planName,
-        expiryDate: membersTable.expiryDate,
-      })
-      .from(membersTable)
-      .where(
-        and(
-          eq(membersTable.status, "active"),
-          isNull(membersTable.deletedAt),
-          gte(membersTable.expiryDate, today),
-        ),
-      );
-
-    // ── 2. Monthly revenue ─────────────────────────────────────────────────
-    const { from: curRevFrom, to: curRevTo } = monthBounds(curYear, curMonth);
-    const { from: prevRevFrom, to: prevRevTo } = monthBounds(prevYear, prevMonth);
-
-    const getRevenue = async (from: Date, to: Date) => {
-      const rows = await db
-        .select({ amount: paymentsTable.amount, currency: paymentsTable.currency })
-        .from(paymentsTable)
-        .where(
-          and(
-            eq(paymentsTable.status, "completed"),
-            gte(paymentsTable.paymentDate, from),
-            lte(paymentsTable.paymentDate, to),
-          ),
-        );
-      return rows.reduce((acc, r) => acc + toUsd(r.amount, r.currency, rate), 0);
-    };
-
-    const [curRevenue, prevRevenue] = await Promise.all([
-      getRevenue(curRevFrom, curRevTo),
-      getRevenue(prevRevFrom, prevRevTo),
+    const [activeMembers, revByPeriod, expByPeriod, revAllTime, expAllTime] = await Promise.all([
+      countActiveMembers(),
+      Promise.all([day, month, year].map((p) => revenueUsd(rate, p))),
+      Promise.all([day, month, year].map((p) => expensesUsd(rate, p))),
+      revenueUsd(rate),
+      expensesUsd(rate),
     ]);
 
-    // ── 3. Monthly expenses ────────────────────────────────────────────────
-    const getExpenses = async (from: Date, to: Date) => {
-      const rows = await db
-        .select({ amount: expensesTable.amount, currency: expensesTable.currency })
-        .from(expensesTable)
-        .where(
-          and(
-            eq(expensesTable.type, "expense"),
-            eq(expensesTable.status, "recorded"),
-            gte(expensesTable.expenseDate, from),
-            lte(expensesTable.expenseDate, to),
-          ),
-        );
-      return rows.reduce((acc, r) => acc + toUsd(r.amount, r.currency, rate), 0);
-    };
+    const [revDay, revMonth, revYear] = revByPeriod;
+    const [expDay, expMonth, expYear] = expByPeriod;
 
-    const [curExpenses, prevExpenses] = await Promise.all([
-      getExpenses(curRevFrom, curRevTo),
-      getExpenses(prevRevFrom, prevRevTo),
-    ]);
-
-    // ── 4. Today's check-ins ───────────────────────────────────────────────
-    const todayEnd = lubumbashiTodayEnd();
-
-    const todayCheckins = await db
-      .select({ checkedInAt: checkInsTable.checkedInAt })
-      .from(checkInsTable)
-      .where(
-        and(
-          gte(checkInsTable.checkedInAt, today),
-          lte(checkInsTable.checkedInAt, todayEnd),
-        ),
-      );
-
-    // Build hourly distribution (0–23)
-    const hourlyCounts: Record<number, number> = {};
-    for (let h = 0; h < 24; h++) hourlyCounts[h] = 0;
-    for (const ci of todayCheckins) {
-      if (ci.checkedInAt) {
-        const h = new Date(ci.checkedInAt).getHours();
-        hourlyCounts[h] = (hourlyCounts[h] ?? 0) + 1;
-      }
-    }
-    const hourly = Object.entries(hourlyCounts).map(([hour, count]) => ({
-      hour: parseInt(hour),
-      count,
-    }));
-
-    // ── 5. Expiring soon ───────────────────────────────────────────────────
-    const in7 = new Date(today); in7.setDate(in7.getDate() + 7);
-    const in14 = new Date(today); in14.setDate(in14.getDate() + 14);
-    const in30 = new Date(today); in30.setDate(in30.getDate() + 30);
-
-    const expiringRows = await db
-      .select({
-        id: membersTable.id,
-        name: membersTable.name,
-        planName: membersTable.planName,
-        expiryDate: membersTable.expiryDate,
-      })
-      .from(membersTable)
-      .where(
-        and(
-          eq(membersTable.status, "active"),
-          isNull(membersTable.deletedAt),
-          gte(membersTable.expiryDate, today),
-          lte(membersTable.expiryDate, in30),
-        ),
-      );
-
-    const withDays = expiringRows.map((m) => ({
-      id: m.id,
-      name: m.name,
-      planName: m.planName,
-      expiryDate: m.expiryDate?.toISOString() ?? null,
-      daysRemaining: m.expiryDate
-        ? Math.max(0, Math.ceil((m.expiryDate.getTime() - today.getTime()) / 86400000))
-        : 0,
-    }));
-
-    const expiringSoon = {
-      in7Days: withDays.filter((m) => m.daysRemaining <= 7),
-      in14Days: withDays.filter((m) => m.daysRemaining <= 14),
-      in30Days: withDays,
-    };
-
-    // ── 6. Low stock ───────────────────────────────────────────────────────
-    const lowStockProducts = await db
-      .select({
-        id: productsTable.id,
-        name: productsTable.name,
-        quantity: productsTable.quantity,
-        alertQuantity: productsTable.alertQuantity,
-      })
-      .from(productsTable)
-      .where(
-        and(
-          eq(productsTable.status, "active"),
-          isNull(productsTable.deletedAt),
-          lte(productsTable.quantity, productsTable.alertQuantity),
-        ),
-      );
-
-    // ── 7. Profit ──────────────────────────────────────────────────────────
-    const [curProfit, prevProfit] = await Promise.all([
-      calculateProfit(curRevFrom, curRevTo),
-      calculateProfit(prevRevFrom, prevRevTo),
-    ]);
-
-    // ── Charts: last 12 months ─────────────────────────────────────────────
-    const months = last12Months();
-
-    const revenueChart = await Promise.all(
-      months.map(async ({ year, month, label }) => {
-        const { from, to } = monthBounds(year, month);
-        const amount = await getRevenue(from, to);
-        return { month: label, amount: Math.round(amount * 100) / 100 };
-      }),
-    );
-
-    const expenseChart = await Promise.all(
-      months.map(async ({ year, month, label }) => {
-        const { from, to } = monthBounds(year, month);
-        const amount = await getExpenses(from, to);
-        return { month: label, amount: Math.round(amount * 100) / 100 };
-      }),
-    );
-
-    // Membership growth: new members per month
-    const membershipGrowth = await Promise.all(
-      months.map(async ({ year, month, label }) => {
-        const { from, to } = monthBounds(year, month);
-        const rows = await db
-          .select({ id: membersTable.id })
-          .from(membersTable)
-          .where(
-            and(
-              isNull(membersTable.deletedAt),
-              gte(membersTable.createdAt, from),
-              lte(membersTable.createdAt, to),
-            ),
-          );
-        return { month: label, count: rows.length };
-      }),
-    );
-
-    // ── Recent activity ────────────────────────────────────────────────────
-    const recentActivity = await db
-      .select()
-      .from(activityLogsTable)
-      .orderBy(desc(activityLogsTable.createdAt))
-      .limit(10);
-
-    const kpis = {
-      activeMembers: { count: allActiveMembers.length },
-      monthlyRevenue: {
-        current: Math.round(curRevenue * 100) / 100,
-        previous: Math.round(prevRevenue * 100) / 100,
-        changePercent: pctChange(curRevenue, prevRevenue),
-        currency: "USD",
+    res.json({
+      activeMembers: { count: activeMembers },
+      revenue: {
+        day: round2(revDay),
+        month: round2(revMonth),
+        year: round2(revYear),
       },
-      monthlyExpenses: {
-        current: Math.round(curExpenses * 100) / 100,
-        previous: Math.round(prevExpenses * 100) / 100,
-        changePercent: pctChange(curExpenses, prevExpenses),
+      expenses: {
+        day: round2(expDay),
+        month: round2(expMonth),
+        year: round2(expYear),
       },
-      todayCheckins: { count: todayCheckins.length, hourly },
-      expiringSoon,
-      lowStock: lowStockProducts,
       profit: {
-        current: Math.round(curProfit.profit * 100) / 100,
-        previous: Math.round(prevProfit.profit * 100) / 100,
-        changePercent: pctChange(curProfit.profit, prevProfit.profit),
+        day: round2(revDay - expDay),
+        month: round2(revMonth - expMonth),
+        year: round2(revYear - expYear),
+        total: round2(revAllTime - expAllTime),
       },
-      revenueChart,
-      expenseChart,
-      membershipGrowth,
-      recentActivity,
-    };
-
-    res.json(kpis);
+      currency: "USD",
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to get dashboard KPIs");
     res.status(500).json({ error: "Internal server error" });

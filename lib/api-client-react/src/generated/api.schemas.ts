@@ -357,75 +357,29 @@ export interface ActivityLog {
   createdAt: string;
 }
 
-export interface MonthlyMetric {
-  current: number;
-  previous: number;
-  changePercent: number;
-}
-
-export interface ChartPoint {
-  month: string;
-  amount: number;
-}
-
-export interface GrowthPoint {
-  month: string;
-  count: number;
-}
-
-export interface HourlyPoint {
-  hour: number;
-  count: number;
-}
-
-export interface ExpiringMember {
-  id: number;
-  name: string;
-  /** @nullable */
-  planName?: string | null;
-  /** @nullable */
-  expiryDate?: string | null;
-  daysRemaining: number;
-}
-
-export interface LowStockProduct {
-  id: number;
-  name: string;
-  quantity: number;
-  alertQuantity: number;
+/**
+ * Amount in USD for the current business day, calendar month and calendar year.
+ */
+export interface PeriodTotals {
+  day: number;
+  month: number;
+  year: number;
 }
 
 export type DashboardKpisActiveMembers = {
   count: number;
 };
 
-export type DashboardKpisMonthlyRevenue = MonthlyMetric & {
-  currency: string;
-};
-
-export type DashboardKpisTodayCheckins = {
-  count: number;
-  hourly: HourlyPoint[];
-};
-
-export type DashboardKpisExpiringSoon = {
-  in7Days: ExpiringMember[];
-  in14Days: ExpiringMember[];
-  in30Days: ExpiringMember[];
+export type DashboardKpisProfit = PeriodTotals & {
+  total: number;
 };
 
 export interface DashboardKpis {
   activeMembers: DashboardKpisActiveMembers;
-  monthlyRevenue: DashboardKpisMonthlyRevenue;
-  monthlyExpenses: MonthlyMetric;
-  todayCheckins: DashboardKpisTodayCheckins;
-  expiringSoon: DashboardKpisExpiringSoon;
-  lowStock: LowStockProduct[];
-  profit: MonthlyMetric;
-  revenueChart: ChartPoint[];
-  expenseChart: ChartPoint[];
-  membershipGrowth: GrowthPoint[];
-  recentActivity: ActivityLog[];
+  revenue: PeriodTotals;
+  expenses: PeriodTotals;
+  profit: DashboardKpisProfit;
+  currency: string;
 }
 
 export interface Plan {
