@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 type NodeEnv = "development" | "test" | "production";
 
 function optional(name: string): string | undefined {
@@ -5,14 +7,10 @@ function optional(name: string): string | undefined {
   return value ? value : undefined;
 }
 
-function required(name: string): string {
-  const value = optional(name);
-  if (!value) throw new Error(`${name} environment variable is required.`);
-  return value;
-}
-
-function positiveInteger(name: string): number {
-  const raw = required(name);
+function positiveInteger(name: string, fallback?: number): number {
+  const raw = optional(name);
+  if (!raw && fallback !== undefined) return fallback;
+  if (!raw) throw new Error(`${name} environment variable is required.`);
   const value = Number(raw);
   if (!Number.isInteger(value) || value <= 0) {
     throw new Error(`${name} must be a positive integer; received ${JSON.stringify(raw)}.`);
@@ -37,7 +35,7 @@ const staticDir = optional("STATIC_DIR") ?? optional("ELECTRON_STATIC_DIR");
 export const env = Object.freeze({
   nodeEnv: runtime,
   isProduction: runtime === "production",
-  port: positiveInteger("PORT"),
+  port: positiveInteger("PORT", 3000),
   sessionSecret: configuredSecret ?? "gympro-dev-secret-change-in-prod",
   logLevel: optional("LOG_LEVEL") ?? "info",
   staticDir,
