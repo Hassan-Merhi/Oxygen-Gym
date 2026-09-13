@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -19,7 +19,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -43,25 +42,28 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
   MoreHorizontal,
   Edit,
-  Archive,
   Trash2,
   Dumbbell,
-  Clock,
-  RotateCcw,
   Search,
-  Layers,
   UserCheck,
+  RefreshCw,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
-// ── Schemas ────────────────────────────────────────────────────────────────────
 const planSchema = z.object({
-  name: z.string().min(1, "Name is required"),
+  name: z.string().trim().min(1, "Name is required"),
   description: z.string().optional(),
   durationDays: z.coerce.number().int().min(1, "Duration must be at least 1 day"),
   price: z.coerce.number().min(0, "Price must be ≥ 0"),
@@ -72,41 +74,33 @@ const planSchema = z.object({
 });
 type PlanFormValues = z.infer<typeof planSchema>;
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
 function fmtPrice(price: number, currency: string) {
   if (currency === "CDF") return `FC ${price.toLocaleString()}`;
-  return price % 1 === 0 ? `$${price}` : `$${price.toFixed(2)}`;
+  return price % 1 === 0 ? `$${price.toLocaleString()}` : `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function fmtDuration(days: number): { label: string; sub: string } {
+function fmtDuration(days: number): { label: string; detail: string } {
   if (days % 365 === 0) {
     const n = days / 365;
-    return { label: `${n}`, sub: `year${n > 1 ? "s" : ""}` };
+    return { label: `${n} year${n > 1 ? "s" : ""}`, detail: `${days}d` };
   }
   if (days % 30 === 0) {
     const n = days / 30;
-    return { label: `${n}`, sub: `month${n > 1 ? "s" : ""}` };
+    return { label: `${n} month${n > 1 ? "s" : ""}`, detail: `${days}d` };
   }
   if (days % 7 === 0) {
     const n = days / 7;
-    return { label: `${n}`, sub: `week${n > 1 ? "s" : ""}` };
+    return { label: `${n} week${n > 1 ? "s" : ""}`, detail: `${days}d` };
   }
-  return { label: `${days}`, sub: "days" };
+  return { label: `${days} day${days !== 1 ? "s" : ""}`, detail: `${days}d` };
 }
 
-// cycle through a set of accent colors so cards aren't all the same
-const CARD_ACCENTS = [
-  "from-violet-500 to-purple-600",
-  "from-blue-500 to-cyan-600",
-  "from-emerald-500 to-teal-600",
-  "from-orange-500 to-amber-600",
-  "from-rose-500 to-pink-600",
-  "from-indigo-500 to-blue-600",
-];
-
-// ── Plan Form Modal ────────────────────────────────────────────────────────────
 function PlanModal({
-  open, onClose, plan, onSaved, employees,
+  open,
+  onClose,
+  plan,
+  onSaved,
+  employees,
 }: {
   open: boolean;
   onClose: () => void;
@@ -116,10 +110,8 @@ function PlanModal({
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
-  const qc = useQueryClient();
-  const invalidate = () => qc.invalidateQueries({ queryKey: getListPlansQueryKey() });
-  const createPlan = useCreatePlan({ mutation: { onSuccess: invalidate } });
-  const updatePlan = useUpdatePlan({ mutation: { onSuccess: invalidate } });
+  const createPlan = useCreatePlan();
+  const updatePlan = useUpdatePlan();
 
   const {
     register,
@@ -146,35 +138,35 @@ function PlanModal({
   const currency = watch("currency");
   const coachId = watch("coachId");
 
-  // Re-populate form whenever the plan being edited changes
   useEffect(() => {
-    if (open) {
-      reset(
-        plan
-          ? {
-              name: plan.name,
-              description: plan.description ?? "",
-              durationDays: plan.durationDays,
-              price: plan.price,
-              currency: (plan.currency as "USD" | "CDF") ?? "USD",
-              coachId: plan.coachId ?? null,
-              coachFee: plan.coachFee ?? 0,
-            }
-          : { currency: "USD", durationDays: 30, price: 0, coachId: null, coachFee: 0 },
-      );
-    }
+    if (!open) return;
+    reset(
+      plan
+        ? {
+            name: plan.name,
+            description: plan.description ?? "",
+            durationDays: plan.durationDays,
+            price: plan.price,
+            currency: (plan.currency as "USD" | "CDF") ?? "USD",
+            coachId: plan.coachId ?? null,
+            coachFee: plan.coachFee ?? 0,
+          }
+        : { currency: "USD", durationDays: 30, price: 0, coachId: null, coachFee: 0 },
+    );
   }, [open, plan, reset]);
 
   const onSubmit = handleSubmit(async (data) => {
     try {
-      // Resolve coachName from selected employee
-      const selectedCoach = employees.find(e => e.id === Number(data.coachId));
+      const selectedCoach = employees.find((employee) => employee.id === Number(data.coachId));
       const payload = {
         ...data,
+        name: data.name.trim(),
+        description: data.description?.trim() || undefined,
         coachId: data.coachId ? Number(data.coachId) : null,
         coachName: selectedCoach?.name ?? null,
         coachFee: data.coachId ? (data.coachFee ?? 0) : 0,
       };
+
       if (plan) {
         await updatePlan.mutateAsync({ id: plan.id, data: payload });
         toast({ title: t("plans.updated") });
@@ -182,8 +174,9 @@ function PlanModal({
         await createPlan.mutateAsync({ data: payload });
         toast({ title: t("plans.created") });
       }
-      reset();
+
       onSaved();
+      reset();
       onClose();
     } catch {
       toast({ title: t("common.error"), variant: "destructive" });
@@ -191,7 +184,7 @@ function PlanModal({
   });
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) { reset(); onClose(); } }}>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) { reset(); onClose(); } }}>
       <DialogContent className="w-[95vw] max-w-md">
         <DialogHeader>
           <DialogTitle>{plan ? t("plans.editPlan") : t("plans.addPlan")}</DialogTitle>
@@ -199,7 +192,7 @@ function PlanModal({
         <form onSubmit={onSubmit} className="space-y-4 py-2">
           <div className="space-y-1.5">
             <Label htmlFor="name">{t("plans.form.name")} *</Label>
-            <Input id="name" {...register("name")} placeholder={t("plans.form.namePlaceholder")} />
+            <Input id="name" {...register("name")} placeholder={t("plans.form.namePlaceholder")} autoFocus />
             {errors.name && <p className="text-xs text-red-500">{errors.name.message}</p>}
           </div>
 
@@ -208,15 +201,15 @@ function PlanModal({
             <Textarea id="description" {...register("description")} rows={2} placeholder={t("plans.form.descriptionPlaceholder")} />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="durationDays">{t("plans.form.duration")} (days) *</Label>
-              <Input id="durationDays" type="number" min={1} {...register("durationDays")} placeholder="30" />
+              <Input id="durationDays" type="number" min={1} step={1} {...register("durationDays")} placeholder="30" />
               {errors.durationDays && <p className="text-xs text-red-500">{errors.durationDays.message}</p>}
             </div>
             <div className="space-y-1.5">
               <Label>{t("plans.form.currency")}</Label>
-              <Select value={currency} onValueChange={(v) => setValue("currency", v as "USD" | "CDF")}>
+              <Select value={currency} onValueChange={(value) => setValue("currency", value as "USD" | "CDF", { shouldDirty: true })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="USD">$ USD</SelectItem>
@@ -229,7 +222,7 @@ function PlanModal({
           <div className="space-y-1.5">
             <Label htmlFor="price">{t("plans.form.price")} *</Label>
             <div className="relative">
-              <span className="absolute left-3 top-2.5 text-muted-foreground text-sm font-medium">
+              <span className="absolute left-3 top-2.5 text-sm font-medium text-muted-foreground">
                 {currency === "CDF" ? "FC" : "$"}
               </span>
               <Input id="price" type="number" step="0.01" min="0" className="pl-9" {...register("price")} placeholder="0" />
@@ -237,20 +230,19 @@ function PlanModal({
             {errors.price && <p className="text-xs text-red-500">{errors.price.message}</p>}
           </div>
 
-          {/* Coach commission section */}
-          <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3 space-y-3">
-            <p className="text-xs font-semibold text-violet-700 flex items-center gap-1.5">
-              <UserCheck className="w-3.5 h-3.5" />
+          <div className="space-y-3 rounded-lg border border-violet-500/20 bg-violet-500/5 p-3">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-violet-600 dark:text-violet-300">
+              <UserCheck className="h-3.5 w-3.5" />
               Coach Commission <span className="font-normal text-muted-foreground">(optional)</span>
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label className="text-xs">Default Coach</Label>
                 <Select
                   value={coachId ? String(coachId) : "none"}
-                  onValueChange={(v) => {
-                    setValue("coachId", v === "none" ? null : Number(v));
-                    if (v === "none") setValue("coachFee", 0);
+                  onValueChange={(value) => {
+                    setValue("coachId", value === "none" ? null : Number(value), { shouldDirty: true });
+                    if (value === "none") setValue("coachFee", 0, { shouldDirty: true });
                   }}
                 >
                   <SelectTrigger className="h-8 text-xs">
@@ -258,8 +250,8 @@ function PlanModal({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No coach</SelectItem>
-                    {employees.map(e => (
-                      <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>
+                    {employees.map((employee) => (
+                      <SelectItem key={employee.id} value={String(employee.id)}>{employee.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -267,7 +259,9 @@ function PlanModal({
               <div className="space-y-1.5">
                 <Label className="text-xs">Commission Fee ({currency === "CDF" ? "FC" : "$"})</Label>
                 <Input
-                  type="number" step="0.01" min="0"
+                  type="number"
+                  step="0.01"
+                  min="0"
                   className="h-8 text-xs"
                   {...register("coachFee")}
                   placeholder="0"
@@ -275,13 +269,15 @@ function PlanModal({
                 />
               </div>
             </div>
-            <p className="text-[10px] text-muted-foreground">
-              When a payment is recorded for a member on this plan, a commission is auto-created for the assigned coach.
+            <p className="text-[10px] leading-relaxed text-muted-foreground">
+              When a payment is recorded for a member on this plan, a commission is automatically created for the assigned coach.
             </p>
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => { reset(); onClose(); }}>{t("common.cancel")}</Button>
+            <Button type="button" variant="ghost" onClick={() => { reset(); onClose(); }}>
+              {t("common.cancel")}
+            </Button>
             <Button type="submit" disabled={isSubmitting || createPlan.isPending || updatePlan.isPending}>
               {plan ? t("common.save") : t("plans.addPlan")}
             </Button>
@@ -292,200 +288,57 @@ function PlanModal({
   );
 }
 
-// ── Plan Card ──────────────────────────────────────────────────────────────────
-function PlanCard({
-  plan, accentIdx, exchangeRate, t, onEdit, onArchive, onDelete, onRestore, canManage,
-}: {
-  plan: Plan;
-  accentIdx: number;
-  exchangeRate: number;
-  t: (k: string) => string;
-  onEdit: () => void;
-  onArchive: () => void;
-  onDelete: () => void;
-  onRestore: () => void;
-  canManage: boolean;
-}) {
-  const isArchived = plan.status === "archived";
-  const accent = CARD_ACCENTS[accentIdx % CARD_ACCENTS.length];
-  const dur = fmtDuration(plan.durationDays);
-
-  return (
-    <div
-      className={cn(
-        "group rounded-2xl border overflow-hidden flex flex-col transition-all duration-200",
-        isArchived
-          ? "bg-muted/20 border-border/30 opacity-60"
-          : "bg-card border-border/50 hover:border-border hover:shadow-md hover:-translate-y-0.5",
-      )}
-    >
-      {/* Accent top bar with duration badge */}
-      <div className={cn("h-1.5 w-full bg-gradient-to-r", isArchived ? "bg-muted" : accent)} />
-
-      {/* Card body */}
-      <div className="p-5 flex flex-col flex-1 gap-4">
-        {/* Name row */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div
-              className={cn(
-                "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
-                isArchived ? "bg-muted" : `bg-gradient-to-br ${accent} shadow-sm`,
-              )}
-            >
-              <Dumbbell className="w-4 h-4 text-white" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-semibold text-sm leading-tight truncate">{plan.name}</h3>
-              <p className="text-xs text-muted-foreground font-mono mt-0.5">{plan.planNumber}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            {isArchived && (
-              <Badge variant="outline" className="text-xs border-amber-300 text-amber-600 bg-amber-50">
-                Archived
-              </Badge>
-            )}
-            {canManage && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <MoreHorizontal className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {!isArchived && (
-                    <DropdownMenuItem onClick={onEdit}>
-                      <Edit className="w-3.5 h-3.5 mr-2" />{t("common.edit")}
-                    </DropdownMenuItem>
-                  )}
-                  {isArchived ? (
-                    <DropdownMenuItem onClick={onRestore}>
-                      <RotateCcw className="w-3.5 h-3.5 mr-2" />{t("plans.restore")}
-                    </DropdownMenuItem>
-                  ) : (
-                    <DropdownMenuItem onClick={onArchive}>
-                      <Archive className="w-3.5 h-3.5 mr-2" />{t("plans.archive")}
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={onDelete} className="text-red-600 focus:text-red-600">
-                    <Trash2 className="w-3.5 h-3.5 mr-2" />{t("common.delete")}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
-        </div>
-
-        {/* Description */}
-        {plan.description && (
-          <p className="text-xs text-muted-foreground line-clamp-2 -mt-1">{plan.description}</p>
-        )}
-
-        {/* Price + Duration — the hero section */}
-        <div className="mt-auto pt-3 border-t border-border/40 space-y-2">
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <Clock className="w-3.5 h-3.5" />
-            <span className="text-sm font-semibold text-foreground">{dur.label}</span>
-            <span className="text-xs">{dur.sub}</span>
-            <span className="text-xs text-muted-foreground/60">({plan.durationDays}d)</span>
-          </div>
-          <div className="flex items-end justify-between gap-2">
-            <div>
-              {plan.currency === "USD" ? (
-                <>
-                  <p className="text-xl font-bold tracking-tight text-foreground">{fmtPrice(plan.price, "USD")}</p>
-                  <p className="text-xs text-muted-foreground">FC {Math.round(plan.price * exchangeRate).toLocaleString()}</p>
-                </>
-              ) : (
-                <>
-                  <p className="text-xl font-bold tracking-tight text-foreground">{fmtPrice(plan.price, "CDF")}</p>
-                  <p className="text-xs text-muted-foreground">${(plan.price / exchangeRate).toFixed(0)}</p>
-                </>
-              )}
-            </div>
-          </div>
-          {/* Coach commission badge */}
-          {plan.coachId && plan.coachName && (
-            <div className="flex items-center gap-1.5 pt-1">
-              <UserCheck className="w-3 h-3 text-violet-500 shrink-0" />
-              <span className="text-xs text-violet-700 font-medium truncate">{plan.coachName}</span>
-              {(plan.coachFee ?? 0) > 0 && (
-                <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
-                  +{fmtPrice(plan.coachFee!, plan.currency)}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Page ──────────────────────────────────────────────────────────────────
 export default function PlansPage() {
   const { t } = useI18n();
   const { toast } = useToast();
   const me = useGetMe();
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   const canManage = me?.role === "admin" || me?.permissions?.managePlans;
 
   const [showModal, setShowModal] = useState(false);
   const [editPlan, setEditPlan] = useState<Plan | null>(null);
-  const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState("");
 
-  const { data: plans = [], isLoading } = useListPlans();
-  const { data: empData } = useListStaffEmployees({ limit: "200" });
-  const employees = empData?.items ?? [];
+  const {
+    data: plans = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useListPlans();
+  const { data: employeeData } = useListStaffEmployees({ limit: "200" });
+  const employees = employeeData?.items ?? [];
   const { data: settings } = useGetSettings();
-  const exchangeRate = (settings?.usdToCdfRate as number) ?? 2800;
-  const updatePlan = useUpdatePlan();
+  const exchangeRate = Number(settings?.usdToCdfRate) > 0 ? Number(settings?.usdToCdfRate) : 2800;
   const deletePlan = useDeletePlan();
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getListPlansQueryKey() });
-
-  const activeCount = plans.filter((p) => p.status !== "archived").length;
-  const archivedCount = plans.filter((p) => p.status === "archived").length;
-
-  const filtered = plans.filter((p) => {
-    const matchesTab = showArchived ? p.status === "archived" : p.status !== "archived";
-    const matchesSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
-    return matchesTab && matchesSearch;
-  });
-
-  const handleArchive = async (plan: Plan) => {
-    try {
-      await updatePlan.mutateAsync({
-        id: plan.id,
-        data: { name: plan.name, description: plan.description, durationDays: plan.durationDays, price: plan.price, currency: plan.currency as "USD" | "CDF", status: "archived" },
-      });
-      toast({ title: t("plans.archived") });
-      invalidate();
-    } catch {
-      toast({ title: t("common.error"), variant: "destructive" });
-    }
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: getListPlansQueryKey() });
   };
 
-  const handleRestore = async (plan: Plan) => {
-    try {
-      await updatePlan.mutateAsync({
-        id: plan.id,
-        data: { name: plan.name, description: plan.description, durationDays: plan.durationDays, price: plan.price, currency: plan.currency as "USD" | "CDF", status: "active" },
-      });
-      toast({ title: t("plans.restored") });
-      invalidate();
-    } catch {
-      toast({ title: t("common.error"), variant: "destructive" });
-    }
-  };
+  const activePlans = useMemo(
+    () => plans.filter((plan) => plan.status !== "archived"),
+    [plans],
+  );
+
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLocaleLowerCase();
+    if (!needle) return activePlans;
+
+    return activePlans.filter((plan) => {
+      const searchable = [
+        plan.name,
+        plan.planNumber,
+        plan.description,
+        plan.coachName,
+        String(plan.durationDays),
+        plan.currency,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase();
+      return searchable.includes(needle);
+    });
+  }, [activePlans, search]);
 
   const handleDelete = async (plan: Plan) => {
     if (!window.confirm(t("plans.deleteConfirm"))) return;
@@ -499,7 +352,7 @@ export default function PlansPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         icon={Dumbbell}
         iconClass="bg-indigo-500/10 text-indigo-500"
@@ -507,113 +360,200 @@ export default function PlansPage() {
         subtitle={t("plans.subtitle")}
         actions={canManage ? (
           <Button onClick={() => { setEditPlan(null); setShowModal(true); }}>
-            <Plus className="w-4 h-4 mr-1.5" />
+            <Plus className="mr-1.5 h-4 w-4" />
             {t("plans.addPlan")}
           </Button>
         ) : undefined}
       />
 
-      {/* Controls row */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {/* Tab pills */}
-        <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">
-          <button
-            onClick={() => setShowArchived(false)}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all",
-              !showArchived
-                ? "bg-white text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            Active
-            <span className={cn(
-              "text-xs px-1.5 py-0.5 rounded-full font-semibold",
-              !showArchived ? "bg-primary/10 text-primary" : "bg-muted-foreground/20 text-muted-foreground",
-            )}>
-              {activeCount}
-            </span>
-          </button>
-          <button
-            onClick={() => setShowArchived(true)}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all",
-              showArchived
-                ? "bg-white text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Archive className="w-3.5 h-3.5" />
-            Archived
-            <span className={cn(
-              "text-xs px-1.5 py-0.5 rounded-full font-semibold",
-              showArchived ? "bg-amber-100 text-amber-700" : "bg-muted-foreground/20 text-muted-foreground",
-            )}>
-              {archivedCount}
-            </span>
-          </button>
+      <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 px-1">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Dumbbell className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold">Active plans</p>
+            <p className="text-xs text-muted-foreground">
+              {activePlans.length} plan{activePlans.length !== 1 ? "s" : ""} available
+            </p>
+          </div>
         </div>
 
-        {/* Search */}
-        <div className="relative flex-1 min-w-[180px] max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            className="pl-9"
+            className="h-9 pl-9"
             placeholder="Search plans…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-label="Search plans"
           />
         </div>
-
-        <p className="text-sm text-muted-foreground ml-auto">
-          {filtered.length} plan{filtered.length !== 1 ? "s" : ""}
-        </p>
       </div>
 
-      {/* Grid */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-44 rounded-2xl" />
-          ))}
+      {isError ? (
+        <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border/70 bg-card/40 px-6 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
+            <RefreshCw className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="font-semibold">Couldn’t load plans</p>
+            <p className="mt-1 text-sm text-muted-foreground">Please retry. Your plans were not changed.</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => { void refetch(); }}>
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            Retry
+          </Button>
+        </div>
+      ) : isLoading ? (
+        <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+          <div className="grid grid-cols-[minmax(240px,2fr)_1fr_1fr_1fr_48px] gap-4 border-b bg-muted/40 px-4 py-3">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <Skeleton key={index} className="h-4 w-20" />
+            ))}
+          </div>
+          <div className="divide-y divide-border/50">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="grid grid-cols-[minmax(240px,2fr)_1fr_1fr_1fr_48px] items-center gap-4 px-4 py-4">
+                <Skeleton className="h-9 w-48" />
+                <Skeleton className="h-5 w-24" />
+                <Skeleton className="h-8 w-20" />
+                <Skeleton className="h-5 w-28" />
+                <Skeleton className="h-8 w-8" />
+              </div>
+            ))}
+          </div>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-4 rounded-2xl border border-dashed border-border/60 bg-muted/10">
-          <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
-            <Dumbbell className="w-7 h-7 text-muted-foreground/40" />
+        <div className="flex min-h-72 flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border/70 bg-card/40 px-6 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+            <Dumbbell className="h-6 w-6 text-muted-foreground/50" />
           </div>
-          <div className="text-center">
+          <div>
             <p className="font-semibold text-foreground">
-              {search ? "No plans match your search" : showArchived ? t("plans.noArchived") : t("plans.noPlans")}
+              {search ? "No plans match your search" : t("plans.noPlans")}
             </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              {search ? "Try a different name" : !showArchived && canManage ? t("plans.noPlansHint") : ""}
+            <p className="mt-1 text-sm text-muted-foreground">
+              {search ? "Try a different plan name, number, coach, or duration." : canManage ? t("plans.noPlansHint") : ""}
             </p>
           </div>
-          {!search && !showArchived && canManage && (
+          {!search && canManage && (
             <Button onClick={() => { setEditPlan(null); setShowModal(true); }}>
-              <Plus className="w-4 h-4 mr-1.5" />
+              <Plus className="mr-1.5 h-4 w-4" />
               {t("plans.addPlan")}
             </Button>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((plan, i) => (
-            <PlanCard
-              key={plan.id}
-              plan={plan}
-              accentIdx={i}
-              exchangeRate={exchangeRate}
-              t={t}
-              canManage={!!canManage}
-              onEdit={() => { setEditPlan(plan); setShowModal(true); }}
-              onArchive={() => handleArchive(plan)}
-              onDelete={() => handleDelete(plan)}
-              onRestore={() => handleRestore(plan)}
-            />
-          ))}
+        <Table className="min-w-[760px] bg-card">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-[36%] px-4">Plan</TableHead>
+              <TableHead className="w-[18%] px-4">Duration</TableHead>
+              <TableHead className="w-[18%] px-4">Price</TableHead>
+              <TableHead className="w-[22%] px-4">Coach</TableHead>
+              <TableHead className="w-14 px-3 text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.map((plan) => {
+              const duration = fmtDuration(plan.durationDays);
+              const convertedPrice = plan.currency === "USD"
+                ? `FC ${Math.round(plan.price * exchangeRate).toLocaleString()}`
+                : `$${Math.round(plan.price / exchangeRate).toLocaleString()}`;
+
+              return (
+                <TableRow key={plan.id} className="group">
+                  <TableCell className="px-4 py-3.5">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-500">
+                        <Dumbbell className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate font-semibold text-foreground">{plan.name}</p>
+                          {plan.planNumber && (
+                            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                              {plan.planNumber}
+                            </span>
+                          )}
+                        </div>
+                        {plan.description ? (
+                          <p className="mt-0.5 max-w-md truncate text-xs text-muted-foreground">{plan.description}</p>
+                        ) : (
+                          <p className="mt-0.5 text-xs text-muted-foreground/60">No description</p>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+
+                  <TableCell className="px-4 py-3.5">
+                    <p className="font-medium tabular-nums text-foreground">{duration.label}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{duration.detail}</p>
+                  </TableCell>
+
+                  <TableCell className="px-4 py-3.5">
+                    <p className="font-semibold tabular-nums text-foreground">{fmtPrice(plan.price, plan.currency)}</p>
+                    <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">{convertedPrice}</p>
+                  </TableCell>
+
+                  <TableCell className="px-4 py-3.5">
+                    {plan.coachId && plan.coachName ? (
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-500/10 text-violet-500">
+                          <UserCheck className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{plan.coachName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(plan.coachFee ?? 0) > 0 ? `${fmtPrice(plan.coachFee ?? 0, plan.currency)} commission` : "No commission fee"}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+
+                  <TableCell className="px-3 py-3.5 text-right">
+                    {canManage ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${plan.name}`}>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-36">
+                          <DropdownMenuItem onClick={() => { setEditPlan(plan); setShowModal(true); }}>
+                            <Edit className="mr-2 h-3.5 w-3.5" />
+                            {t("common.edit")}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => { void handleDelete(plan); }}
+                            className="text-red-600 focus:text-red-600"
+                            disabled={deletePlan.isPending}
+                          >
+                            <Trash2 className="mr-2 h-3.5 w-3.5" />
+                            {t("common.delete")}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : (
+                      <span className="text-muted-foreground/40">—</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      )}
+
+      {!isLoading && !isError && filtered.length > 0 && (
+        <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
+          <span>{filtered.length} of {activePlans.length} active plan{activePlans.length !== 1 ? "s" : ""}</span>
+          {search && <span>Filtered by “{search.trim()}”</span>}
         </div>
       )}
 
