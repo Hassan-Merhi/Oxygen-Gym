@@ -1,16 +1,19 @@
-import { pgTable, text, serial, timestamp, doublePrecision, jsonb, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, numeric, jsonb, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+
+const money = (name: string) => numeric(name, { precision: 20, scale: 6, mode: "number" });
+const fx = (name: string) => numeric(name, { precision: 20, scale: 8, mode: "number" });
 
 export interface SaleItem {
   productId: number;
   productName: string;
   quantity: number;
   unitPrice: number;
-  discount: number;       // per-unit discount in sale currency
-  lineTotal: number;      // (unitPrice - discount) * quantity
-  costPrice: number;      // average cost at time of sale (in sale currency)
-  profit: number;         // lineTotal - costPrice * quantity
+  discount: number;
+  lineTotal: number;
+  costPrice: number;
+  profit: number;
   currency: string;
 }
 
@@ -18,26 +21,22 @@ export const salesTable = pgTable("sales", {
   id: serial("id").primaryKey(),
   saleNumber: text("sale_number").unique(),
   items: jsonb("items").$type<SaleItem[]>().default([]),
-  // Totals in sale currency
-  totalAmount: doublePrecision("total_amount").notNull().default(0),
-  totalDiscount: doublePrecision("total_discount").notNull().default(0),
-  totalCost: doublePrecision("cost_total").notNull().default(0),
-  totalProfit: doublePrecision("total_profit").notNull().default(0),
-  // USD equivalents
-  totalAmountUsd: doublePrecision("total_amount_usd"),
-  totalCostUsd: doublePrecision("cost_total_usd"),
-  totalProfitUsd: doublePrecision("total_profit_usd"),
-  // Payment
+  totalAmount: money("total_amount").notNull().default(0),
+  totalDiscount: money("total_discount").notNull().default(0),
+  totalCost: money("cost_total").notNull().default(0),
+  totalProfit: money("total_profit").notNull().default(0),
+  totalAmountUsd: money("total_amount_usd"),
+  totalCostUsd: money("cost_total_usd"),
+  totalProfitUsd: money("total_profit_usd"),
   currency: text("currency").notNull().default("USD"),
-  exchangeRate: doublePrecision("exchange_rate").notNull().default(1),
-  paymentAmount: doublePrecision("payment_amount").notNull().default(0),
-  changeDue: doublePrecision("change_due").notNull().default(0),
+  exchangeRate: fx("exchange_rate").notNull().default(1),
+  paymentAmount: money("payment_amount").notNull().default(0),
+  changeDue: money("change_due").notNull().default(0),
   paymentId: integer("payment_id"),
-  // Meta
   notes: text("notes"),
   createdBy: text("created_by"),
   saleDate: timestamp("sale_date", { withTimezone: true }).notNull().defaultNow(),
-  status: text("status").notNull().default("completed"), // 'completed' | 'voided'
+  status: text("status").notNull().default("completed"),
   voidedAt: timestamp("voided_at", { withTimezone: true }),
   voidedBy: text("voided_by"),
   voidReason: text("void_reason"),

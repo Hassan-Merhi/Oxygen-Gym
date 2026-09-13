@@ -1,13 +1,11 @@
 import type { Plan } from "@workspace/db/schema";
+import { convertCurrencyAmount } from "../../shared/accounting/currency";
+import { money, subtractMoney } from "../../shared/accounting/decimal";
 
 export function planPriceInCurrency(plan: Plan, currency: string, exchangeRate: number): number {
-  const planCurrency = plan.currency ?? "USD";
-  if (planCurrency === currency) return plan.price;
-  if (planCurrency === "CDF" && currency === "USD") return plan.price / exchangeRate;
-  if (planCurrency === "USD" && currency === "CDF") return plan.price * exchangeRate;
-  return plan.price;
+  return convertCurrencyAmount(money(plan.price), plan.currency ?? "USD", currency, exchangeRate);
 }
 
 export function calculateMemberBalance(planPrice: number, amountPaid: number, discount: number): number {
-  return planPrice - discount - amountPaid;
+  return subtractMoney(subtractMoney(planPrice, discount), amountPaid);
 }

@@ -10,17 +10,14 @@ import {
   parsePage,
   requiredString,
 } from "../../shared/http/validation";
+import { getAccountStatement, listAccountSales } from "./accounts-service";
 import {
   createChartAccount,
   deactivateChartAccount,
-  getAccountStatement,
-  getAccountsSummary,
-  getProfitLoss,
-  listAccountExpenses,
-  listAccountSales,
   listChartAccounts,
   updateChartAccount,
-} from "./accounts-service";
+} from "./chart-service";
+import { getAccountsSummary, getProfitLoss, listAccountExpenses } from "./reporting-service";
 
 const router = Router();
 router.use(requireAuth());

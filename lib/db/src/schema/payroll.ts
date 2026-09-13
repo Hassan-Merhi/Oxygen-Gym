@@ -1,29 +1,28 @@
-import { pgTable, text, serial, timestamp, doublePrecision, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, numeric, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+
+const money = (name: string) => numeric(name, { precision: 20, scale: 6, mode: "number" });
+const fx = (name: string) => numeric(name, { precision: 20, scale: 8, mode: "number" });
 
 export const payrollTable = pgTable("payroll", {
   id: serial("id").primaryKey(),
   payrollNumber: text("payroll_number").unique(),
-  // Staff employee link
   staffEmployeeId: integer("staff_employee_id"),
   staffName: text("user_name").notNull(),
   staffNumber: text("staff_number"),
-  // Pay period
   periodStart: timestamp("period_start", { withTimezone: true }),
   periodEnd: timestamp("period_end", { withTimezone: true }),
-  // Financials
-  baseSalary: doublePrecision("amount").notNull().default(0),
-  bonus: doublePrecision("bonus").notNull().default(0),
-  deduction: doublePrecision("deduction").notNull().default(0),
-  netPay: doublePrecision("net_pay").notNull().default(0),
+  baseSalary: money("amount").notNull().default(0),
+  bonus: money("bonus").notNull().default(0),
+  deduction: money("deduction").notNull().default(0),
+  netPay: money("net_pay").notNull().default(0),
   currency: text("currency").notNull().default("USD"),
-  exchangeRate: doublePrecision("exchange_rate").notNull().default(1),
-  netPayUsd: doublePrecision("amount_usd"),
-  // Status
-  commissionBonus: doublePrecision("commission_bonus").notNull().default(0),
+  exchangeRate: fx("exchange_rate").notNull().default(1),
+  netPayUsd: money("amount_usd"),
+  commissionBonus: money("commission_bonus").notNull().default(0),
   notes: text("notes"),
-  status: text("status").notNull().default("draft"), // 'draft' | 'paid' | 'cancelled'
+  status: text("status").notNull().default("draft"),
   paidAt: timestamp("paid_at", { withTimezone: true }),
   paidBy: text("paid_by"),
   paymentId: integer("payment_id"),
