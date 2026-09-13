@@ -27,17 +27,17 @@ function invalidInput(res: Response, issues: readonly ContractIssue[]): null {
 }
 
 export function parseBody<T>(req: Request, res: Response, schema: ContractSchema<T>): T | null {
-  const parsed = schema.safeParse(req.body as unknown);
+  const parsed = schema.safeParse(req.body);
   return parsed.success ? parsed.data : invalidInput(res, parsed.error.issues);
 }
 
 export function parseParams<T>(req: Request, res: Response, schema: ContractSchema<T>): T | null {
-  const parsed = schema.safeParse(req.params as unknown);
+  const parsed = schema.safeParse(req.params);
   return parsed.success ? parsed.data : invalidInput(res, parsed.error.issues);
 }
 
 export function parseQuery<T>(req: Request, res: Response, schema: ContractSchema<T>): T | null {
-  const parsed = schema.safeParse(req.query as unknown);
+  const parsed = schema.safeParse(req.query);
   return parsed.success ? parsed.data : invalidInput(res, parsed.error.issues);
 }
 
