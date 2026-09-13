@@ -4,6 +4,7 @@ import pinoHttp from "pino-http";
 import path from "path";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { env } from "./config/env";
 
 const app: Express = express();
 
@@ -19,9 +20,7 @@ app.use(
         };
       },
       res(res) {
-        return {
-          statusCode: res.statusCode,
-        };
+        return { statusCode: res.statusCode };
       },
     },
   }),
@@ -31,16 +30,12 @@ app.use(cors({ credentials: true, origin: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve uploaded files
-const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
-app.use("/api/uploads", express.static(UPLOAD_DIR));
-
+const uploadDir = path.resolve(process.cwd(), "uploads");
+app.use("/api/uploads", express.static(uploadDir));
 app.use("/api", router);
 
-// ── Production / Electron: serve the built frontend ───────────────────────────
-const staticDir = process.env.STATIC_DIR ?? process.env.ELECTRON_STATIC_DIR;
-if (staticDir) {
-  const resolvedStaticDir = path.resolve(staticDir);
+if (env.staticDir) {
+  const resolvedStaticDir = path.resolve(env.staticDir);
   app.use(express.static(resolvedStaticDir));
   app.get("/{*splat}", (_req, res) => {
     res.sendFile(path.join(resolvedStaticDir, "index.html"));
