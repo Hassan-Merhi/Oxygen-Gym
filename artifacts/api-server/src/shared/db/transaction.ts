@@ -1,6 +1,7 @@
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { getMutationRequestContext } from "../http/idempotency-context";
+import { conflict } from "../http/errors";
 
 export type DatabaseTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -8,17 +9,28 @@ let ensureIdempotencyTablePromise: Promise<void> | undefined;
 
 function ensureIdempotencyTable(): Promise<void> {
   if (!ensureIdempotencyTablePromise) {
-    ensureIdempotencyTablePromise = db.execute(sql`
-      CREATE TABLE IF NOT EXISTS financial_idempotency (
-        scope TEXT NOT NULL,
-        idempotency_key TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'processing',
-        response_json JSONB,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        completed_at TIMESTAMPTZ,
-        PRIMARY KEY (scope, idempotency_key)
-      )
-    `).then(() => undefined).catch((error) => {
+    ensureIdempotencyTablePromise = (async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS financial_idempotency (
+          scope TEXT NOT NULL,
+          idempotency_key TEXT NOT NULL,
+          request_hash TEXT,
+          status TEXT NOT NULL DEFAULT 'processing',
+          response_json JSONB,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          completed_at TIMESTAMPTZ,
+          PRIMARY KEY (scope, idempotency_key)
+        )
+      `);
+      await db.execute(sql`
+        ALTER TABLE financial_idempotency
+          ADD COLUMN IF NOT EXISTS request_hash TEXT
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS idx_financial_idempotency_created_at
+          ON financial_idempotency(created_at)
+      `);
+    })().catch((error) => {
       ensureIdempotencyTablePromise = undefined;
       throw error;
     });
@@ -68,23 +80,26 @@ export async function withTransaction<T>(work: (tx: DatabaseTransaction) => Prom
     if (!context?.idempotencyKey) return work(tx);
 
     const claimed = await tx.execute(sql`
-      INSERT INTO financial_idempotency (scope, idempotency_key, status)
-      VALUES (${context.scope}, ${context.idempotencyKey}, 'processing')
+      INSERT INTO financial_idempotency (scope, idempotency_key, request_hash, status)
+      VALUES (${context.scope}, ${context.idempotencyKey}, ${context.requestHash}, 'processing')
       ON CONFLICT (scope, idempotency_key) DO NOTHING
       RETURNING idempotency_key
     `);
 
     if (claimed.rows.length === 0) {
       const prior = await tx.execute(sql`
-        SELECT status, response_json
+        SELECT status, response_json, request_hash
         FROM financial_idempotency
         WHERE scope = ${context.scope}
           AND idempotency_key = ${context.idempotencyKey}
         FOR UPDATE
       `);
-      const row = prior.rows[0] as { status?: string; response_json?: unknown } | undefined;
+      const row = prior.rows[0] as { status?: string; response_json?: unknown; request_hash?: string | null } | undefined;
+      if (row?.request_hash && row.request_hash !== context.requestHash) {
+        throw conflict("Idempotency-Key was already used with different request data");
+      }
       if (row?.status === "completed") return row.response_json as T;
-      throw new Error(`Idempotency key is already in progress for ${context.scope}`);
+      throw conflict(`Idempotency-Key is already in progress for ${context.scope}`);
     }
 
     const result = await work(tx);
