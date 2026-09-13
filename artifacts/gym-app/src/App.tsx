@@ -14,6 +14,7 @@ import Dashboard from "@/pages/dashboard";
 import Staff from "@/pages/staff";
 import Settings from "@/pages/settings";
 import Members from "@/pages/members";
+import MembersOverview from "@/pages/members-overview";
 import MemberProfile from "@/pages/member-profile";
 import Payments from "@/pages/payments";
 import Accounts from "@/pages/accounts";
@@ -202,6 +203,7 @@ function AppShell() {
         <Route path="/staff"><ProtectedRoute component={Staff} permKey="staff" /></Route>
         <Route path="/settings"><ProtectedRoute component={Settings} permKey="settings" /></Route>
         <Route path="/members"><ProtectedRoute component={Members} permKey="members" /></Route>
+        <Route path="/members-overview"><ProtectedRoute component={MembersOverview} permKey="members" /></Route>
         <Route path="/members/:id">{(params) => <ProtectedMemberProfile id={Number(params.id)} />}</Route>
         <Route path="/plans"><ProtectedRoute component={Plans} permKey="plans" /></Route>
         <Route path="/payroll"><Redirect to="/staff" /></Route>
