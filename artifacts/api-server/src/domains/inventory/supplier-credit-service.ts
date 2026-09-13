@@ -168,10 +168,14 @@ export async function addSupplierPayment(
     if (appliedAmount > remaining + 0.001) throw badRequest(`Payment exceeds remaining balance (${remaining.toFixed(2)} ${credit.currency})`);
 
     const paymentDate = input.paymentDate ?? new Date();
+    const { amountUsd, amountCdf } = toUsdCdf(input.amount, paymentCurrency, rate);
     const [payment] = await tx.insert(supplierPaymentsTable).values({
       creditId,
       amount: input.amount,
       currency: paymentCurrency,
+      exchangeRate: rate,
+      amountUsd,
+      amountCdf,
       paymentDate,
       notes: input.notes,
     }).returning();
@@ -182,7 +186,6 @@ export async function addSupplierPayment(
       status: newPaid >= credit.totalAmount - 0.001 ? "paid" : "open",
     }).where(eq(supplierCreditsTable.id, creditId)).returning();
 
-    const { amountUsd, amountCdf } = toUsdCdf(input.amount, paymentCurrency, rate);
     const description = `Supplier payment: ${credit.supplier} — ${credit.creditNumber ?? credit.id}`;
     await appendLedgerEntry({
       entryDate: paymentDate,
@@ -220,7 +223,8 @@ export async function addSupplierPayment(
 }
 
 export async function deleteSupplierPayment(creditId: number, paymentId: number) {
-  const currentRate = await getExchangeRate();
+  const fallbackRate = await getExchangeRate();
+  if (!Number.isFinite(fallbackRate) || fallbackRate <= 0) throw badRequest("A valid exchange rate is required");
 
   return withTransaction(async (tx) => {
     const [payment] = await tx.select().from(supplierPaymentsTable).where(and(
@@ -237,6 +241,10 @@ export async function deleteSupplierPayment(creditId: number, paymentId: number)
       eq(cashLedgerTable.sourceId, paymentId),
     )).orderBy(desc(cashLedgerTable.id)).limit(1);
 
+    const paymentRate = payment.exchangeRate > 0
+      ? payment.exchangeRate
+      : ledger?.exchangeRate ?? fallbackRate;
+
     if (ledger) {
       await appendLedgerEntry({
         entryDate: new Date(),
@@ -246,28 +254,22 @@ export async function deleteSupplierPayment(creditId: number, paymentId: number)
         direction: "in",
         amount: payment.amount,
         currency: payment.currency,
-        exchangeRate: ledger.exchangeRate,
+        exchangeRate: paymentRate,
         description: `Reversal: supplier payment ${credit.creditNumber ?? credit.id}`,
       }, tx);
       await reverseEntries("supplier_payment", payment.id, "supplier_payment_reversal", "system", tx);
     }
 
     await tx.delete(supplierPaymentsTable).where(eq(supplierPaymentsTable.id, paymentId));
-    // Legacy supplier payments pre-date ledger/accounting posting and historically
-    // updated amountPaid using the raw amount. Preserve that behavior only for
-    // legacy rows; new atomic rows use the stored ledger exchange rate.
-    const appliedAmount = ledger
-      ? convertAmount(payment.amount, payment.currency, credit.currency, ledger.exchangeRate)
-      : payment.amount;
+    // Legacy supplier payments pre-date atomic posting. New rows persist the exact
+    // exchange rate used for balance, ledger, and accounting in the source row.
+    const appliedAmount = convertAmount(payment.amount, payment.currency, credit.currency, paymentRate);
     const newPaid = Math.max(0, credit.amountPaid - appliedAmount);
     const [updated] = await tx.update(supplierCreditsTable).set({
       amountPaid: newPaid,
       status: newPaid < credit.totalAmount - 0.001 ? "open" : "paid",
     }).where(eq(supplierCreditsTable.id, creditId)).returning();
 
-    // Validate current rate even for legacy reversals so corrupt settings cannot
-    // silently create a future inconsistent supplier transaction.
-    if (!Number.isFinite(currentRate) || currentRate <= 0) throw badRequest("A valid exchange rate is required");
     return { ok: true, credit: { ...updated, remaining: updated.totalAmount - updated.amountPaid } };
   });
 }
