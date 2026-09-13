@@ -476,8 +476,7 @@ function ProductModal({
   onUpdate: (id: number, data: Record<string, unknown>) => Promise<void>;
 }) {
   const [form, setForm] = useState({
-    name: "", barcode: "", description: "", category: "", supplier: "",
-    notes: "", quantity: "0", alertQuantity: "5",
+    name: "", barcode: "", quantity: "0", alertQuantity: "5",
     costPrice: "0", sellingPrice: "0", currency: "USD", status: "active",
   });
   const [saving, setSaving] = useState(false);
@@ -489,10 +488,6 @@ function ProductModal({
         setForm({
           name: editing.name,
           barcode: editing.barcode ?? "",
-          description: editing.description ?? "",
-          category: editing.category ?? "",
-          supplier: editing.supplier ?? "",
-          notes: editing.notes ?? "",
           quantity: String(editing.quantity),
           alertQuantity: String(editing.alertQuantity),
           costPrice: String(editing.costPrice),
@@ -501,38 +496,43 @@ function ProductModal({
           status: editing.status,
         });
       } else {
-        setForm({ name: "", barcode: "", description: "", category: "", supplier: "", notes: "", quantity: "0", alertQuantity: "5", costPrice: "0", sellingPrice: "0", currency: "USD", status: "active" });
+        setForm({ name: "", barcode: "", quantity: "0", alertQuantity: "5", costPrice: "0", sellingPrice: "0", currency: "USD", status: "active" });
       }
       setError("");
     }
   }, [open, editing]);
 
-  function set(k: string, v: string) { setForm((f) => ({ ...f, [k]: v })); }
+  function set(k: keyof typeof form, v: string) { setForm((f) => ({ ...f, [k]: v })); }
 
   async function save() {
     if (!form.name.trim()) { setError(t("stock.field.name") + " is required"); return; }
     setSaving(true);
     setError("");
     try {
+      const quantity = Number.parseInt(form.quantity, 10);
+      const alertQuantity = Number.parseInt(form.alertQuantity, 10);
+      const costPrice = Number.parseFloat(form.costPrice);
+      const sellingPrice = Number.parseFloat(form.sellingPrice);
       const data = {
         name: form.name.trim(),
         barcode: form.barcode.trim() || null,
-        description: form.description.trim() || null,
-        category: form.category.trim() || null,
-        supplier: form.supplier.trim() || null,
-        notes: form.notes.trim() || null,
-        quantity: parseInt(form.quantity) || 0,
-        alertQuantity: parseInt(form.alertQuantity) || 5,
-        costPrice: parseFloat(form.costPrice) || 0,
-        sellingPrice: parseFloat(form.sellingPrice) || 0,
+        quantity: Number.isFinite(quantity) ? Math.max(0, quantity) : 0,
+        alertQuantity: Number.isFinite(alertQuantity) ? Math.max(0, alertQuantity) : 5,
+        costPrice: Number.isFinite(costPrice) ? Math.max(0, costPrice) : 0,
+        sellingPrice: Number.isFinite(sellingPrice) ? Math.max(0, sellingPrice) : 0,
         currency: form.currency,
         status: form.status,
+        // These fields are no longer editable here. Preserve existing values on edits.
+        description: editing?.description ?? null,
+        category: editing?.category ?? null,
+        supplier: editing?.supplier ?? null,
+        notes: editing?.notes ?? null,
       };
       if (editing) await onUpdate(editing.id, data);
       else await onCreate(data);
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { error?: string } } };
-      const msg = err?.response?.data?.error ?? "An error occurred";
+      const err = e as { data?: { error?: string }; response?: { data?: { error?: string } }; message?: string };
+      const msg = err?.data?.error ?? err?.response?.data?.error ?? err?.message ?? "An error occurred";
       if (msg.toLowerCase().includes("barcode")) setError(t("stock.barcodeExists"));
       else setError(msg);
     } finally {
@@ -541,82 +541,107 @@ function ProductModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="w-[95vw] max-w-xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{editing ? t("stock.editProduct") : t("stock.addProduct")}</DialogTitle>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <DialogContent className="w-[95vw] max-w-lg overflow-hidden p-0">
+        <DialogHeader className="border-b border-border bg-muted/20 px-6 py-5 text-left">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-500">
+              {editing ? <Pencil className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+            </div>
+            <div className="min-w-0">
+              <DialogTitle className="text-xl">{editing ? t("stock.editProduct") : t("stock.addProduct")}</DialogTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {editing ? "Update the essential product, pricing and stock details." : "Add the essential product and inventory details."}
+              </p>
+              {editing?.productNumber && <p className="mt-1 text-xs text-muted-foreground/70">{editing.productNumber}</p>}
+            </div>
+          </div>
         </DialogHeader>
 
-        {error && <p className="text-sm text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="sm:col-span-2">
-            <Label>{t("stock.field.name")} *</Label>
-            <Input value={form.name} onChange={(e) => set("name", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label>{t("stock.field.barcode")}</Label>
-            <Input value={form.barcode} onChange={(e) => set("barcode", e.target.value)} className="mt-1" placeholder="e.g. 123456789" />
-          </div>
-          <div>
-            <Label>{t("stock.field.category")}</Label>
-            <Input value={form.category} onChange={(e) => set("category", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label>{t("stock.field.supplier")}</Label>
-            <Input value={form.supplier} onChange={(e) => set("supplier", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label>{t("stock.field.currency")}</Label>
-            <Select value={form.currency} onValueChange={(v) => set("currency", v)}>
-              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="USD">USD</SelectItem>
-                <SelectItem value="CDF">CDF</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>{t("stock.field.sellingPrice")}</Label>
-            <Input type="number" min="0" step="0.01" value={form.sellingPrice} onChange={(e) => set("sellingPrice", e.target.value)} className="mt-1" />
-          </div>
-          {canViewCost && (
-            <div>
-              <Label>{t("stock.field.costPrice")}</Label>
-              <Input type="number" min="0" step="0.01" value={form.costPrice} onChange={(e) => set("costPrice", e.target.value)} className="mt-1" />
+        <div className="space-y-5 px-6 py-5">
+          {error && (
+            <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
-          <div>
-            <Label>{t("stock.field.quantity")}</Label>
-            <Input type="number" min="0" value={form.quantity} onChange={(e) => set("quantity", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label>{t("stock.field.alertQty")}</Label>
-            <Input type="number" min="0" value={form.alertQuantity} onChange={(e) => set("alertQuantity", e.target.value)} className="mt-1" />
-          </div>
-          <div>
-            <Label>{t("stock.field.status")}</Label>
-            <Select value={form.status} onValueChange={(v) => set("status", v)}>
-              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">{t("stock.status.active")}</SelectItem>
-                <SelectItem value="archived">{t("stock.status.archived")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="sm:col-span-2">
-            <Label>{t("stock.field.description")}</Label>
-            <Textarea value={form.description} onChange={(e) => set("description", e.target.value)} className="mt-1" rows={2} />
-          </div>
-          <div className="sm:col-span-2">
-            <Label>{t("stock.field.notes")}</Label>
-            <Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} className="mt-1" rows={2} />
-          </div>
+
+          <section className="space-y-3">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Package className="h-3.5 w-3.5" /> Product
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("stock.field.name")} *</Label>
+              <Input autoFocus value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Product name" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("stock.field.barcode")}</Label>
+              <Input value={form.barcode} onChange={(e) => set("barcode", e.target.value)} placeholder="Scan or enter barcode" />
+            </div>
+          </section>
+
+          <div className="h-px bg-border" />
+
+          <section className="space-y-3">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <DollarSign className="h-3.5 w-3.5" /> Pricing
+            </div>
+            <div className={`grid grid-cols-1 gap-3 ${canViewCost ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+              <div className="space-y-1.5">
+                <Label>{t("stock.field.currency")}</Label>
+                <Select value={form.currency} onValueChange={(v) => set("currency", v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="CDF">CDF / FC</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>{t("stock.field.sellingPrice")}</Label>
+                <Input type="number" min="0" step="0.01" value={form.sellingPrice} onChange={(e) => set("sellingPrice", e.target.value)} />
+              </div>
+              {canViewCost && (
+                <div className="space-y-1.5">
+                  <Label>{t("stock.field.costPrice")}</Label>
+                  <Input type="number" min="0" step="0.01" value={form.costPrice} onChange={(e) => set("costPrice", e.target.value)} />
+                </div>
+              )}
+            </div>
+          </section>
+
+          <div className="h-px bg-border" />
+
+          <section className="space-y-3">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Layers className="h-3.5 w-3.5" /> Inventory
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label>{t("stock.field.quantity")}</Label>
+                <Input type="number" min="0" step="1" value={form.quantity} onChange={(e) => set("quantity", e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>{t("stock.field.alertQty")}</Label>
+                <Input type="number" min="0" step="1" value={form.alertQuantity} onChange={(e) => set("alertQuantity", e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>{t("stock.field.status")}</Label>
+                <Select value={form.status} onValueChange={(v) => set("status", v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">{t("stock.status.active")}</SelectItem>
+                    <SelectItem value="archived">{t("stock.status.archived")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </section>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
-          <Button onClick={save} disabled={saving}>
+        <DialogFooter className="border-t border-border bg-muted/20 px-6 py-4">
+          <Button variant="outline" onClick={onClose} disabled={saving}>{t("common.cancel")}</Button>
+          <Button onClick={save} disabled={saving} className="min-w-24">
             {saving ? t("common.saving") : t("common.save")}
           </Button>
         </DialogFooter>
