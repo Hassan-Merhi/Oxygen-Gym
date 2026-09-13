@@ -25,7 +25,8 @@ async function getCashLedgerFallback(account: NonNullable<Awaited<ReturnType<typ
   const ledgerRows = await db.select().from(cashLedgerTable)
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(asc(cashLedgerTable.entryDate), asc(cashLedgerTable.id));
-  const fallbackRate = await getExchangeRate();
+  const configuredRate = await getExchangeRate();
+  const fallbackRate = configuredRate >= 10 ? configuredRate : 2800;
 
   let runningBalance = 0;
   const rows = ledgerRows.map((row) => {
