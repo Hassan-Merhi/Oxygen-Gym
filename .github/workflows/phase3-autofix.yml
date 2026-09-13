@@ -39,14 +39,16 @@ jobs:
         run: |
           if git diff --quiet; then
             echo "No autofix changes"
-            exit 0
+          else
+            git config user.name "Phase 3 Architecture Bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add \
+              lib/api-spec/openapi.yaml \
+              lib/api-zod/src/generated \
+              lib/api-client-react/src/generated \
+              artifacts/api-server/src/routes
+            git commit -m "Phase 3: synchronize contracts and request boundaries"
+            git push origin HEAD:phase-3/contracts-boundaries-architecture
           fi
-          git config user.name "Phase 3 Architecture Bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add \
-            lib/api-spec/openapi.yaml \
-            lib/api-zod/src/generated \
-            lib/api-client-react/src/generated \
-            artifacts/api-server/src/routes
-          git commit -m "Phase 3: synchronize contracts and request boundaries"
-          git push origin HEAD:phase-3/contracts-boundaries-architecture
+      - name: Validate full Phase 3 architecture gate
+        run: pnpm run architecture:check
