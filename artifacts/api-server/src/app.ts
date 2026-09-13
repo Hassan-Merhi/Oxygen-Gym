@@ -5,6 +5,7 @@ import path from "path";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { env } from "./config/env";
+import { contractErrorHandler } from "./http/contracts";
 
 const app: Express = express();
 
@@ -33,6 +34,7 @@ app.use(express.urlencoded({ extended: true }));
 const uploadDir = path.resolve(process.cwd(), "uploads");
 app.use("/api/uploads", express.static(uploadDir));
 app.use("/api", router);
+app.use(contractErrorHandler);
 
 if (env.staticDir) {
   const resolvedStaticDir = path.resolve(env.staticDir);
