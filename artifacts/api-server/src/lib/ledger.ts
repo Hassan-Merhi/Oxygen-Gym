@@ -89,15 +89,32 @@ export async function appendLedgerEntry(
   });
 }
 
+export interface CashMovement {
+  sourceType: string;
+  sourceId: number | null;
+  sourceNumber: string | null;
+  date: Date;
+  direction: "in" | "out";
+  amount: number;
+  currency: string;
+  exchangeRate: number;
+  amountUsd: number;
+  amountCdf: number;
+  description: string;
+  party: string;
+}
+
 /**
- * Current physical Cash balance reconstructed from authoritative source rows.
- * The optional executor lets callers calculate balances while holding the same
- * financial transaction lock used for a write (for example opening-balance
- * adjustments), avoiding a read-then-write race.
+ * Canonical effective physical-cash movements.
+ *
+ * The Accounts/Cash statement and the balance must be derived from this
+ * exact source stream. Historical double-entry rows can contain legacy
+ * polarity mistakes (for example expenses posted on the Cash debit side),
+ * so they are not authoritative for whether cash moved IN or OUT.
  */
-export async function getCurrentBalance(
+export async function getCashMovements(
   executor: DbExecutor = db,
-): Promise<{ balanceUsd: number; balanceCdf: number }> {
+): Promise<CashMovement[]> {
   const result = await executor.execute(sql`
     WITH payment_values AS (
       SELECT
@@ -122,8 +139,28 @@ export async function getCurrentBalance(
     ),
     payment_cash AS (
       SELECT
-        COALESCE(SUM(CASE WHEN p.direction = 'in' THEN p.effective_usd ELSE -p.effective_usd END), 0) AS usd,
-        COALESCE(SUM(CASE WHEN p.direction = 'in' THEN p.effective_cdf ELSE -p.effective_cdf END), 0) AS cdf
+        'payment'::text AS source_type,
+        p.id AS source_id,
+        p.payment_number AS source_number,
+        p.payment_date AS entry_date,
+        p.direction,
+        p.amount,
+        p.currency,
+        p.exchange_rate,
+        p.effective_usd AS amount_usd,
+        p.effective_cdf AS amount_cdf,
+        COALESCE(
+          NULLIF(TRIM(p.notes), ''),
+          NULLIF(TRIM(p.linked_entity_name), ''),
+          NULLIF(TRIM(p.member_name), ''),
+          NULLIF(TRIM(p.category), ''),
+          'Payment'
+        ) AS description,
+        COALESCE(
+          NULLIF(TRIM(p.linked_entity_name), ''),
+          NULLIF(TRIM(p.member_name), ''),
+          ''
+        ) AS party
       FROM payment_values p
       WHERE p.status = 'completed'
         AND LOWER(REPLACE(TRIM(COALESCE(p.account, 'cash')), '_', ' ')) = 'cash'
@@ -151,8 +188,18 @@ export async function getCurrentBalance(
     ),
     voucher_cash AS (
       SELECT
-        COALESCE(SUM(CASE WHEN v.direction = 'in' THEN v.effective_usd ELSE -v.effective_usd END), 0) AS usd,
-        COALESCE(SUM(CASE WHEN v.direction = 'in' THEN v.effective_cdf ELSE -v.effective_cdf END), 0) AS cdf
+        'voucher'::text AS source_type,
+        v.id AS source_id,
+        v.voucher_number AS source_number,
+        v.voucher_date AS entry_date,
+        v.direction,
+        v.amount,
+        v.currency,
+        v.exchange_rate,
+        v.effective_usd AS amount_usd,
+        v.effective_cdf AS amount_cdf,
+        COALESCE(NULLIF(TRIM(v.description), ''), NULLIF(TRIM(v.category), ''), v.voucher_type, 'Voucher') AS description,
+        COALESCE(NULLIF(TRIM(v.paid_to), ''), NULLIF(TRIM(v.received_from), ''), NULLIF(TRIM(v.linked_entity_name), ''), '') AS party
       FROM voucher_values v
       WHERE v.status = 'recorded'
         AND v.deleted_at IS NULL
@@ -171,28 +218,39 @@ export async function getCurrentBalance(
     ),
     stock_cash AS (
       SELECT
-        -COALESCE(SUM(COALESCE(
+        'stock_purchase'::text AS source_type,
+        sp.id AS source_id,
+        sp.purchase_number AS source_number,
+        sp.purchase_date AS entry_date,
+        'out'::text AS direction,
+        sp.total_cost AS amount,
+        sp.currency,
+        sp.exchange_rate,
+        COALESCE(
           sp.total_cost_usd,
           CASE
             WHEN sp.currency = 'USD' THEN sp.total_cost
             WHEN COALESCE(sp.exchange_rate, 0) > 0 THEN sp.total_cost / sp.exchange_rate
             ELSE 0
           END
-        )), 0) AS usd,
-        -COALESCE(SUM(COALESCE(
+        ) AS amount_usd,
+        COALESCE(
           sp.total_cost_cdf,
           CASE
             WHEN sp.currency = 'CDF' THEN sp.total_cost
             WHEN COALESCE(sp.exchange_rate, 0) > 0 THEN sp.total_cost * sp.exchange_rate
             ELSE 0
           END
-        )), 0) AS cdf
+        ) AS amount_cdf,
+        COALESCE(NULLIF(TRIM(sp.notes), ''), 'Stock purchase: ' || COALESCE(sp.product_name, sp.purchase_number, sp.id::text)) AS description,
+        COALESCE(NULLIF(TRIM(sp.supplier), ''), '') AS party
       FROM stock_purchases sp
       WHERE sp.paid_from_cash = 1
         AND (
           sp.payment_id IS NULL
           OR NOT EXISTS (
-            SELECT 1 FROM payments p3
+            SELECT 1
+            FROM payments p3
             WHERE p3.id = sp.payment_id
               AND p3.status = 'completed'
           )
@@ -200,78 +258,121 @@ export async function getCurrentBalance(
     ),
     supplier_cash AS (
       SELECT
-        -COALESCE(SUM(COALESCE(
+        'supplier_payment'::text AS source_type,
+        sp.id AS source_id,
+        sc.credit_number AS source_number,
+        sp.payment_date AS entry_date,
+        'out'::text AS direction,
+        sp.amount,
+        sp.currency,
+        COALESCE(NULLIF(sp.exchange_rate, 0), 1) AS exchange_rate,
+        COALESCE(
           sp.amount_usd,
           CASE
             WHEN sp.currency = 'USD' THEN sp.amount
             WHEN COALESCE(sp.exchange_rate, 0) > 0 THEN sp.amount / sp.exchange_rate
             ELSE 0
           END
-        )), 0) AS usd,
-        -COALESCE(SUM(COALESCE(
+        ) AS amount_usd,
+        COALESCE(
           sp.amount_cdf,
           CASE
             WHEN sp.currency = 'CDF' THEN sp.amount
             WHEN COALESCE(sp.exchange_rate, 0) > 0 THEN sp.amount * sp.exchange_rate
             ELSE 0
           END
-        )), 0) AS cdf
+        ) AS amount_cdf,
+        COALESCE(NULLIF(TRIM(sp.notes), ''), 'Supplier payment: ' || COALESCE(sc.supplier, sc.credit_number, sp.id::text)) AS description,
+        COALESCE(NULLIF(TRIM(sc.supplier), ''), '') AS party
       FROM supplier_payments sp
+      LEFT JOIN supplier_credits sc ON sc.id = sp.credit_id
     ),
-    opening_adjustments AS (
+    opening_cash AS (
       SELECT
-        COALESCE(SUM(
-          CASE WHEN cl.direction = 'in' THEN
-            COALESCE(
-              cl.amount_usd,
-              CASE
-                WHEN cl.currency = 'USD' THEN cl.amount
-                WHEN COALESCE(cl.exchange_rate, 0) > 0 THEN cl.amount / cl.exchange_rate
-                ELSE 0
-              END
-            )
-          ELSE -COALESCE(
-              cl.amount_usd,
-              CASE
-                WHEN cl.currency = 'USD' THEN cl.amount
-                WHEN COALESCE(cl.exchange_rate, 0) > 0 THEN cl.amount / cl.exchange_rate
-                ELSE 0
-              END
-            )
+        'opening_balance'::text AS source_type,
+        cl.id AS source_id,
+        cl.source_number,
+        cl.entry_date,
+        cl.direction,
+        cl.amount,
+        cl.currency,
+        cl.exchange_rate,
+        COALESCE(
+          cl.amount_usd,
+          CASE
+            WHEN cl.currency = 'USD' THEN cl.amount
+            WHEN COALESCE(cl.exchange_rate, 0) > 0 THEN cl.amount / cl.exchange_rate
+            ELSE 0
           END
-        ), 0) AS usd,
-        COALESCE(SUM(
-          CASE WHEN cl.direction = 'in' THEN
-            COALESCE(
-              cl.amount_cdf,
-              CASE
-                WHEN cl.currency = 'CDF' THEN cl.amount
-                WHEN COALESCE(cl.exchange_rate, 0) > 0 THEN cl.amount * cl.exchange_rate
-                ELSE 0
-              END
-            )
-          ELSE -COALESCE(
-              cl.amount_cdf,
-              CASE
-                WHEN cl.currency = 'CDF' THEN cl.amount
-                WHEN COALESCE(cl.exchange_rate, 0) > 0 THEN cl.amount * cl.exchange_rate
-                ELSE 0
-              END
-            )
+        ) AS amount_usd,
+        COALESCE(
+          cl.amount_cdf,
+          CASE
+            WHEN cl.currency = 'CDF' THEN cl.amount
+            WHEN COALESCE(cl.exchange_rate, 0) > 0 THEN cl.amount * cl.exchange_rate
+            ELSE 0
           END
-        ), 0) AS cdf
+        ) AS amount_cdf,
+        COALESCE(NULLIF(TRIM(cl.description), ''), 'Opening cash balance') AS description,
+        'Opening balance'::text AS party
       FROM cash_ledger cl
       WHERE cl.source_type = 'opening_balance'
     )
-    SELECT
-      payment_cash.usd + voucher_cash.usd + stock_cash.usd + supplier_cash.usd + opening_adjustments.usd AS balance_usd,
-      payment_cash.cdf + voucher_cash.cdf + stock_cash.cdf + supplier_cash.cdf + opening_adjustments.cdf AS balance_cdf
-    FROM payment_cash, voucher_cash, stock_cash, supplier_cash, opening_adjustments
+    SELECT * FROM payment_cash
+    UNION ALL SELECT * FROM voucher_cash
+    UNION ALL SELECT * FROM stock_cash
+    UNION ALL SELECT * FROM supplier_cash
+    UNION ALL SELECT * FROM opening_cash
+    ORDER BY entry_date ASC, source_type ASC, source_id ASC
   `);
 
-  const row = result.rows[0] as { balance_usd?: number | string; balance_cdf?: number | string } | undefined;
-  return {
-    balanceUsd: Number(row?.balance_usd ?? 0),
-    balanceCdf: Number(row?.balance_cdf ?? 0),
+  type RawMovement = {
+    source_type?: string;
+    source_id?: number | string | null;
+    source_number?: string | null;
+    entry_date?: Date | string;
+    direction?: string;
+    amount?: number | string;
+    currency?: string;
+    exchange_rate?: number | string;
+    amount_usd?: number | string;
+    amount_cdf?: number | string;
+    description?: string | null;
+    party?: string | null;
   };
+
+  return (result.rows as RawMovement[]).map((row) => ({
+    sourceType: row.source_type ?? 'cash',
+    sourceId: row.source_id == null ? null : Number(row.source_id),
+    sourceNumber: row.source_number ?? null,
+    date: row.entry_date instanceof Date ? row.entry_date : new Date(row.entry_date ?? 0),
+    direction: row.direction === 'out' ? 'out' : 'in',
+    amount: Number(row.amount ?? 0),
+    currency: row.currency ?? 'USD',
+    exchangeRate: Number(row.exchange_rate ?? 1),
+    amountUsd: Number(row.amount_usd ?? 0),
+    amountCdf: Number(row.amount_cdf ?? 0),
+    description: row.description ?? '',
+    party: row.party ?? '',
+  }));
+}
+
+/**
+ * Current physical Cash balance from the same canonical movements used by
+ * the Cash account statement. This guarantees Balance = Total In - Total Out
+ * for the same all-time movement set and removes legacy debit/credit drift.
+ */
+export async function getCurrentBalance(
+  executor: DbExecutor = db,
+): Promise<{ balanceUsd: number; balanceCdf: number }> {
+  const movements = await getCashMovements(executor);
+  return movements.reduce(
+    (balance, movement) => {
+      const sign = movement.direction === 'in' ? 1 : -1;
+      balance.balanceUsd += sign * movement.amountUsd;
+      balance.balanceCdf += sign * movement.amountCdf;
+      return balance;
+    },
+    { balanceUsd: 0, balanceCdf: 0 },
+  );
 }

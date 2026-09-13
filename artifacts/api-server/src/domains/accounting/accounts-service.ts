@@ -6,7 +6,7 @@ import {
   vouchersTable,
 } from "@workspace/db/schema";
 import { and, asc, count, desc, eq, gte, ilike, inArray, lte, not, or, sum } from "drizzle-orm";
-import { getCurrentBalance } from "../../lib/ledger";
+import { getCashMovements, getCurrentBalance } from "../../lib/ledger";
 import { lubumbashiTodayEnd, lubumbashiTodayStart } from "../../lib/timezone";
 import { conflict, notFound } from "../../shared/http/errors";
 
@@ -288,6 +288,37 @@ export async function deactivateChartAccount(id: number) {
 export async function getAccountStatement(id: number, dateFrom?: Date, dateTo?: Date) {
   const account = await db.query.chartOfAccountsTable.findFirst({ where: eq(chartOfAccountsTable.id, id) });
   if (!account) throw notFound("Account not found");
+
+  if (account.name.trim().toLowerCase() === "cash") {
+    const movements = await getCashMovements();
+    const filtered = movements.filter((movement) => {
+      if (dateFrom && movement.date < dateFrom) return false;
+      if (dateTo && movement.date > dateTo) return false;
+      return true;
+    });
+    let runningBalance = 0;
+    const cashRows = filtered.map((movement, index) => {
+      const sign = movement.direction === "in" ? 1 : -1;
+      runningBalance += sign * movement.amountUsd;
+      return {
+        id: movement.sourceId ?? -(index + 1),
+        date: movement.date,
+        description: movement.description,
+        party: movement.party || movement.sourceNumber || "",
+        sourceType: movement.sourceType,
+        sourceId: movement.sourceId,
+        amount: movement.amount,
+        currency: movement.currency,
+        debitUsd: movement.direction === "in" ? movement.amountUsd : 0,
+        creditUsd: movement.direction === "out" ? movement.amountUsd : 0,
+        debitCdf: movement.direction === "in" ? movement.amountCdf : 0,
+        creditCdf: movement.direction === "out" ? movement.amountCdf : 0,
+        exchangeRate: movement.exchangeRate,
+        runningBalance,
+      };
+    });
+    return { account, rows: cashRows };
+  }
   const conditions: ReturnType<typeof eq>[] = [eq(accountingEntriesTable.accountId, id)];
   if (dateFrom) conditions.push(gte(accountingEntriesTable.entryDate, dateFrom));
   if (dateTo) conditions.push(lte(accountingEntriesTable.entryDate, dateTo));
