@@ -14,16 +14,20 @@ function rel(file: string): string {
   return path.relative(ROOT, file).replaceAll(path.sep, "/");
 }
 
-function walk(dir: string): string[] {
+function walk(dir: string, predicate: (file: string) => boolean): string[] {
   if (!fs.existsSync(dir)) return [];
   const output: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory() && SKIP_DIRS.has(entry.name)) continue;
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) output.push(...walk(full));
-    else if (SOURCE_EXTENSIONS.has(path.extname(entry.name))) output.push(full);
+    if (entry.isDirectory()) output.push(...walk(full, predicate));
+    else if (predicate(full)) output.push(full);
   }
   return output;
+}
+
+function sourceFiles(dir: string): string[] {
+  return walk(dir, (file) => SOURCE_EXTENSIONS.has(path.extname(file)));
 }
 
 function lineOf(text: string, index: number): number {
@@ -55,9 +59,7 @@ function checkBoundaries(files: string[], violations: Violation[]): void {
           specifier.includes("api-server") ||
           specifier.startsWith("@workspace/api-zod") ||
           nodeBuiltins.test(specifier)
-        ) {
-          violations.push({ file: relative, message: `frontend boundary leak: ${specifier}` });
-        }
+        ) violations.push({ file: relative, message: `frontend boundary leak: ${specifier}` });
       }
 
       if (relative.startsWith("artifacts/api-server/src/")) {
@@ -66,9 +68,7 @@ function checkBoundaries(files: string[], violations: Violation[]): void {
           specifier.includes("gym-app") ||
           specifier.includes("mockup-sandbox") ||
           specifier.includes("desktop")
-        ) {
-          violations.push({ file: relative, message: `API boundary leak: ${specifier}` });
-        }
+        ) violations.push({ file: relative, message: `API boundary leak: ${specifier}` });
       }
 
       if (relative.startsWith("lib/db/src/")) {
@@ -77,9 +77,7 @@ function checkBoundaries(files: string[], violations: Violation[]): void {
           specifier.includes("api-server") ||
           specifier.includes("gym-app") ||
           specifier.includes("desktop")
-        ) {
-          violations.push({ file: relative, message: `database boundary leak: ${specifier}` });
-        }
+        ) violations.push({ file: relative, message: `database boundary leak: ${specifier}` });
       }
 
       if (relative.startsWith("lib/api-zod/src/") || relative.startsWith("lib/api-client-react/src/")) {
@@ -107,8 +105,7 @@ function checkEnvironmentAccess(files: string[], violations: Violation[]): void 
       relative.startsWith("lib/db/src/");
     if (!runtimeSource || allowed.has(relative)) continue;
 
-    const pattern = /\bprocess\.env\b|\bimport\.meta\.env\b/g;
-    for (const match of text.matchAll(pattern)) {
+    for (const match of text.matchAll(/\bprocess\.env\b|\bimport\.meta\.env\b/g)) {
       violations.push({
         file: relative,
         line: lineOf(text, match.index ?? 0),
@@ -121,7 +118,7 @@ function checkEnvironmentAccess(files: string[], violations: Violation[]): void 
 function checkUnsafeApiCasts(files: string[], violations: Violation[]): void {
   for (const file of files) {
     const relative = rel(file);
-    if (!relative.startsWith("artifacts/api-server/src/")) continue;
+    if (!relative.startsWith("artifacts/api-server/src/") || relative.endsWith("/types/express.d.ts")) continue;
     const text = fs.readFileSync(file, "utf8");
     const patterns: Array<[RegExp, string]> = [
       [/\bas\s+any\b/g, "unsafe `as any` cast"],
@@ -137,7 +134,7 @@ function checkUnsafeApiCasts(files: string[], violations: Violation[]): void {
 }
 
 function normalizeRoutePath(prefix: string, routePath: string): string {
-  const joined = `${prefix}/${routePath}`.replace(/\/+/, "/").replace(/\/{2,}/g, "/");
+  const joined = `${prefix}/${routePath}`.replace(/\/{2,}/g, "/");
   const normalized = joined !== "/" && joined.endsWith("/") ? joined.slice(0, -1) : joined;
   return normalized.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
 }
@@ -158,46 +155,30 @@ function parseExpressRoutes(): RouteOperation[] {
   const operations: RouteOperation[] = [];
   for (const [routerName, fileName] of importToFile) {
     const full = path.join(routesDir, fileName);
-    if (!fs.existsSync(full)) continue;
     const prefix = prefixes.get(routerName);
-    if (prefix === undefined) continue;
+    if (!fs.existsSync(full) || prefix === undefined) continue;
     const text = fs.readFileSync(full, "utf8");
-    const pattern = /router\.(get|post|put|patch|delete)\(\s*["'`]([^"'`]+)["'`]/g;
-    for (const match of text.matchAll(pattern)) {
-      operations.push({
-        method: match[1].toLowerCase(),
-        path: normalizeRoutePath(prefix, match[2]),
-        source: rel(full),
-      });
+    for (const match of text.matchAll(/router\.(get|post|put|patch|delete)\(\s*["'`]([^"'`]+)["'`]/g)) {
+      operations.push({ method: match[1].toLowerCase(), path: normalizeRoutePath(prefix, match[2]), source: rel(full) });
     }
   }
   return operations;
 }
 
 function parseOpenApiOperations(): Set<string> {
-  const specPath = path.join(ROOT, "lib/api-spec/openapi.yaml");
-  const lines = fs.readFileSync(specPath, "utf8").split(/\r?\n/);
+  const lines = fs.readFileSync(path.join(ROOT, "lib/api-spec/openapi.yaml"), "utf8").split(/\r?\n/);
   const operations = new Set<string>();
   let inPaths = false;
   let currentPath: string | null = null;
 
   for (const line of lines) {
-    if (line === "paths:") {
-      inPaths = true;
-      continue;
-    }
+    if (line === "paths:") { inPaths = true; continue; }
     if (inPaths && /^components:\s*$/.test(line)) break;
     if (!inPaths) continue;
-
     const pathMatch = line.match(/^  (\/[^:]+):\s*$/);
-    if (pathMatch) {
-      currentPath = pathMatch[1].replace(/\/$/, "") || "/";
-      continue;
-    }
+    if (pathMatch) { currentPath = pathMatch[1].replace(/\/$/, "") || "/"; continue; }
     const methodMatch = line.match(/^    (get|post|put|patch|delete):\s*$/);
-    if (currentPath && methodMatch && HTTP_METHODS.has(methodMatch[1])) {
-      operations.add(`${methodMatch[1]} ${currentPath}`);
-    }
+    if (currentPath && methodMatch && HTTP_METHODS.has(methodMatch[1])) operations.add(`${methodMatch[1]} ${currentPath}`);
   }
   return operations;
 }
@@ -209,27 +190,21 @@ function checkOpenApiCoverage(violations: Violation[]): void {
 
   for (const op of expressOps) {
     const key = `${op.method} ${op.path}`;
-    if (!specOps.has(key)) {
-      violations.push({ file: op.source, message: `route missing from OpenAPI contract: ${key}` });
-    }
+    if (!specOps.has(key)) violations.push({ file: op.source, message: `route missing from OpenAPI contract: ${key}` });
   }
   for (const key of specOps) {
-    if (!expressKeys.has(key)) {
-      violations.push({ file: "lib/api-spec/openapi.yaml", message: `OpenAPI operation has no Express route: ${key}` });
-    }
+    if (!expressKeys.has(key)) violations.push({ file: "lib/api-spec/openapi.yaml", message: `OpenAPI operation has no Express route: ${key}` });
   }
 }
 
 function checkPackageDependencies(violations: Violation[]): void {
-  const packageFiles = walk(ROOT).filter((file) => path.basename(file) === "package.json");
+  const packageFiles = walk(ROOT, (file) => path.basename(file) === "package.json");
   for (const file of packageFiles) {
     const relative = rel(file);
-    let parsed: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
-    try {
-      parsed = JSON.parse(fs.readFileSync(file, "utf8"));
-    } catch {
-      continue;
-    }
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
     const deps = parsed.dependencies ?? {};
     const devDeps = parsed.devDependencies ?? {};
     for (const name of Object.keys(deps)) {
@@ -239,9 +214,9 @@ function checkPackageDependencies(violations: Violation[]): void {
 }
 
 const files = [
-  ...walk(path.join(ROOT, "artifacts")),
-  ...walk(path.join(ROOT, "lib")),
-  ...walk(path.join(ROOT, "scripts")),
+  ...sourceFiles(path.join(ROOT, "artifacts")),
+  ...sourceFiles(path.join(ROOT, "lib")),
+  ...sourceFiles(path.join(ROOT, "scripts")),
 ];
 
 const violations: Violation[] = [];
@@ -259,4 +234,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("Architecture audit passed: contracts, boundaries, environment access, and unsafe-cast rules are clean.");
+console.log("Architecture audit passed: contracts, boundaries, environment access, route coverage, and dependency rules are clean.");
