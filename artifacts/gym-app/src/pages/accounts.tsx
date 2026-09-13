@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGetMe } from "@/hooks/use-me";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -271,8 +271,14 @@ export default function AccountsPage() {
   const [statement, setStatement] = useState<Statement | null>(null);
   const [stmtLoading, setStmtLoading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const deepLinkHandled = useRef(false);
 
-  const [period, setPeriod] = useState<PeriodFilter>("month");
+  const [period, setPeriod] = useState<PeriodFilter>(() => {
+    const requested = new URLSearchParams(window.location.search).get("period");
+    return requested === "day" || requested === "month" || requested === "year" || requested === "custom"
+      ? requested
+      : "month";
+  });
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [currencyView, setCurrencyView] = useState<CurrencyView>("BOTH");
@@ -281,7 +287,6 @@ export default function AccountsPage() {
   const [form, setForm] = useState({ name: "", type: "asset" as AccountType, description: "" });
   const [saving, setSaving] = useState(false);
   const [deleteAccountId, setDeleteAccountId] = useState<number | null>(null);
-  const [filterType, setFilterType] = useState<AccountType | "all">("all");
 
   const preset = period === "custom" ? null : getPresetRange(period);
   const dateFrom = period === "custom" ? customFrom : preset?.from ?? "";
@@ -294,7 +299,17 @@ export default function AccountsPage() {
       if (!response.ok) return;
       const next: Account[] = await response.json();
       setAccounts(next);
-      setSelected((current) => current ? (next.find((account) => account.id === current.id) ?? current) : current);
+      setSelected((current) => {
+        if (current) return next.find((account) => account.id === current.id) ?? current;
+        if (deepLinkHandled.current) return current;
+
+        deepLinkHandled.current = true;
+        const requestedType = new URLSearchParams(window.location.search).get("type");
+        if (requestedType && TYPE_ORDER.includes(requestedType as AccountType)) {
+          return next.find((account) => account.isActive && account.type === requestedType) ?? null;
+        }
+        return current;
+      });
     } finally {
       if (!silent) setLoading(false);
     }
@@ -628,7 +643,6 @@ export default function AccountsPage() {
   }
 
   const activeAccounts = accounts.filter((account) => account.isActive);
-  const visibleAccounts = activeAccounts.filter((account) => filterType === "all" || account.type === filterType);
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
@@ -644,28 +658,14 @@ export default function AccountsPage() {
         ) : undefined}
       />
 
-      <div className="flex flex-wrap gap-2">
-        <Button variant={filterType === "all" ? "default" : "outline"} size="sm" onClick={() => setFilterType("all")}>All</Button>
-        {TYPE_ORDER.map((type) => (
-          <Button
-            key={type}
-            variant={filterType === type ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilterType(type)}
-          >
-            {TYPE_CONF[type].plural}
-          </Button>
-        ))}
-      </div>
-
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         {loading ? (
           <div className="py-16 text-center text-sm text-muted-foreground">Loading accounts…</div>
-        ) : visibleAccounts.length === 0 ? (
-          <div className="py-16 text-center text-sm text-muted-foreground">No accounts in this category.</div>
+        ) : activeAccounts.length === 0 ? (
+          <div className="py-16 text-center text-sm text-muted-foreground">No accounts yet.</div>
         ) : (
           <div className="divide-y divide-border/50">
-            {visibleAccounts.map((account) => {
+            {activeAccounts.map((account) => {
               const conf = TYPE_CONF[account.type];
               const Icon = conf.icon;
               return (
