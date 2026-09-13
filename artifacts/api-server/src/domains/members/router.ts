@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { logActivity } from "../../lib/activity";
+import { badRequest } from "../../shared/http/errors";
 import {
   asRecord,
   nonNegativeNumber,
@@ -166,7 +167,7 @@ router.post("/:id/renew", async (req, res) => {
   const body = asRecord(req.body);
   const startDate = optionalDate(body.startDate, "startDate");
   const expiryDate = optionalDate(body.expiryDate, "expiryDate");
-  if (!startDate || !expiryDate) throw new Error("startDate and expiryDate are required");
+  if (!startDate || !expiryDate) throw badRequest("startDate and expiryDate are required");
 
   const member = await renewMember(id, {
     planId: parseId(body.planId as string | number | undefined, "planId"),
@@ -189,7 +190,7 @@ router.post("/:id/freeze", async (req, res) => {
   const body = asRecord(req.body);
   const frozenAt = optionalDate(body.frozenAt, "frozenAt");
   const frozenUntil = optionalDate(body.frozenUntil, "frozenUntil");
-  if (!frozenAt || !frozenUntil) throw new Error("frozenAt and frozenUntil are required");
+  if (!frozenAt || !frozenUntil) throw badRequest("frozenAt and frozenUntil are required");
   const member = await freezeMember(id, frozenAt, frozenUntil);
   await logActivity(req, "freeze_member", "member", id, {
     name: member.name,
