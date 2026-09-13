@@ -11,7 +11,6 @@ import {
   useDeletePlan,
   getListPlansQueryKey,
   useGetSettings,
-  useListStaffEmployees,
 } from "@workspace/api-client-react";
 import type { Plan } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -58,7 +57,6 @@ import {
   Trash2,
   Dumbbell,
   Search,
-  UserCheck,
   RefreshCw,
 } from "lucide-react";
 
@@ -68,9 +66,6 @@ const planSchema = z.object({
   durationDays: z.coerce.number().int().min(1, "Duration must be at least 1 day"),
   price: z.coerce.number().min(0, "Price must be ≥ 0"),
   currency: z.enum(["USD", "CDF"]).default("USD"),
-  coachId: z.coerce.number().nullable().optional(),
-  coachFee: z.coerce.number().min(0).default(0),
-  coachName: z.string().nullable().optional(),
 });
 type PlanFormValues = z.infer<typeof planSchema>;
 
@@ -100,13 +95,11 @@ function PlanModal({
   onClose,
   plan,
   onSaved,
-  employees,
 }: {
   open: boolean;
   onClose: () => void;
   plan?: Plan | null;
   onSaved: () => void;
-  employees: { id: number; name: string }[];
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -129,14 +122,11 @@ function PlanModal({
           durationDays: plan.durationDays,
           price: plan.price,
           currency: (plan.currency as "USD" | "CDF") ?? "USD",
-          coachId: plan.coachId ?? null,
-          coachFee: plan.coachFee ?? 0,
         }
-      : { currency: "USD", durationDays: 30, price: 0, coachId: null, coachFee: 0 },
+      : { currency: "USD", durationDays: 30, price: 0 },
   });
 
   const currency = watch("currency");
-  const coachId = watch("coachId");
 
   useEffect(() => {
     if (!open) return;
@@ -148,23 +138,17 @@ function PlanModal({
             durationDays: plan.durationDays,
             price: plan.price,
             currency: (plan.currency as "USD" | "CDF") ?? "USD",
-            coachId: plan.coachId ?? null,
-            coachFee: plan.coachFee ?? 0,
           }
-        : { currency: "USD", durationDays: 30, price: 0, coachId: null, coachFee: 0 },
+        : { currency: "USD", durationDays: 30, price: 0 },
     );
   }, [open, plan, reset]);
 
   const onSubmit = handleSubmit(async (data) => {
     try {
-      const selectedCoach = employees.find((employee) => employee.id === Number(data.coachId));
       const payload = {
         ...data,
         name: data.name.trim(),
         description: data.description?.trim() || undefined,
-        coachId: data.coachId ? Number(data.coachId) : null,
-        coachName: selectedCoach?.name ?? null,
-        coachFee: data.coachId ? (data.coachFee ?? 0) : 0,
       };
 
       if (plan) {
@@ -230,50 +214,6 @@ function PlanModal({
             {errors.price && <p className="text-xs text-red-500">{errors.price.message}</p>}
           </div>
 
-          <div className="space-y-3 rounded-lg border border-violet-500/20 bg-violet-500/5 p-3">
-            <p className="flex items-center gap-1.5 text-xs font-semibold text-violet-600 dark:text-violet-300">
-              <UserCheck className="h-3.5 w-3.5" />
-              Coach Commission <span className="font-normal text-muted-foreground">(optional)</span>
-            </p>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Default Coach</Label>
-                <Select
-                  value={coachId ? String(coachId) : "none"}
-                  onValueChange={(value) => {
-                    setValue("coachId", value === "none" ? null : Number(value), { shouldDirty: true });
-                    if (value === "none") setValue("coachFee", 0, { shouldDirty: true });
-                  }}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="No coach" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No coach</SelectItem>
-                    {employees.map((employee) => (
-                      <SelectItem key={employee.id} value={String(employee.id)}>{employee.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Commission Fee ({currency === "CDF" ? "FC" : "$"})</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  className="h-8 text-xs"
-                  {...register("coachFee")}
-                  placeholder="0"
-                  disabled={!coachId}
-                />
-              </div>
-            </div>
-            <p className="text-[10px] leading-relaxed text-muted-foreground">
-              When a payment is recorded for a member on this plan, a commission is automatically created for the assigned coach.
-            </p>
-          </div>
-
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => { reset(); onClose(); }}>
               {t("common.cancel")}
@@ -305,8 +245,6 @@ export default function PlansPage() {
     isError,
     refetch,
   } = useListPlans();
-  const { data: employeeData } = useListStaffEmployees({ limit: "200" });
-  const employees = employeeData?.items ?? [];
   const { data: settings } = useGetSettings();
   const exchangeRate = Number(settings?.usdToCdfRate) > 0 ? Number(settings?.usdToCdfRate) : 2800;
   const deletePlan = useDeletePlan();
@@ -329,7 +267,6 @@ export default function PlansPage() {
         plan.name,
         plan.planNumber,
         plan.description,
-        plan.coachName,
         String(plan.durationDays),
         plan.currency,
       ]
@@ -407,18 +344,17 @@ export default function PlansPage() {
         </div>
       ) : isLoading ? (
         <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
-          <div className="grid grid-cols-[minmax(240px,2fr)_1fr_1fr_1fr_48px] gap-4 border-b bg-muted/40 px-4 py-3">
-            {Array.from({ length: 5 }).map((_, index) => (
+          <div className="grid grid-cols-[minmax(240px,2fr)_1fr_1fr_48px] gap-4 border-b bg-muted/40 px-4 py-3">
+            {Array.from({ length: 4 }).map((_, index) => (
               <Skeleton key={index} className="h-4 w-20" />
             ))}
           </div>
           <div className="divide-y divide-border/50">
             {Array.from({ length: 6 }).map((_, index) => (
-              <div key={index} className="grid grid-cols-[minmax(240px,2fr)_1fr_1fr_1fr_48px] items-center gap-4 px-4 py-4">
+              <div key={index} className="grid grid-cols-[minmax(240px,2fr)_1fr_1fr_48px] items-center gap-4 px-4 py-4">
                 <Skeleton className="h-9 w-48" />
                 <Skeleton className="h-5 w-24" />
                 <Skeleton className="h-8 w-20" />
-                <Skeleton className="h-5 w-28" />
                 <Skeleton className="h-8 w-8" />
               </div>
             ))}
@@ -434,7 +370,7 @@ export default function PlansPage() {
               {search ? "No plans match your search" : t("plans.noPlans")}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {search ? "Try a different plan name, number, coach, or duration." : canManage ? t("plans.noPlansHint") : ""}
+              {search ? "Try a different plan name, number, or duration." : canManage ? t("plans.noPlansHint") : ""}
             </p>
           </div>
           {!search && canManage && (
@@ -445,13 +381,12 @@ export default function PlansPage() {
           )}
         </div>
       ) : (
-        <Table className="min-w-[760px] bg-card">
+        <Table className="min-w-[620px] bg-card">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[36%] px-4">Plan</TableHead>
-              <TableHead className="w-[18%] px-4">Duration</TableHead>
-              <TableHead className="w-[18%] px-4">Price</TableHead>
-              <TableHead className="w-[22%] px-4">Coach</TableHead>
+              <TableHead className="w-[48%] px-4">Plan</TableHead>
+              <TableHead className="w-[22%] px-4">Duration</TableHead>
+              <TableHead className="w-[22%] px-4">Price</TableHead>
               <TableHead className="w-14 px-3 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -478,10 +413,8 @@ export default function PlansPage() {
                             </span>
                           )}
                         </div>
-                        {plan.description ? (
+                        {plan.description && (
                           <p className="mt-0.5 max-w-md truncate text-xs text-muted-foreground">{plan.description}</p>
-                        ) : (
-                          <p className="mt-0.5 text-xs text-muted-foreground/60">No description</p>
                         )}
                       </div>
                     </div>
@@ -495,24 +428,6 @@ export default function PlansPage() {
                   <TableCell className="px-4 py-3.5">
                     <p className="font-semibold tabular-nums text-foreground">{fmtPrice(plan.price, plan.currency)}</p>
                     <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">{convertedPrice}</p>
-                  </TableCell>
-
-                  <TableCell className="px-4 py-3.5">
-                    {plan.coachId && plan.coachName ? (
-                      <div className="flex min-w-0 items-center gap-2">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-500/10 text-violet-500">
-                          <UserCheck className="h-3.5 w-3.5" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{plan.coachName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {(plan.coachFee ?? 0) > 0 ? `${fmtPrice(plan.coachFee ?? 0, plan.currency)} commission` : "No commission fee"}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">—</span>
-                    )}
                   </TableCell>
 
                   <TableCell className="px-3 py-3.5 text-right">
@@ -562,7 +477,6 @@ export default function PlansPage() {
         onClose={() => { setShowModal(false); setEditPlan(null); }}
         plan={editPlan}
         onSaved={invalidate}
-        employees={employees}
       />
     </div>
   );
