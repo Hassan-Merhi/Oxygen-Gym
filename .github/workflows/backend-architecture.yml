@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - "artifacts/api-server/**"
+      - "artifacts/gym-app/**"
       - "lib/db/**"
+      - "lib/api-client-react/**"
       - "lib/api-zod/**"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -15,7 +17,9 @@ on:
     branches: [main]
     paths:
       - "artifacts/api-server/**"
+      - "artifacts/gym-app/**"
       - "lib/db/**"
+      - "lib/api-client-react/**"
       - "lib/api-zod/**"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -65,6 +69,8 @@ jobs:
         run: pnpm run db:migrate
       - name: Verify migrations are idempotent
         run: pnpm run db:migrate
+      - name: Verify financial atomicity and idempotency
+        run: pnpm --filter @workspace/db run check:atomicity
       - name: Typecheck workspace
         run: pnpm run typecheck
       - name: Build production backend
