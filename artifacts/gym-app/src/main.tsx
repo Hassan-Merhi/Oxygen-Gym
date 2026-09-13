@@ -87,9 +87,16 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       : await nativeFetch(resolvedUrl, { ...init, method, headers });
 
     if (fingerprint && idempotencyKey) {
-      // Keep a short grace window so a double-click that lands just after the
-      // first response still reuses the committed event instead of posting twice.
-      releaseMutationKey(fingerprint, idempotencyKey, 5_000);
+      if (response.ok) {
+        // Keep a short grace window so a double-click that lands just after the
+        // first success still reuses the committed event instead of posting twice.
+        releaseMutationKey(fingerprint, idempotencyKey, 5_000);
+      } else {
+        // A non-2xx response can still be ambiguous if the financial transaction
+        // committed and a later route-side action failed. Retain the key so a
+        // retry recovers the already-committed result rather than posting again.
+        releaseMutationKey(fingerprint, idempotencyKey, 5 * 60_000);
+      }
     }
     return response;
   } catch (error) {
