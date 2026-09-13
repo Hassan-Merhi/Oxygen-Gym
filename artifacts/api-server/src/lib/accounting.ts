@@ -11,7 +11,7 @@
 
 import { db } from "@workspace/db";
 import { chartOfAccountsTable, accountingEntriesTable } from "@workspace/db/schema";
-import { eq, and, ilike } from "drizzle-orm";
+import { eq, and, ilike, or } from "drizzle-orm";
 import type { AccountingEntry } from "@workspace/db/schema";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -169,7 +169,14 @@ export async function postDoubleEntry(input: PostEntryInput, executor: Executor 
   ]);
 }
 
-// ── Reverse all accounting entries for a given source ────────────────────────
+// ── Reverse the CURRENT effective entries for a source ───────────────────────
+//
+// Voucher/payment edits are append-only: original rows stay in the ledger and
+// correction/reversal rows are added. Reversing only the original rows on every
+// edit causes repeated edits to drift the ledger. Instead, calculate the current
+// net position per account across the whole source family, then post only the
+// opposite of that effective position. This keeps repeated amount/currency/account
+// edits correct without deleting accounting history.
 
 export async function reverseEntries(
   originalSourceType: string,
@@ -178,37 +185,86 @@ export async function reverseEntries(
   createdBy: string,
   executor: Executor = db,
 ): Promise<void> {
+  const sourceFamily = [
+    originalSourceType,
+    `${originalSourceType}_correction`,
+    `${originalSourceType}_reversal`,
+  ];
+
   const existing: AccountingEntry[] = await executor
     .select()
     .from(accountingEntriesTable)
     .where(
       and(
-        eq(accountingEntriesTable.sourceType, originalSourceType),
         eq(accountingEntriesTable.sourceId, originalSourceId),
+        or(...sourceFamily.map((type) => eq(accountingEntriesTable.sourceType, type))),
       ),
     );
 
   if (existing.length === 0) return;
 
-  await executor.insert(accountingEntriesTable).values(
-    existing.map((e) => ({
+  type EffectiveAccount = {
+    latest: AccountingEntry;
+    debitUsd: number;
+    creditUsd: number;
+    debitCdf: number;
+    creditCdf: number;
+  };
+
+  const grouped = new Map<string, EffectiveAccount>();
+  for (const entry of existing) {
+    const key = `${entry.accountId ?? "none"}:${entry.accountNameSnapshot ?? ""}`;
+    const current = grouped.get(key) ?? {
+      latest: entry,
+      debitUsd: 0,
+      creditUsd: 0,
+      debitCdf: 0,
+      creditCdf: 0,
+    };
+
+    current.debitUsd += Number(entry.debitUsd ?? 0);
+    current.creditUsd += Number(entry.creditUsd ?? 0);
+    current.debitCdf += Number(entry.debitCdf ?? 0);
+    current.creditCdf += Number(entry.creditCdf ?? 0);
+    if ((entry.id ?? 0) >= (current.latest.id ?? 0)) current.latest = entry;
+    grouped.set(key, current);
+  }
+
+  const EPSILON = 0.000001;
+  const reversals = [...grouped.values()].flatMap((group) => {
+    const netUsd = group.debitUsd - group.creditUsd;
+    const netCdf = group.debitCdf - group.creditCdf;
+    if (Math.abs(netUsd) < EPSILON && Math.abs(netCdf) < EPSILON) return [];
+
+    const latest = group.latest;
+    const netIsDebit = Math.abs(netUsd) >= EPSILON ? netUsd > 0 : netCdf > 0;
+    const amountUsd = Math.abs(netUsd);
+    const amountCdf = Math.abs(netCdf);
+    const currency = latest.currency ?? "USD";
+    const amount = currency === "CDF" ? amountCdf : amountUsd;
+
+    return [{
       entryDate:           new Date(),
       sourceType:          reversalSourceType,
       sourceId:            originalSourceId,
-      sourceNumber:        e.sourceNumber,
-      accountId:           e.accountId,
-      accountNameSnapshot: e.accountNameSnapshot,
-      debitUsd:   e.creditUsd,
-      creditUsd:  e.debitUsd,
-      debitCdf:   e.creditCdf,
-      creditCdf:  e.debitCdf,
-      currency:    e.currency,
-      amount:      e.amount,
-      exchangeRate: e.exchangeRate,
-      description: `Reversal: ${e.description ?? ""}`.trim(),
+      sourceNumber:        latest.sourceNumber,
+      accountId:           latest.accountId,
+      accountNameSnapshot: latest.accountNameSnapshot,
+      debitUsd:            netIsDebit ? 0 : amountUsd,
+      creditUsd:           netIsDebit ? amountUsd : 0,
+      debitCdf:            netIsDebit ? 0 : amountCdf,
+      creditCdf:           netIsDebit ? amountCdf : 0,
+      currency,
+      amount,
+      exchangeRate:        latest.exchangeRate,
+      description:         `Reversal: current effective ${originalSourceType} ${latest.sourceNumber ?? originalSourceId}`,
       createdBy,
-    })),
-  );
+    }];
+  });
+
+  if (reversals.length > 0) {
+    await executor.insert(accountingEntriesTable).values(reversals);
+  }
 }
 
 // ── Seed default chart of accounts (idempotent) ──────────────────────────────
