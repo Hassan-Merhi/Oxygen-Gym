@@ -121,6 +121,15 @@ function readAssertionType(text, start) {
   return { type: text.slice(typeStart, i).trim(), end: i };
 }
 
+function routesIn(text, prefix) {
+  return [...text.matchAll(/router\.(get|post|put|patch|delete)\(\s*["'`]([^"'`]+)["'`]/g)]
+    .map((match) => ({
+      index: match.index ?? 0,
+      method: match[1],
+      path: normalizeRoutePath(prefix, match[2]),
+    }));
+}
+
 function operationForIndex(routes, index) {
   let selected = null;
   for (const route of routes) {
@@ -130,13 +139,54 @@ function operationForIndex(routes, index) {
   return selected;
 }
 
+function ensureContractImports(text, helpers) {
+  if (helpers.size === 0) return text;
+  if (!text.includes('import * as ApiContracts from "@workspace/api-zod";')) {
+    text = `import * as ApiContracts from "@workspace/api-zod";\n${text}`;
+  }
+
+  const importPattern = /import\s*{([^}]*)}\s*from\s*["']\.\.\/http\/contracts["'];/;
+  const match = text.match(importPattern);
+  if (match) {
+    const names = new Set(match[1].split(",").map((name) => name.trim()).filter(Boolean));
+    for (const helper of helpers) names.add(helper);
+    const replacement = `import { ${[...names].sort().join(", ")} } from "../http/contracts";`;
+    return text.replace(importPattern, replacement);
+  }
+
+  return `import { ${[...helpers].sort().join(", ")} } from "../http/contracts";\n${text}`;
+}
+
+function rewriteCashCleanup(text, helpers) {
+  const start = 'router.all("/admin/cash-cleanup", async (req: Request, res: Response) => {';
+  if (!text.includes(start)) return text;
+
+  text = text.replace(start, 'async function cashCleanupHandler(req: Request, res: Response) {');
+  text = text.replace(
+    '  const dryRun = req.method === "GET" || (req.body?.dry_run !== false);',
+    '  const dryRun = req.method === "GET"\n    ? true\n    : contractBody(req, ApiContracts.ApplyCashCleanupBody).dry_run !== false;',
+  );
+  const endMarker = '  });\n});\n\n// ── Send WhatsApp receipt for a payment';
+  if (!text.includes(endMarker)) {
+    throw new Error("Could not locate cash-cleanup handler end");
+  }
+  text = text.replace(
+    endMarker,
+    '  });\n}\n\nrouter.get("/admin/cash-cleanup", cashCleanupHandler);\nrouter.post("/admin/cash-cleanup", cashCleanupHandler);\n\n// ── Send WhatsApp receipt for a payment',
+  );
+  helpers.add("contractBody");
+  return text;
+}
+
 const prefixes = parseRoutePrefixes();
 const operationIds = parseOpenApiOperationIds();
 const generatedContracts = fs.readFileSync(generatedContractsPath, "utf8");
 const unresolved = [];
 let changedFiles = 0;
 let changedAssertions = 0;
+let changedRawInputs = 0;
 let narrowedUsers = 0;
+let rewroteCleanup = false;
 
 for (const file of files(routesDir)) {
   const fileName = path.relative(routesDir, file).replaceAll(path.sep, "/");
@@ -146,18 +196,17 @@ for (const file of files(routesDir)) {
   const before = text;
   const prefix = prefixes.get(fileName);
   if (prefix === undefined) continue;
-
-  const routes = [...text.matchAll(/router\.(get|post|put|patch|delete)\(\s*["'`]([^"'`]+)["'`]/g)]
-    .map((match) => ({
-      index: match.index ?? 0,
-      method: match[1],
-      path: normalizeRoutePath(prefix, match[2]),
-    }));
-
-  const replacements = [];
   const usedHelpers = new Set();
-  const assertionPattern = /req\.(body|query|params)\s+as\s+/g;
 
+  if (fileName === "payments.ts" && text.includes('router.all("/admin/cash-cleanup"')) {
+    text = rewriteCashCleanup(text, usedHelpers);
+    rewroteCleanup = true;
+  }
+
+  let routes = routesIn(text, prefix);
+
+  const assertionReplacements = [];
+  const assertionPattern = /req\.(body|query|params)\s+as\s+/g;
   for (const match of text.matchAll(assertionPattern)) {
     const index = match.index ?? 0;
     const kind = match[1];
@@ -193,28 +242,53 @@ for (const file of files(routesDir)) {
 
     const helper = kind === "body" ? "contractBodyAs" : kind === "query" ? "contractQueryAs" : "contractParamsAs";
     usedHelpers.add(helper);
-    replacements.push({
+    assertionReplacements.push({
       start: index,
       end: assertion.end,
       value: `${helper}<${viewType}>(req, ApiContracts.${schema})`,
     });
   }
 
-  for (const replacement of replacements.sort((a, b) => b.start - a.start)) {
+  for (const replacement of assertionReplacements.sort((a, b) => b.start - a.start)) {
     text = text.slice(0, replacement.start) + replacement.value + text.slice(replacement.end);
     changedAssertions += 1;
   }
 
-  if (replacements.length > 0) {
-    if (!text.includes('import * as ApiContracts from "@workspace/api-zod";')) {
-      text = `import * as ApiContracts from "@workspace/api-zod";\n${text}`;
+  routes = routesIn(text, prefix);
+  const rawReplacements = [];
+  for (const match of text.matchAll(/\breq\.(body|query|params)\b/g)) {
+    const index = match.index ?? 0;
+    const kind = match[1];
+    const route = operationForIndex(routes, index);
+    if (!route) {
+      unresolved.push(`${fileName}: raw req.${kind} outside a recognized route`);
+      continue;
     }
-    const helpers = [...usedHelpers].sort().join(", ");
-    if (!text.includes('from "../http/contracts"')) {
-      text = `import { ${helpers} } from "../http/contracts";\n${text}`;
-    } else {
-      unresolved.push(`${fileName}: already imports ../http/contracts; merge imports manually`);
+
+    const operationId = operationIds.get(`${route.method} ${route.path}`);
+    if (!operationId) {
+      unresolved.push(`${fileName}: ${route.method.toUpperCase()} ${route.path} has no OpenAPI operationId for raw req.${kind}`);
+      continue;
     }
+
+    const schema = schemaName(operationId, kind);
+    if (!generatedContracts.includes(`export const ${schema} `) && !generatedContracts.includes(`export const ${schema}=`)) {
+      unresolved.push(`${fileName}: generated schema ${schema} is missing for ${route.method.toUpperCase()} ${route.path}`);
+      continue;
+    }
+
+    const helper = kind === "body" ? "contractBody" : kind === "query" ? "contractQuery" : "contractParams";
+    usedHelpers.add(helper);
+    rawReplacements.push({
+      start: index,
+      end: index + match[0].length,
+      value: `${helper}(req, ApiContracts.${schema})`,
+    });
+  }
+
+  for (const replacement of rawReplacements.sort((a, b) => b.start - a.start)) {
+    text = text.slice(0, replacement.start) + replacement.value + text.slice(replacement.end);
+    changedRawInputs += 1;
   }
 
   const userMatches = text.match(/const user = req\.__gymproUser;/g)?.length ?? 0;
@@ -225,6 +299,8 @@ for (const file of files(routesDir)) {
       text = `import { authenticatedUser } from "../middlewares/auth";\n${text}`;
     }
   }
+
+  text = ensureContractImports(text, usedHelpers);
 
   if (text !== before) {
     fs.writeFileSync(file, text);
@@ -238,4 +314,7 @@ if (unresolved.length > 0) {
   process.exit(1);
 }
 
-console.log(`Phase 3 request-contract codemod complete: ${changedAssertions} assertions, ${narrowedUsers} authenticated-user narrowings across ${changedFiles} files.`);
+console.log(
+  `Phase 3 request-contract codemod complete: ${changedAssertions} assertions, ${changedRawInputs} raw inputs, ` +
+  `${narrowedUsers} authenticated-user narrowings across ${changedFiles} files${rewroteCleanup ? "; cash cleanup split into GET/POST" : ""}.`,
+);
