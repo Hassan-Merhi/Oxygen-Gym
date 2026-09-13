@@ -10,6 +10,7 @@
   "scripts": {
     "migrate": "node ./scripts/migrate.mjs",
     "repair:legacy-financials": "node ./scripts/repair-legacy-financials.mjs",
+    "repair:inventory-quantities": "node ./scripts/repair-inventory-quantities.mjs",
     "admin:cash-wipe-v1": "node ./scripts/cash-wipe-v1.mjs"
   },
   "dependencies": {
