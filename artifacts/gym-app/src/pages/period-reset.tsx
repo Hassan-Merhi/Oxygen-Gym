@@ -36,18 +36,18 @@ type ResetResult = {
 const preserved = [
   "Current stock quantities, costs, products, and stock purchase history",
   "Active members and member records used for retention/history",
-  "Expenses",
+  "Expense payments, outgoing expense vouchers, and expense records",
   "Plans, users, staff, gym settings, and system numbering",
   "Supplier / inventory master data",
 ];
 
 const cleared = [
-  "Payments and current cashbook activity",
-  "Vouchers",
+  "Membership/revenue payments and incoming cash receipts",
+  "Incoming/receipt vouchers (outgoing expense vouchers are preserved)",
   "Sales transaction history for the current operating period",
   "Payroll runs and commissions",
   "Attendance / check-in history",
-  "Current accounting entries and cash-ledger event stream",
+  "Non-preserved accounting entries and the current cash-ledger event stream",
 ];
 
 export default function PeriodReset() {
@@ -257,7 +257,7 @@ export default function PeriodReset() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Opening cash</p><p className="font-semibold">${result.balance.balanceUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p></div>
-              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Payments cleared</p><p className="font-semibold">{result.cleared.payments}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Revenue payments cleared</p><p className="font-semibold">{result.cleared.payments}</p></div>
               <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Sales cleared</p><p className="font-semibold">{result.cleared.sales}</p></div>
               <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Check-ins cleared</p><p className="font-semibold">{result.cleared.checkIns}</p></div>
             </div>
