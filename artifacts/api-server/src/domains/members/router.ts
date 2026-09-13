@@ -1,4 +1,4 @@
-import { contractBody, contractBodyAs, contractParams, contractQueryAs } from "../../http/contracts";
+import { contractBody, contractParams, contractQueryAs } from "../../http/contracts";
 import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
@@ -142,7 +142,7 @@ router.delete("/:id", async (req, res) => {
 
 router.post("/:id/checkin", async (req, res) => {
   const id = parseId(contractParams(req, ApiContracts.CheckInMemberParams).id, "member id");
-  const body = contractBody(req, ApiContracts.CheckInMemberBody) && typeof contractBody(req, ApiContracts.CheckInMemberBody) === "object" ? contractBodyAs<Record<string, unknown> : {}>(req, ApiContracts.CheckInMemberBody);
+  const body = contractBody(req, ApiContracts.CheckInMemberBody);
   const result = await checkInMember(id, body.force === true);
   if (result.alreadyCheckedIn || !result.checkIn) {
     res.json({ success: false, alreadyCheckedIn: true, checkIn: null });
