@@ -21,16 +21,17 @@ import { useGetMe } from "@/hooks/use-me";
 import { useSidebarStore } from "@/lib/sidebar-store";
 
 const NAV_ITEMS = [
-  { id: "dashboard",  href: "/dashboard",  icon: LayoutDashboard, labelKey: "nav.dashboard",  permKey: "dashboard"      },
-  { id: "members",    href: "/members",    icon: Users,           labelKey: "nav.members",    permKey: "members"        },
-  { id: "plans",      href: "/plans",      icon: Dumbbell,        labelKey: "nav.plans",      permKey: "plans"          },
-  { id: "payments",   href: "/payments",   icon: CreditCard,      labelKey: "nav.cashbook",   permKey: "payments"       },
-  { id: "accounts",   href: "/accounts",   icon: BookOpen,        labelKey: "nav.accounts",   permKey: "accounts"       },
-  { id: "financials", href: "/financials", icon: BarChart3,       labelKey: "nav.financials", permKey: "viewAccounting" },
-  { id: "stock",       href: "/stock",       icon: Package,       labelKey: "nav.stock",        permKey: "stock"          },
-  { id: "supplements", href: "/supplements", icon: FlaskConical,  labelKey: "nav.supplements",  permKey: "stock"          },
-  { id: "sales",       href: "/sales",       icon: TrendingUp,    labelKey: "nav.sales",        permKey: "sales"          },
-  { id: "settings",   href: "/settings",   icon: Settings,        labelKey: "nav.settings",   permKey: "settings"       },
+  { id: "dashboard",        href: "/dashboard",        icon: LayoutDashboard, labelKey: "nav.dashboard",  permKey: "dashboard"      },
+  { id: "members",          href: "/members",          icon: Users,           labelKey: "nav.members",    permKey: "members"        },
+  { id: "members-overview", href: "/members-overview", icon: BarChart3,       labelOverride: "Member Overview", permKey: "members"    },
+  { id: "plans",            href: "/plans",            icon: Dumbbell,        labelKey: "nav.plans",      permKey: "plans"          },
+  { id: "payments",         href: "/payments",         icon: CreditCard,      labelKey: "nav.cashbook",   permKey: "payments"       },
+  { id: "accounts",         href: "/accounts",         icon: BookOpen,        labelKey: "nav.accounts",   permKey: "accounts"       },
+  { id: "financials",       href: "/financials",       icon: BarChart3,       labelKey: "nav.financials", permKey: "viewAccounting" },
+  { id: "stock",            href: "/stock",            icon: Package,         labelKey: "nav.stock",      permKey: "stock"          },
+  { id: "supplements",      href: "/supplements",      icon: FlaskConical,    labelKey: "nav.supplements",permKey: "stock"          },
+  { id: "sales",            href: "/sales",            icon: TrendingUp,      labelKey: "nav.sales",      permKey: "sales"          },
+  { id: "settings",         href: "/settings",         icon: Settings,        labelKey: "nav.settings",   permKey: "settings"       },
 ] as const;
 
 export function Sidebar() {
@@ -47,6 +48,9 @@ export function Sidebar() {
     if (isAdmin) return true;
     return !!perms?.[item.permKey];
   });
+
+  const getLabel = (item: (typeof NAV_ITEMS)[number]) =>
+    "labelOverride" in item ? item.labelOverride : t(item.labelKey);
 
   return (
     <>
@@ -98,11 +102,12 @@ export function Sidebar() {
           <nav className="space-y-0.5 px-2">
             {visibleItems.map((item) => {
               const isActive = location.startsWith(item.href);
+              const label = getLabel(item);
               return (
                 <Link
                   key={item.id}
                   href={item.href}
-                  title={collapsed ? t(item.labelKey) : undefined}
+                  title={collapsed ? label : undefined}
                   onClick={closeMobile}
                   className={cn(
                     "relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group",
@@ -128,7 +133,7 @@ export function Sidebar() {
                     "transition-colors",
                     collapsed && "md:hidden"
                   )}>
-                    {t(item.labelKey)}
+                    {label}
                   </span>
                 </Link>
               );
