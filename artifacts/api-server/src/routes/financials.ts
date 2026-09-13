@@ -81,13 +81,16 @@ function rangeFor(period: Period, dateFrom?: string, dateTo?: string): { from: D
     return { from: lubumbashiTodayStart(now), to: lubumbashiTodayEnd(now) };
   }
   if (period === "year") {
-    return lubumbashiYearBounds(now);
+    const { start, end } = lubumbashiYearBounds(now);
+    return { from: start, to: end };
   }
   if (period === "last_month") {
     const current = lubumbashiMonthBounds(now);
-    return lubumbashiMonthBounds(new Date(current.start.getTime() - 1));
+    const { start, end } = lubumbashiMonthBounds(new Date(current.start.getTime() - 1));
+    return { from: start, to: end };
   }
-  return lubumbashiMonthBounds(now);
+  const { start, end } = lubumbashiMonthBounds(now);
+  return { from: start, to: end };
 }
 
 function monthLabel(monthKey: string): string {
