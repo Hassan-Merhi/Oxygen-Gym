@@ -16,7 +16,6 @@ import {
 } from "../../shared/http/validation";
 import {
   cancelPayment,
-  cashCleanup,
   createPayment,
   getPaymentSummary,
   listPayments,
@@ -24,6 +23,7 @@ import {
   updatePayment,
   type UpdatePaymentInput,
 } from "./payment-service";
+import { cashCleanup } from "./cash-cleanup-service";
 
 const router = Router();
 router.use(requireAuth());
@@ -102,7 +102,7 @@ router.post("/", async (req, res) => {
 router.all("/admin/cash-cleanup", requireAdmin(), async (req, res) => {
   const body = req.body && typeof req.body === "object" ? req.body as Record<string, unknown> : {};
   const dryRun = req.method === "GET" || body.dry_run !== false;
-  res.json(await cashCleanup(dryRun));
+  res.json(await cashCleanup(dryRun, getCurrentUser(req).name));
 });
 
 router.post("/:id/send-receipt", async (req, res) => {
