@@ -1,6 +1,8 @@
 import { db, withTransaction, type DbExecutor } from "@workspace/db";
 import { cashLedgerTable } from "@workspace/db/schema";
 import { desc, sql } from "drizzle-orm";
+import { addMoney, fxRate, money, subtractMoney } from "../shared/accounting/decimal";
+import { toUsdCdf } from "../shared/accounting/currency";
 
 export interface LedgerEntryInput {
   entryDate?: Date;
@@ -19,19 +21,13 @@ async function appendLedgerEntryWithExecutor(
   input: LedgerEntryInput,
   executor: DbExecutor,
 ): Promise<void> {
-  if (!Number.isFinite(input.exchangeRate) || input.exchangeRate <= 0) {
-    throw new Error("Ledger exchangeRate must be greater than zero");
-  }
+  const amount = money(input.amount);
+  const rate = fxRate(input.exchangeRate);
+  if (amount < 0) throw new Error("Ledger amount cannot be negative");
+  if (amount === 0) return;
 
-  // Serialize running-balance writes inside the surrounding transaction. This
-  // prevents two concurrent cash movements from reading the same previous row
-  // and persisting conflicting running balances.
   await executor.execute(sql`SELECT pg_advisory_xact_lock(hashtext('oxygen_gym_cash_ledger'))`);
-
-  const amountUsd =
-    input.currency === "USD" ? input.amount : input.amount / input.exchangeRate;
-  const amountCdf =
-    input.currency === "CDF" ? input.amount : input.amount * input.exchangeRate;
+  const { amountUsd, amountCdf } = toUsdCdf(amount, input.currency, rate);
 
   const [lastEntry] = await executor
     .select({ balanceUsd: cashLedgerTable.balanceUsd, balanceCdf: cashLedgerTable.balanceCdf })
@@ -39,39 +35,33 @@ async function appendLedgerEntryWithExecutor(
     .orderBy(desc(cashLedgerTable.id))
     .limit(1);
 
-  const prevUsd = lastEntry?.balanceUsd ?? 0;
-  const prevCdf = lastEntry?.balanceCdf ?? 0;
-
-  const balanceUsd =
-    input.direction === "in" ? prevUsd + amountUsd : prevUsd - amountUsd;
-  const balanceCdf =
-    input.direction === "in" ? prevCdf + amountCdf : prevCdf - amountCdf;
+  const prevUsd = money(Number(lastEntry?.balanceUsd ?? 0));
+  const prevCdf = money(Number(lastEntry?.balanceCdf ?? 0));
+  const balanceUsd = input.direction === "in"
+    ? addMoney(prevUsd, amountUsd)
+    : subtractMoney(prevUsd, amountUsd);
+  const balanceCdf = input.direction === "in"
+    ? addMoney(prevCdf, amountCdf)
+    : subtractMoney(prevCdf, amountCdf);
 
   await executor.insert(cashLedgerTable).values({
-    entryDate:    input.entryDate ?? new Date(),
-    sourceType:   input.sourceType,
+    entryDate: input.entryDate ?? new Date(),
+    sourceType: input.sourceType,
     sourceNumber: input.sourceNumber,
-    sourceId:     input.sourceId,
-    direction:    input.direction,
-    amount:       input.amount,
-    currency:     input.currency,
-    exchangeRate: input.exchangeRate,
+    sourceId: input.sourceId,
+    direction: input.direction,
+    amount,
+    currency: input.currency.toUpperCase(),
+    exchangeRate: rate,
     amountUsd,
     amountCdf,
     balanceUsd,
     balanceCdf,
-    description:  input.description,
-    createdBy:    input.createdBy,
+    description: input.description,
+    createdBy: input.createdBy,
   });
 }
 
-/**
- * Append a cash-ledger row.
- *
- * When a transaction executor is supplied, this joins that transaction. When
- * called standalone it opens a transaction automatically, so the advisory lock,
- * previous-balance read, and insert always share one atomic unit of work.
- */
 export async function appendLedgerEntry(
   input: LedgerEntryInput,
   executor?: DbExecutor,
@@ -80,24 +70,13 @@ export async function appendLedgerEntry(
     await appendLedgerEntryWithExecutor(input, executor);
     return;
   }
-
-  await withTransaction(async (tx) => {
-    await appendLedgerEntryWithExecutor(input, tx);
-  });
+  await withTransaction(async (tx) => appendLedgerEntryWithExecutor(input, tx));
 }
 
 /**
- * Current physical Cash balance.
- *
- * `accounting_entries` was introduced after the gym already had historical
- * payments and sales, so using only the double-entry Cash account can produce a
- * false negative balance until every legacy transaction is backfilled.
- *
- * Reconstruct the balance from the authoritative business records that actually
- * move physical cash. The append-only ledger is used only for explicit opening
- * balance adjustments, because those may pre-date the accounting_entries table.
- * This preserves legitimate historical opening cash without reintroducing old
- * ledger drift or correction duplicates.
+ * Reconstruct physical Cash from authoritative business records. The append-only
+ * ledger contributes only explicit opening balances so legacy duplicate ledger
+ * rows cannot drift current cash.
  */
 export async function getCurrentBalance(): Promise<{ balanceUsd: number; balanceCdf: number }> {
   const result = await db.execute(sql`
@@ -253,7 +232,7 @@ export async function getCurrentBalance(): Promise<{ balanceUsd: number; balance
 
   const row = result.rows[0] as { balance_usd?: number | string; balance_cdf?: number | string } | undefined;
   return {
-    balanceUsd: Number(row?.balance_usd ?? 0),
-    balanceCdf: Number(row?.balance_cdf ?? 0),
+    balanceUsd: money(Number(row?.balance_usd ?? 0)),
+    balanceCdf: money(Number(row?.balance_cdf ?? 0)),
   };
 }
