@@ -1,13 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
+import { apiUrl } from "@/config/env";
 import { AuthContext, TOKEN_KEY } from "./auth-context";
 import type { AuthState } from "./auth-context";
-
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
-
-function apiUrl(path: string) {
-  return `${API_BASE}${path}`;
-}
 
 async function fetchMe(token: string) {
   try {
