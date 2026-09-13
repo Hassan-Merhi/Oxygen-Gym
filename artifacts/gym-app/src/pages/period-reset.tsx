@@ -11,8 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useGetMe } from "@/hooks/use-me";
 
-const BASE = import.meta.env.BASE_URL;
 const CONFIRMATION = "RESET OXYGEN GYM";
+
+function apiBaseUrl() {
+  return (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
+}
 
 type ResetResult = {
   ok: boolean;
@@ -71,8 +74,9 @@ export default function PeriodReset() {
     setResult(null);
     try {
       const token = localStorage.getItem("gym_token");
-      const response = await fetch(`${BASE}api/ledger/opening-balance`, {
+      const response = await fetch(`${apiBaseUrl()}/api/ledger/opening-balance`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           "X-Reset-Confirmation": confirmation,
