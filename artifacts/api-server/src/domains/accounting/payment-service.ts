@@ -15,6 +15,7 @@ import { getNextNumber } from "../../lib/numbering";
 import { formatReceiptMessage, lookupPhoneOnWhatsApp, sendDirectMessage } from "../../lib/whatsapp";
 import { lubumbashiTodayEnd, lubumbashiTodayStart } from "../../lib/timezone";
 import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
+import { addMoney, fxRate, money, subtractMoney } from "../../shared/accounting/decimal";
 import { withTransaction } from "../../shared/db/transaction";
 import { badRequest, notFound } from "../../shared/http/errors";
 
@@ -72,9 +73,13 @@ function assertDirection(value: string): asserts value is "in" | "out" {
   if (value !== "in" && value !== "out") throw badRequest("direction must be in or out");
 }
 
+function assertCurrency(value: string): asserts value is "USD" | "CDF" {
+  if (value !== "USD" && value !== "CDF") throw badRequest("currency must be USD or CDF");
+}
+
 export async function getPaymentSummary() {
   const [settings] = await db.select({ rate: settingsTable.usdToCdfRate, currency: settingsTable.defaultCurrency }).from(settingsTable);
-  const rate = settings?.rate ?? 2800;
+  const rate = Number(settings?.rate ?? 2800);
   const currency = settings?.currency ?? "USD";
   const todayStart = lubumbashiTodayStart();
   const todayEnd = lubumbashiTodayEnd();
@@ -90,25 +95,25 @@ export async function getPaymentSummary() {
     db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) }).from(vouchersTable).where(and(eq(vouchersTable.direction, "out"), eq(vouchersTable.status, "recorded"))),
   ]);
 
-  const n = (value: unknown) => Number(value ?? 0);
-  const cashInToday = n(payTodayIn[0]?.usd) + n(vchTodayIn[0]?.usd);
-  const cashOutToday = n(payTodayOut[0]?.usd) + n(vchTodayOut[0]?.usd);
-  const cashInTodayCdf = n(payTodayIn[0]?.cdf) + n(vchTodayIn[0]?.cdf);
-  const cashOutTodayCdf = n(payTodayOut[0]?.cdf) + n(vchTodayOut[0]?.cdf);
-  const totalIn = n(payAllIn[0]?.usd) + n(vchAllIn[0]?.usd);
-  const totalOut = n(payAllOut[0]?.usd) + n(vchAllOut[0]?.usd);
-  const totalInCdf = n(payAllIn[0]?.cdf) + n(vchAllIn[0]?.cdf);
-  const totalOutCdf = n(payAllOut[0]?.cdf) + n(vchAllOut[0]?.cdf);
+  const n = (value: unknown) => money(Number(value ?? 0));
+  const cashInToday = addMoney(n(payTodayIn[0]?.usd), n(vchTodayIn[0]?.usd));
+  const cashOutToday = addMoney(n(payTodayOut[0]?.usd), n(vchTodayOut[0]?.usd));
+  const cashInTodayCdf = addMoney(n(payTodayIn[0]?.cdf), n(vchTodayIn[0]?.cdf));
+  const cashOutTodayCdf = addMoney(n(payTodayOut[0]?.cdf), n(vchTodayOut[0]?.cdf));
+  const totalIn = addMoney(n(payAllIn[0]?.usd), n(vchAllIn[0]?.usd));
+  const totalOut = addMoney(n(payAllOut[0]?.usd), n(vchAllOut[0]?.usd));
+  const totalInCdf = addMoney(n(payAllIn[0]?.cdf), n(vchAllIn[0]?.cdf));
+  const totalOutCdf = addMoney(n(payAllOut[0]?.cdf), n(vchAllOut[0]?.cdf));
 
   return {
     cashInToday,
     cashOutToday,
     cashInTodayCdf,
     cashOutTodayCdf,
-    netCashToday: cashInToday - cashOutToday,
-    netCashTodayCdf: cashInTodayCdf - cashOutTodayCdf,
-    balanceUsd: totalIn - totalOut,
-    balanceCdf: totalInCdf - totalOutCdf,
+    netCashToday: subtractMoney(cashInToday, cashOutToday),
+    netCashTodayCdf: subtractMoney(cashInTodayCdf, cashOutTodayCdf),
+    balanceUsd: subtractMoney(totalIn, totalOut),
+    balanceCdf: subtractMoney(totalInCdf, totalOutCdf),
     currency,
     rate,
   };
@@ -164,12 +169,16 @@ export async function createPayment(input: CreatePaymentInput, actor: string) {
   assertDirection(input.direction);
   if (input.amount < 0) throw badRequest("Amount cannot be negative");
   if ((input.discount ?? 0) < 0) throw badRequest("Discount cannot be negative");
-  const rate = input.exchangeRate ?? await getExchangeRate();
-  if (rate <= 0) throw badRequest("Exchange rate must be greater than zero");
-  const converted = toUsdCdf(input.amount, input.currency, rate);
-  const paymentNumber = await getNextNumber("PAY");
+  const currency = input.currency.toUpperCase();
+  assertCurrency(currency);
 
   return withTransaction(async (tx) => {
+    const rate = fxRate(input.exchangeRate ?? await getExchangeRate(tx));
+    const amount = money(input.amount);
+    const discount = money(input.discount ?? 0);
+    const converted = toUsdCdf(amount, currency, rate);
+    const paymentNumber = await getNextNumber("PAY", tx);
+
     const [payment] = await tx.insert(paymentsTable).values({
       paymentNumber,
       direction: input.direction,
@@ -182,9 +191,9 @@ export async function createPayment(input: CreatePaymentInput, actor: string) {
       memberName: input.memberName,
       planId: input.planId,
       planName: input.planName,
-      amount: input.amount,
-      discount: input.discount ?? 0,
-      currency: input.currency,
+      amount,
+      discount,
+      currency,
       exchangeRate: rate,
       ...converted,
       account: input.account ?? "cash",
@@ -194,7 +203,7 @@ export async function createPayment(input: CreatePaymentInput, actor: string) {
       createdBy: actor,
     }).returning();
 
-    if (input.amount > 0) {
+    if (amount > 0) {
       const description = `${input.category} — ${input.linkedEntityName ?? input.memberName ?? ""}`;
       await appendLedgerEntry({
         entryDate: input.paymentDate,
@@ -202,8 +211,8 @@ export async function createPayment(input: CreatePaymentInput, actor: string) {
         sourceNumber: paymentNumber,
         sourceId: payment.id,
         direction: input.direction,
-        amount: input.amount,
-        currency: input.currency,
+        amount,
+        currency,
         exchangeRate: rate,
         description,
         createdBy: actor,
@@ -215,9 +224,9 @@ export async function createPayment(input: CreatePaymentInput, actor: string) {
         sourceId: payment.id,
         sourceNumber: paymentNumber,
         ...names,
-        amount: input.amount,
+        amount,
         ...converted,
-        currency: input.currency,
+        currency,
         exchangeRate: rate,
         description,
         createdBy: actor,
@@ -228,12 +237,12 @@ export async function createPayment(input: CreatePaymentInput, actor: string) {
       const [member] = await tx.select().from(membersTable).where(eq(membersTable.id, input.memberId));
       if (member) {
         let coachId = member.coachId;
-        let commissionAmount = member.commissionAmount ?? 0;
+        let commissionAmount = money(member.commissionAmount ?? 0);
         if (!coachId && input.planId) {
           const [plan] = await tx.select().from(plansTable).where(eq(plansTable.id, input.planId));
           if (plan?.coachId) {
             coachId = plan.coachId;
-            commissionAmount = plan.coachFee ?? 0;
+            commissionAmount = money(plan.coachFee ?? 0);
             await tx.update(membersTable).set({ coachId, commissionAmount }).where(eq(membersTable.id, input.memberId));
           }
         }
@@ -243,7 +252,7 @@ export async function createPayment(input: CreatePaymentInput, actor: string) {
             memberId: input.memberId,
             memberName: member.name,
             amount: commissionAmount,
-            currency: input.currency,
+            currency,
             status: "pending",
             note: `Payment ${paymentNumber}`,
           });
@@ -261,14 +270,20 @@ export async function updatePayment(id: number, input: UpdatePaymentInput, actor
   if (input.exchangeRate !== undefined && input.exchangeRate <= 0) throw badRequest("Exchange rate must be greater than zero");
 
   return withTransaction(async (tx) => {
-    const [existing] = await tx.select().from(paymentsTable).where(eq(paymentsTable.id, id));
+    const [existing] = await tx.select().from(paymentsTable).where(eq(paymentsTable.id, id)).for("update");
     if (!existing) throw notFound("Payment not found");
 
-    const amount = input.amount ?? existing.amount ?? 0;
-    const direction = input.direction ?? existing.direction as "in" | "out";
+    const storedRate = Number(existing.exchangeRate ?? 0);
+    if (input.exchangeRate !== undefined && storedRate > 0 && fxRate(input.exchangeRate) !== fxRate(storedRate)) {
+      throw badRequest("Exchange rate is locked after a payment is posted");
+    }
+    const rate = fxRate(storedRate > 0 ? storedRate : (input.exchangeRate ?? await getExchangeRate(tx)));
+    const amount = money(input.amount ?? existing.amount ?? 0);
+    const discount = money(input.discount ?? existing.discount ?? 0);
+    const direction = (input.direction ?? existing.direction) as "in" | "out";
     assertDirection(direction);
-    const currency = input.currency ?? existing.currency;
-    const rate = input.exchangeRate ?? existing.exchangeRate ?? await getExchangeRate();
+    const currency = (input.currency ?? existing.currency).toUpperCase();
+    assertCurrency(currency);
     const account = input.account ?? existing.account ?? "cash";
     const category = input.category ?? existing.category;
     const converted = toUsdCdf(amount, currency, rate);
@@ -283,34 +298,34 @@ export async function updatePayment(id: number, input: UpdatePaymentInput, actor
       ...(input.memberName !== undefined && { memberName: input.memberName }),
       ...(input.planId !== undefined && { planId: input.planId }),
       ...(input.planName !== undefined && { planName: input.planName }),
-      ...(input.amount !== undefined && { amount: input.amount }),
-      ...(input.discount !== undefined && { discount: input.discount }),
-      ...(input.currency !== undefined && { currency: input.currency }),
+      amount,
+      discount,
+      currency,
       exchangeRate: rate,
       ...converted,
-      ...(input.account !== undefined && { account: input.account }),
+      account,
       ...(input.notes !== undefined && { notes: input.notes }),
       ...(input.paymentDate !== undefined && { paymentDate: input.paymentDate }),
     }).where(eq(paymentsTable.id, id)).returning();
 
     const oldDirection = existing.direction as "in" | "out";
-    const financialsChanged = (existing.amount ?? 0) !== amount
+    const financialsChanged = money(existing.amount ?? 0) !== amount
       || oldDirection !== direction
-      || existing.currency !== currency
-      || Math.abs((existing.exchangeRate ?? 1) - rate) > 0.0001
+      || existing.currency.toUpperCase() !== currency
       || existing.account !== account
       || existing.category !== category
       || (input.paymentDate !== undefined && input.paymentDate.getTime() !== existing.paymentDate.getTime());
 
     if (financialsChanged) {
-      if ((existing.amount ?? 0) > 0) {
+      if (money(existing.amount ?? 0) > 0) {
         await appendLedgerEntry({
           sourceType: "payment_correction",
+          sourceNumber: existing.paymentNumber ?? undefined,
           sourceId: id,
           direction: oldDirection === "in" ? "out" : "in",
           amount: existing.amount ?? 0,
           currency: existing.currency,
-          exchangeRate: existing.exchangeRate ?? rate,
+          exchangeRate: rate,
           description: `Correction: reversed payment ${existing.paymentNumber ?? id}`,
           createdBy: actor,
         }, tx);
@@ -318,6 +333,7 @@ export async function updatePayment(id: number, input: UpdatePaymentInput, actor
       if (amount > 0) {
         await appendLedgerEntry({
           sourceType: "payment_correction",
+          sourceNumber: existing.paymentNumber ?? undefined,
           sourceId: id,
           direction,
           amount,
@@ -325,7 +341,7 @@ export async function updatePayment(id: number, input: UpdatePaymentInput, actor
           exchangeRate: rate,
           description: `Correction: updated payment ${existing.paymentNumber ?? id}`,
           createdBy: actor,
-          entryDate: input.paymentDate,
+          entryDate: input.paymentDate ?? existing.paymentDate,
         }, tx);
       }
 
@@ -354,15 +370,18 @@ export async function updatePayment(id: number, input: UpdatePaymentInput, actor
 
 export async function cancelPayment(id: number, actor: string) {
   return withTransaction(async (tx) => {
-    const [existing] = await tx.select().from(paymentsTable).where(eq(paymentsTable.id, id));
+    const [existing] = await tx.select().from(paymentsTable).where(eq(paymentsTable.id, id)).for("update");
     if (!existing) throw notFound("Payment not found");
-    const [payment] = await tx.update(paymentsTable).set({ status: "cancelled" }).where(eq(paymentsTable.id, id)).returning();
+    if (existing.status === "cancelled") return existing;
 
-    if (existing.status === "completed" && (existing.amount ?? 0) > 0) {
-      const rate = existing.exchangeRate ?? await getExchangeRate();
+    const [payment] = await tx.update(paymentsTable).set({ status: "cancelled" }).where(eq(paymentsTable.id, id)).returning();
+    if (existing.status === "completed" && money(existing.amount ?? 0) > 0) {
+      const storedRate = Number(existing.exchangeRate ?? 0);
+      const rate = fxRate(storedRate > 0 ? storedRate : await getExchangeRate(tx));
       const direction = existing.direction as "in" | "out";
       await appendLedgerEntry({
         sourceType: "payment_reversal",
+        sourceNumber: existing.paymentNumber ?? undefined,
         sourceId: id,
         direction: direction === "in" ? "out" : "in",
         amount: existing.amount ?? 0,
