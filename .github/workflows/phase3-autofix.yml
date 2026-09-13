@@ -6,6 +6,7 @@ on:
       - phase-3/contracts-boundaries-architecture
     paths:
       - scripts/phase3-autofix.mjs
+      - scripts/phase3-openapi-sync.mjs
       - .github/workflows/phase3-autofix.yml
 
 permissions:
@@ -19,19 +20,33 @@ jobs:
         with:
           ref: phase-3/contracts-boundaries-architecture
           fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply codemod
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Synchronize missing OpenAPI paths
+        run: node scripts/phase3-openapi-sync.mjs
+      - name: Regenerate API clients and Zod contracts
+        run: pnpm --filter @workspace/api-spec exec orval --config ./orval.config.ts
+      - name: Apply request-contract codemod
         run: node scripts/phase3-autofix.mjs
-      - name: Commit fixes
+      - name: Commit architecture fixes
         run: |
           if git diff --quiet; then
-            echo "No codemod changes"
+            echo "No autofix changes"
             exit 0
           fi
           git config user.name "Phase 3 Architecture Bot"
           git config user.email "actions@users.noreply.github.com"
-          git add artifacts/api-server/src/routes
-          git commit -m "Phase 3: type authenticated route context"
+          git add \
+            lib/api-spec/openapi.yaml \
+            lib/api-zod/src/generated \
+            lib/api-client-react/src/generated \
+            artifacts/api-server/src/routes
+          git commit -m "Phase 3: synchronize contracts and request boundaries"
           git push origin HEAD:phase-3/contracts-boundaries-architecture
