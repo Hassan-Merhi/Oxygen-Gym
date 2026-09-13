@@ -14,6 +14,7 @@ import ledgerRouter from "../domains/accounting/ledger-router";
 import accountsRouter from "../domains/accounting/accounts-router";
 import financialsRouter from "../domains/accounting/financials-router";
 import stockRouter from "../domains/inventory/router";
+import supplierCreditsRouter from "../domains/inventory/supplier-credits-router";
 import salesRouter from "../domains/sales/router";
 import staffEmployeesRouter from "./staff-employees";
 import payrollRouter from "../domains/payroll/router";
@@ -22,7 +23,6 @@ import attendanceRouter from "./attendance";
 import notificationsRouter from "./notifications";
 import auditRouter from "./audit";
 import whatsappRouter from "./whatsapp";
-import supplierCreditsRouter from "./supplier-credits";
 
 const router: IRouter = Router();
 
@@ -41,6 +41,7 @@ router.use("/ledger", ledgerRouter);
 router.use("/accounts", accountsRouter);
 router.use("/financials", financialsRouter);
 router.use("/stock", stockRouter);
+router.use("/supplier-credits", supplierCreditsRouter);
 router.use("/sales", salesRouter);
 router.use("/staff-employees", staffEmployeesRouter);
 router.use("/payroll", payrollRouter);
@@ -49,6 +50,5 @@ router.use("/attendance", attendanceRouter);
 router.use("/notifications", notificationsRouter);
 router.use("/audit", auditRouter);
 router.use("/whatsapp", whatsappRouter);
-router.use("/supplier-credits", supplierCreditsRouter);
 
 export default router;
