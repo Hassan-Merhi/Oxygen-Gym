@@ -1,7 +1,8 @@
 import { badRequest } from "./errors";
 
-export function parseId(value: string | number | undefined, field = "id"): number {
-  const parsed = Number(value);
+export function parseId(value: string | string[] | number | undefined, field = "id"): number {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 0) throw badRequest(`${field} must be a positive integer`);
   return parsed;
 }
