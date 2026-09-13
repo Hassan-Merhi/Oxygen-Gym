@@ -30,15 +30,14 @@ if (runtime === "production" && !configuredSecret) {
   throw new Error("SESSION_SECRET is required in production.");
 }
 
-const staticDir = optional("STATIC_DIR") ?? optional("ELECTRON_STATIC_DIR");
-
 export const env = Object.freeze({
   nodeEnv: runtime,
   isProduction: runtime === "production",
   port: positiveInteger("PORT", 3000),
   sessionSecret: configuredSecret ?? "gympro-dev-secret-change-in-prod",
   logLevel: optional("LOG_LEVEL") ?? "info",
-  staticDir,
+  staticDir: optional("STATIC_DIR") ?? optional("ELECTRON_STATIC_DIR"),
+  clerkSecretKey: optional("CLERK_SECRET_KEY"),
 });
 
 export type ServerEnv = typeof env;
