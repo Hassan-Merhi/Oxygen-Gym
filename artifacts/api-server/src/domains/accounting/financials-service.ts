@@ -7,7 +7,8 @@ import {
   lubumbashiTodayStart,
   lubumbashiYearBounds,
 } from "../../lib/timezone";
-import { getExchangeRate } from "../../shared/accounting/currency";
+import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
+import { addMoney, money, subtractMoney } from "../../shared/accounting/decimal";
 import { badRequest } from "../../shared/http/errors";
 
 export type FinancialPeriod = "today" | "month" | "last_month" | "year" | "custom";
@@ -30,7 +31,6 @@ type FinancialTransaction = {
 };
 
 const LUB_OFFSET_MS = 2 * 60 * 60 * 1000;
-const EPSILON = 0.000001;
 
 function localDateKey(value: Date): string {
   return new Date(value.getTime() + LUB_OFFSET_MS).toISOString().slice(0, 10);
@@ -40,12 +40,25 @@ function prettyCategory(value: string): string {
   return value.replace(/[_-]+/g, " ").trim().replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function amountUsd(storedUsd: number | null | undefined, amount: number | null | undefined, currency: string | null | undefined, exchangeRate: number | null | undefined): number {
-  if (storedUsd !== null && storedUsd !== undefined && Number.isFinite(Number(storedUsd))) return Number(storedUsd);
-  const raw = Number(amount ?? 0);
-  if ((currency ?? "USD").toUpperCase() === "USD") return raw;
+function lockedAmounts(
+  storedUsd: number | null | undefined,
+  storedCdf: number | null | undefined,
+  amount: number | null | undefined,
+  currency: string | null | undefined,
+  exchangeRate: number | null | undefined,
+): { usd: number; cdf: number } {
+  const raw = money(Number(amount ?? 0));
+  const normalized = (currency ?? "USD").toUpperCase();
   const rate = Number(exchangeRate ?? 0);
-  return rate > 0 ? raw / rate : 0;
+  const fallback = rate > 0 ? toUsdCdf(raw, normalized, rate) : { amountUsd: normalized === "USD" ? raw : 0, amountCdf: normalized === "CDF" ? raw : 0 };
+  return {
+    usd: storedUsd !== null && storedUsd !== undefined && Number.isFinite(Number(storedUsd))
+      ? money(Number(storedUsd))
+      : fallback.amountUsd,
+    cdf: storedCdf !== null && storedCdf !== undefined && Number.isFinite(Number(storedCdf))
+      ? money(Number(storedCdf))
+      : fallback.amountCdf,
+  };
 }
 
 function rangeFor(period: FinancialPeriod, dateFrom?: string, dateTo?: string): { from: Date; to: Date } {
@@ -84,9 +97,11 @@ function categoryForPayment(category: string, direction: string): string | null 
     if (category === "other") return "Other Income";
     return prettyCategory(category || "Other Income");
   }
-  if (category === "stock_purchase") return null;
+
+  // Asset purchases and liability settlements are cash outflows, not P&L expenses.
+  if (category === "stock_purchase" || category === "supplier_payment") return null;
   if (category === "payroll") return "Payroll";
-  if (category === "expense") return "Expenses";
+  if (category === "expense") return "General Expenses";
   if (category === "other") return "Other Expense";
   return prettyCategory(category || "Other Expense");
 }
@@ -96,17 +111,21 @@ function isInventoryCategory(category?: string | null): boolean {
   return normalized === "inventory" || normalized === "stockpurchase" || normalized === "stock";
 }
 
-function addTransaction(list: FinancialTransaction[], input: Omit<FinancialTransaction, "date" | "dateKey" | "monthKey" | "amountCdf"> & { date: Date }, rate: number): void {
+function addTransaction(
+  list: FinancialTransaction[],
+  input: Omit<FinancialTransaction, "date" | "dateKey" | "monthKey"> & { date: Date },
+): void {
+  const usd = money(Math.abs(input.amountUsd));
+  const cdf = money(Math.abs(input.amountCdf));
+  if (usd === 0 && cdf === 0) return;
   const dateKey = localDateKey(input.date);
-  const usd = Math.abs(Number(input.amountUsd ?? 0));
-  if (usd < EPSILON) return;
   list.push({
     ...input,
     date: input.date.toISOString(),
     dateKey,
     monthKey: dateKey.slice(0, 7),
     amountUsd: usd,
-    amountCdf: usd * rate,
+    amountCdf: cdf,
   });
 }
 
@@ -115,8 +134,7 @@ export async function getFinancialReport(input: { period?: string; dateFrom?: st
     ? input.period as FinancialPeriod
     : "month";
   const range = rangeFor(selectedPeriod, input.dateFrom, input.dateTo);
-  const rateRaw = await getExchangeRate();
-  const rate = rateRaw > 0 ? rateRaw : 2800;
+  const currentRate = await getExchangeRate();
 
   const [payments, vouchers, sales] = await Promise.all([
     db.select({
@@ -128,8 +146,10 @@ export async function getFinancialReport(input: { period?: string; dateFrom?: st
       currency: paymentsTable.currency,
       exchangeRate: paymentsTable.exchangeRate,
       amountUsd: paymentsTable.amountUsd,
+      amountCdf: paymentsTable.amountCdf,
       paymentDate: paymentsTable.paymentDate,
       notes: paymentsTable.notes,
+      memberId: paymentsTable.memberId,
       memberName: paymentsTable.memberName,
       linkedEntity: paymentsTable.linkedEntity,
       linkedEntityId: paymentsTable.linkedEntityId,
@@ -149,11 +169,14 @@ export async function getFinancialReport(input: { period?: string; dateFrom?: st
       currency: vouchersTable.currency,
       exchangeRate: vouchersTable.exchangeRate,
       amountUsd: vouchersTable.amountUsd,
+      amountCdf: vouchersTable.amountCdf,
       voucherDate: vouchersTable.voucherDate,
       category: vouchersTable.category,
       description: vouchersTable.description,
       paidTo: vouchersTable.paidTo,
       receivedFrom: vouchersTable.receivedFrom,
+      linkedEntity: vouchersTable.linkedEntity,
+      linkedEntityId: vouchersTable.linkedEntityId,
       linkedEntityName: vouchersTable.linkedEntityName,
     }).from(vouchersTable).where(and(
       eq(vouchersTable.status, "recorded"),
@@ -180,6 +203,12 @@ export async function getFinancialReport(input: { period?: string; dateFrom?: st
     )),
   ]);
 
+  const membershipPaymentMemberIds = new Set(
+    payments
+      .filter((payment) => payment.direction === "in" && payment.category === "membership" && payment.memberId !== null)
+      .map((payment) => payment.memberId as number),
+  );
+
   const transactions: FinancialTransaction[] = [];
   for (const payment of payments) {
     const linkedPosSale = payment.direction === "in"
@@ -190,6 +219,7 @@ export async function getFinancialReport(input: { period?: string; dateFrom?: st
     const category = categoryForPayment(payment.category, payment.direction);
     if (!category) continue;
     const kind: Kind = payment.direction === "in" ? "revenue" : "expense";
+    const amounts = lockedAmounts(payment.amountUsd, payment.amountCdf, payment.amount, payment.currency, payment.exchangeRate);
     addTransaction(transactions, {
       id: `payment-${payment.id}`,
       sourceType: "payment",
@@ -200,15 +230,22 @@ export async function getFinancialReport(input: { period?: string; dateFrom?: st
       category,
       description: payment.notes || payment.planName || category,
       party: payment.memberName || payment.linkedEntityName || "—",
-      amountUsd: amountUsd(payment.amountUsd, payment.amount, payment.currency, payment.exchangeRate),
-    }, rate);
+      amountUsd: amounts.usd,
+      amountCdf: amounts.cdf,
+    });
   }
 
   for (const voucher of vouchers) {
+    const duplicateMembershipReceipt = voucher.linkedEntity === "member"
+      && voucher.linkedEntityId !== null
+      && voucher.voucherType === "cash_receipt"
+      && membershipPaymentMemberIds.has(voucher.linkedEntityId);
+    if (duplicateMembershipReceipt) continue;
     if (voucher.direction === "out" && isInventoryCategory(voucher.category)) continue;
     const kind: Kind = voucher.direction === "in" ? "revenue" : "expense";
-    const fallback = kind === "revenue" ? "Other Income" : "Expenses";
+    const fallback = kind === "revenue" ? "Other Income" : "General Expenses";
     const category = voucher.category ? prettyCategory(voucher.category) : fallback;
+    const amounts = lockedAmounts(voucher.amountUsd, voucher.amountCdf, voucher.amount, voucher.currency, voucher.exchangeRate);
     addTransaction(transactions, {
       id: `voucher-${voucher.id}`,
       sourceType: "voucher",
@@ -219,13 +256,16 @@ export async function getFinancialReport(input: { period?: string; dateFrom?: st
       category,
       description: voucher.description || prettyCategory(voucher.voucherType),
       party: voucher.paidTo || voucher.receivedFrom || voucher.linkedEntityName || "—",
-      amountUsd: amountUsd(voucher.amountUsd, voucher.amount, voucher.currency, voucher.exchangeRate),
-    }, rate);
+      amountUsd: amounts.usd,
+      amountCdf: amounts.cdf,
+    });
   }
 
   for (const sale of sales) {
     const itemSummary = (sale.items ?? []).map((item) => `${item.quantity > 1 ? `${item.quantity}× ` : ""}${item.productName}`).join(", ");
     const description = itemSummary || sale.notes || "Product sale";
+    const revenue = lockedAmounts(sale.totalAmountUsd, undefined, sale.totalAmount, sale.currency, sale.exchangeRate);
+    const cogs = lockedAmounts(sale.totalCostUsd, undefined, sale.totalCost, sale.currency, sale.exchangeRate);
     addTransaction(transactions, {
       id: `sale-revenue-${sale.id}`,
       sourceType: "sale_revenue",
@@ -236,8 +276,9 @@ export async function getFinancialReport(input: { period?: string; dateFrom?: st
       category: "Product Sales",
       description,
       party: "POS",
-      amountUsd: amountUsd(sale.totalAmountUsd, sale.totalAmount, sale.currency, sale.exchangeRate),
-    }, rate);
+      amountUsd: revenue.usd,
+      amountCdf: revenue.cdf,
+    });
     addTransaction(transactions, {
       id: `sale-cogs-${sale.id}`,
       sourceType: "sale_cogs",
@@ -248,48 +289,67 @@ export async function getFinancialReport(input: { period?: string; dateFrom?: st
       category: "Cost of Goods Sold",
       description,
       party: "POS",
-      amountUsd: amountUsd(sale.totalCostUsd, sale.totalCost, sale.currency, sale.exchangeRate),
-    }, rate);
+      amountUsd: cogs.usd,
+      amountCdf: cogs.cdf,
+    });
   }
 
   transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.id.localeCompare(a.id));
-  const categoryMap = new Map<string, { category: string; kind: Kind; usd: number }>();
-  const monthMap = new Map<string, { key: string; label: string; revenueUsd: number; expensesUsd: number; transactions: FinancialTransaction[] }>();
+  const categoryMap = new Map<string, { category: string; kind: Kind; usd: number; cdf: number }>();
+  const monthMap = new Map<string, { key: string; label: string; revenueUsd: number; revenueCdf: number; expensesUsd: number; expensesCdf: number; transactions: FinancialTransaction[] }>();
   let revenueUsd = 0;
+  let revenueCdf = 0;
   let expensesUsd = 0;
+  let expensesCdf = 0;
 
   for (const transaction of transactions) {
-    if (transaction.kind === "revenue") revenueUsd += transaction.amountUsd;
-    else expensesUsd += transaction.amountUsd;
+    if (transaction.kind === "revenue") {
+      revenueUsd = addMoney(revenueUsd, transaction.amountUsd);
+      revenueCdf = addMoney(revenueCdf, transaction.amountCdf);
+    } else {
+      expensesUsd = addMoney(expensesUsd, transaction.amountUsd);
+      expensesCdf = addMoney(expensesCdf, transaction.amountCdf);
+    }
     const categoryKey = `${transaction.kind}:${transaction.category}`;
-    const category = categoryMap.get(categoryKey) ?? { category: transaction.category, kind: transaction.kind, usd: 0 };
-    category.usd += transaction.amountUsd;
+    const category = categoryMap.get(categoryKey) ?? { category: transaction.category, kind: transaction.kind, usd: 0, cdf: 0 };
+    category.usd = addMoney(category.usd, transaction.amountUsd);
+    category.cdf = addMoney(category.cdf, transaction.amountCdf);
     categoryMap.set(categoryKey, category);
+
     const month = monthMap.get(transaction.monthKey) ?? {
       key: transaction.monthKey,
       label: monthLabel(transaction.monthKey),
       revenueUsd: 0,
+      revenueCdf: 0,
       expensesUsd: 0,
+      expensesCdf: 0,
       transactions: [],
     };
-    if (transaction.kind === "revenue") month.revenueUsd += transaction.amountUsd;
-    else month.expensesUsd += transaction.amountUsd;
+    if (transaction.kind === "revenue") {
+      month.revenueUsd = addMoney(month.revenueUsd, transaction.amountUsd);
+      month.revenueCdf = addMoney(month.revenueCdf, transaction.amountCdf);
+    } else {
+      month.expensesUsd = addMoney(month.expensesUsd, transaction.amountUsd);
+      month.expensesCdf = addMoney(month.expensesCdf, transaction.amountCdf);
+    }
     month.transactions.push(transaction);
     monthMap.set(transaction.monthKey, month);
   }
 
-  const money = (usd: number) => ({ usd, cdf: usd * rate });
   const categories = [...categoryMap.values()]
     .sort((a, b) => a.kind !== b.kind ? (a.kind === "revenue" ? -1 : 1) : b.usd - a.usd)
-    .map((category) => ({ category: category.category, kind: category.kind, ...money(category.usd) }));
+    .map((category) => ({ category: category.category, kind: category.kind, usd: category.usd, cdf: category.cdf }));
   const months = [...monthMap.values()]
     .sort((a, b) => b.key.localeCompare(a.key))
     .map((month) => ({
       key: month.key,
       label: month.label,
-      revenue: money(month.revenueUsd),
-      expenses: money(month.expensesUsd),
-      net: money(month.revenueUsd - month.expensesUsd),
+      revenue: { usd: month.revenueUsd, cdf: month.revenueCdf },
+      expenses: { usd: month.expensesUsd, cdf: month.expensesCdf },
+      net: {
+        usd: subtractMoney(month.revenueUsd, month.expensesUsd),
+        cdf: subtractMoney(month.revenueCdf, month.expensesCdf),
+      },
       transactions: month.transactions,
     }));
 
@@ -297,11 +357,14 @@ export async function getFinancialReport(input: { period?: string; dateFrom?: st
     period: selectedPeriod,
     dateFrom: range.from.toISOString(),
     dateTo: range.to.toISOString(),
-    rate,
+    rate: currentRate,
     currency: { base: "USD", display: "CDF" },
-    revenue: money(revenueUsd),
-    expenses: money(expensesUsd),
-    net: money(revenueUsd - expensesUsd),
+    revenue: { usd: revenueUsd, cdf: revenueCdf },
+    expenses: { usd: expensesUsd, cdf: expensesCdf },
+    net: {
+      usd: subtractMoney(revenueUsd, expensesUsd),
+      cdf: subtractMoney(revenueCdf, expensesCdf),
+    },
     categories,
     months,
   };
