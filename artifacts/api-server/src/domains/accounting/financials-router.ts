@@ -1,3 +1,5 @@
+import { contractQueryAs } from "../../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { optionalString } from "../../shared/http/validation";
@@ -7,7 +9,7 @@ const router = Router();
 router.use(requireAuth());
 
 router.get("/", async (req, res) => {
-  const query = req.query as Record<string, string | undefined>;
+  const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.GetFinancialsQueryParams);
   res.json(await getFinancialReport({
     period: optionalString(query.period),
     dateFrom: optionalString(query.dateFrom),

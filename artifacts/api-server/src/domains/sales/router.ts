@@ -1,3 +1,5 @@
+import { contractBody, contractParams, contractQuery, contractQueryAs } from "../../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { PatchSaleBody as PatchSaleBodySchema } from "@workspace/api-zod";
 import { requireAuth } from "../../middlewares/auth";
@@ -28,7 +30,7 @@ const router = Router();
 router.use(requireAuth());
 
 router.get("/lookup-barcode", async (req, res) => {
-  const barcode = requiredString(req.query.barcode, "barcode");
+  const barcode = requiredString(contractQuery(req, ApiContracts.LookupBarcodeQueryParams).barcode, "barcode");
   const product = await lookupProductByBarcode(barcode);
   if (!product) {
     await logActivity(req, "barcode_not_found", "product", undefined, { barcode });
@@ -38,7 +40,7 @@ router.get("/lookup-barcode", async (req, res) => {
 });
 
 router.get("/", async (req, res) => {
-  const query = req.query as Record<string, string | undefined>;
+  const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListSalesQueryParams);
   const dateTo = optionalDate(query.dateTo, "dateTo");
   if (dateTo) dateTo.setHours(23, 59, 59, 999);
   res.json(await listSales({
@@ -53,11 +55,11 @@ router.get("/", async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  res.json(await getSale(parseId(req.params.id, "sale id")));
+  res.json(await getSale(parseId(contractParams(req, ApiContracts.GetSaleParams).id, "sale id")));
 });
 
 router.post("/", async (req, res) => {
-  const body = asRecord(req.body);
+  const body = asRecord(contractBody(req, ApiContracts.CompleteSaleBody));
   if (!Array.isArray(body.items)) throw badRequest("Cart is empty");
   const items: SaleLineInput[] = body.items.map((raw) => {
     const item = asRecord(raw);
@@ -87,8 +89,8 @@ router.post("/", async (req, res) => {
 });
 
 router.patch("/:id", requireAdmin(), async (req, res) => {
-  const id = parseId(req.params.id, "sale id");
-  const parsed = PatchSaleBodySchema.safeParse(req.body);
+  const id = parseId(contractParams(req, ApiContracts.PatchSaleParams).id, "sale id");
+  const parsed = PatchSaleBodySchema.safeParse(contractBody(req, ApiContracts.PatchSaleBody));
   if (!parsed.success) throw badRequest("Invalid patch body", parsed.error.issues);
 
   const data = parsed.data;
@@ -110,8 +112,8 @@ router.patch("/:id", requireAdmin(), async (req, res) => {
 });
 
 router.patch("/:id/void", async (req, res) => {
-  const id = parseId(req.params.id, "sale id");
-  const reason = requiredString(asRecord(req.body).reason, "reason");
+  const id = parseId(contractParams(req, ApiContracts.VoidSaleParams).id, "sale id");
+  const reason = requiredString(asRecord(contractBody(req, ApiContracts.VoidSaleBody)).reason, "reason");
   const actor = getCurrentUser(req).name;
   const sale = await voidSale(id, reason, actor);
   await logActivity(req, "sale_voided", "sale", id, {

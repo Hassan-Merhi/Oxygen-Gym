@@ -1,3 +1,5 @@
+import { contractBody, contractParams, contractQueryAs } from "../../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { logActivity } from "../../lib/activity";
@@ -42,7 +44,7 @@ router.get("/summary", async (_req, res) => {
 });
 
 router.get("/", async (req, res) => {
-  const query = req.query as Record<string, string | undefined>;
+  const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListProductsQueryParams);
   res.json(await listProducts({
     page: parsePage(query.page),
     limit: parseLimit(query.limit),
@@ -54,7 +56,7 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const body = asRecord(req.body);
+  const body = asRecord(contractBody(req, ApiContracts.CreateProductBody));
   const name = requiredString(body.name, "name");
   const result = await createProduct({
     name,
@@ -79,12 +81,12 @@ router.post("/", async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  res.json(await getProduct(parseId(req.params.id, "product id")));
+  res.json(await getProduct(parseId(contractParams(req, ApiContracts.GetProductParams).id, "product id")));
 });
 
 router.patch("/:id", async (req, res) => {
-  const id = parseId(req.params.id, "product id");
-  const body = asRecord(req.body);
+  const id = parseId(contractParams(req, ApiContracts.UpdateProductParams).id, "product id");
+  const body = asRecord(contractBody(req, ApiContracts.UpdateProductBody));
   const input: UpdateProductInput = {
     name: body.name === undefined ? undefined : requiredString(body.name, "name"),
     barcode: nullableString(body.barcode),
@@ -105,12 +107,12 @@ router.patch("/:id", async (req, res) => {
 });
 
 router.get("/:id/purchases", async (req, res) => {
-  res.json(await listStockPurchases(parseId(req.params.id, "product id")));
+  res.json(await listStockPurchases(parseId(contractParams(req, ApiContracts.ListProductPurchasesParams).id, "product id")));
 });
 
 router.post("/:id/purchases", async (req, res) => {
-  const productId = parseId(req.params.id, "product id");
-  const body = asRecord(req.body);
+  const productId = parseId(contractParams(req, ApiContracts.AddStockPurchaseParams).id, "product id");
+  const body = asRecord(contractBody(req, ApiContracts.AddStockPurchaseBody));
   const actor = getCurrentUser(req).name;
   const purchase = await addStockPurchase(productId, {
     quantityAdded: nonNegativeNumber(body.quantityAdded, "quantityAdded"),
@@ -136,7 +138,7 @@ router.post("/:id/purchases", async (req, res) => {
 });
 
 router.get("/:id/history", async (req, res) => {
-  res.json(await getProductHistory(parseId(req.params.id, "product id")));
+  res.json(await getProductHistory(parseId(contractParams(req, ApiContracts.GetProductHistoryParams).id, "product id")));
 });
 
 export default router;

@@ -1,3 +1,5 @@
+import { contractBody, contractParams } from "../../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { logActivity } from "../../lib/activity";
@@ -50,7 +52,7 @@ router.get("/", async (_req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const body = asRecord(req.body);
+  const body = asRecord(contractBody(req, ApiContracts.CreateSupplierCreditBody));
   const credit = await createSupplierCredit({
     supplier: requiredString(body.supplier, "supplier"),
     description: optionalString(body.description),
@@ -69,8 +71,8 @@ router.post("/", async (req, res) => {
 });
 
 router.patch("/:id", async (req, res) => {
-  const id = parseId(req.params.id, "supplier credit id");
-  const body = asRecord(req.body);
+  const id = parseId(contractParams(req, ApiContracts.UpdateSupplierCreditParams).id, "supplier credit id");
+  const body = asRecord(contractBody(req, ApiContracts.UpdateSupplierCreditBody));
   res.json(await updateSupplierCredit(id, {
     supplier: body.supplier === undefined ? undefined : requiredString(body.supplier, "supplier"),
     description: nullableString(body.description),
@@ -85,16 +87,16 @@ router.patch("/:id", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
-  res.json(await deleteSupplierCredit(parseId(req.params.id, "supplier credit id")));
+  res.json(await deleteSupplierCredit(parseId(contractParams(req, ApiContracts.DeleteSupplierCreditParams).id, "supplier credit id")));
 });
 
 router.get("/:id/payments", async (req, res) => {
-  res.json(await listSupplierPayments(parseId(req.params.id, "supplier credit id")));
+  res.json(await listSupplierPayments(parseId(contractParams(req, ApiContracts.ListSupplierPaymentsParams).id, "supplier credit id")));
 });
 
 router.post("/:id/payments", async (req, res) => {
-  const id = parseId(req.params.id, "supplier credit id");
-  const body = asRecord(req.body);
+  const id = parseId(contractParams(req, ApiContracts.CreateSupplierPaymentParams).id, "supplier credit id");
+  const body = asRecord(contractBody(req, ApiContracts.CreateSupplierPaymentBody));
   const result = await addSupplierPayment(id, {
     amount: nonNegativeNumber(body.amount, "amount"),
     currency: optionalString(body.currency),
@@ -110,8 +112,8 @@ router.post("/:id/payments", async (req, res) => {
 
 router.delete("/:id/payments/:paymentId", async (req, res) => {
   res.json(await deleteSupplierPayment(
-    parseId(req.params.id, "supplier credit id"),
-    parseId(req.params.paymentId, "supplier payment id"),
+    parseId(contractParams(req, ApiContracts.DeleteSupplierPaymentParams).id, "supplier credit id"),
+    parseId(contractParams(req, ApiContracts.DeleteSupplierPaymentParams).paymentId, "supplier payment id"),
   ));
 });
 

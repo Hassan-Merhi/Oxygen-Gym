@@ -1,3 +1,5 @@
+import { contractBody, contractParams, contractQueryAs } from "../../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { logActivity } from "../../lib/activity";
@@ -50,7 +52,7 @@ router.get("/summary", async (_req, res) => {
 });
 
 router.get("/", async (req, res) => {
-  const query = req.query as Record<string, string | undefined>;
+  const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListPaymentsQueryParams);
   const dateTo = optionalDate(query.dateTo, "dateTo");
   if (dateTo) dateTo.setHours(23, 59, 59, 999);
   res.json(await listPayments({
@@ -67,7 +69,7 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const body = asRecord(req.body);
+  const body = asRecord(contractBody(req, ApiContracts.CreatePaymentBody));
   const paymentDirection = direction(body.direction, true)!;
   const payment = await createPayment({
     direction: paymentDirection,
@@ -100,19 +102,24 @@ router.post("/", async (req, res) => {
 
 // Historical cleanup is intentionally unavailable in the running service.
 // It now lives behind the guarded offline DB repair scripts.
-router.all("/admin/cash-cleanup", requireAdmin(), async (_req, res) => {
+router.get("/admin/cash-cleanup", requireAdmin(), async (_req, res) => {
+  res.status(410).json({
+    error: "Cash cleanup is an offline admin operation. Run the guarded repair:legacy-financials database script explicitly.",
+  });
+});
+router.post("/admin/cash-cleanup", requireAdmin(), async (_req, res) => {
   res.status(410).json({
     error: "Cash cleanup is an offline admin operation. Run the guarded repair:legacy-financials database script explicitly.",
   });
 });
 
 router.post("/:id/send-receipt", async (req, res) => {
-  res.json(await sendPaymentReceipt(parseId(req.params.id, "payment id")));
+  res.json(await sendPaymentReceipt(parseId(contractParams(req, ApiContracts.SendPaymentReceiptParams).id, "payment id")));
 });
 
 router.patch("/:id", async (req, res) => {
-  const id = parseId(req.params.id, "payment id");
-  const body = asRecord(req.body);
+  const id = parseId(contractParams(req, ApiContracts.UpdatePaymentParams).id, "payment id");
+  const body = asRecord(contractBody(req, ApiContracts.UpdatePaymentBody));
   const input: UpdatePaymentInput = {
     direction: direction(body.direction),
     category: optionalString(body.category),
@@ -137,7 +144,7 @@ router.patch("/:id", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
-  const id = parseId(req.params.id, "payment id");
+  const id = parseId(contractParams(req, ApiContracts.DeletePaymentParams).id, "payment id");
   const payment = await cancelPayment(id, getCurrentUser(req).name);
   await logActivity(req, "payment_archived", "payment", id, { number: payment.paymentNumber });
   res.json({ ok: true });
