@@ -8,8 +8,9 @@ import {
 import { and, count, desc, eq, gte, ilike, lte, or } from "drizzle-orm";
 import { appendLedgerEntry } from "../../lib/ledger";
 import { getNextNumber } from "../../lib/numbering";
-import { postDoubleEntry, reverseEntries } from "../../lib/accounting";
-import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
+import { ACCOUNTS, postDoubleEntry, reverseEntries } from "../../lib/accounting";
+import { convertCurrencyAmount, getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
+import { addMoney, fxRate, money, subtractMoney } from "../../shared/accounting/decimal";
 import { withTransaction } from "../../shared/db/transaction";
 import { badRequest, notFound } from "../../shared/http/errors";
 
@@ -54,7 +55,6 @@ export async function listPayroll(input: PayrollListInput) {
     db.select().from(payrollTable).where(where).orderBy(desc(payrollTable.createdAt)).limit(input.limit).offset(offset),
     db.select({ total: count() }).from(payrollTable).where(where),
   ]);
-
   return { items, total: Number(totalRow.total), page: input.page, limit: input.limit };
 }
 
@@ -71,34 +71,36 @@ export async function createPayroll(input: CreatePayrollInput, actor: string) {
   if ((input.deduction ?? 0) < 0) throw badRequest("Deduction cannot be negative");
   if (input.periodStart && input.periodEnd && input.periodEnd < input.periodStart) throw badRequest("Period end must be after period start");
 
-  const rate = input.exchangeRate ?? await getExchangeRate();
-  const payrollNumber = await getNextNumber("payroll");
-
   return withTransaction(async (tx) => {
+    const rate = fxRate(input.exchangeRate ?? await getExchangeRate(tx));
+    const payrollNumber = await getNextNumber("payroll", tx);
     const [employee] = await tx.select().from(staffEmployeesTable).where(eq(staffEmployeesTable.id, input.staffEmployeeId));
     if (!employee) throw notFound("Staff employee not found");
 
-    const salCurrency = input.currency ?? employee.salaryCurrency ?? "USD";
+    const salCurrency = (input.currency ?? employee.salaryCurrency ?? "USD").toUpperCase();
+    if (salCurrency !== "USD" && salCurrency !== "CDF") throw badRequest("currency must be USD or CDF");
     const pendingCommissions = await tx.select().from(commissionsTable).where(and(
       eq(commissionsTable.staffEmployeeId, input.staffEmployeeId),
       eq(commissionsTable.status, "pending"),
     ));
 
     const commissionBonus = pendingCommissions.reduce((total, commission) => {
-      const amount = commission.amount ?? 0;
-      const commissionCurrency = commission.currency ?? salCurrency;
-      if (commissionCurrency === salCurrency) return total + amount;
-      if (salCurrency === "USD" && commissionCurrency === "CDF") return total + amount / rate;
-      if (salCurrency === "CDF" && commissionCurrency === "USD") return total + amount * rate;
-      return total + amount;
+      const converted = convertCurrencyAmount(
+        money(commission.amount ?? 0),
+        commission.currency ?? salCurrency,
+        salCurrency,
+        rate,
+      );
+      return addMoney(total, converted);
     }, 0);
 
-    const bonus = input.bonus ?? 0;
-    const deduction = input.deduction ?? 0;
-    const netPay = input.baseSalary + bonus + commissionBonus - deduction;
+    const baseSalary = money(input.baseSalary);
+    const bonus = money(input.bonus ?? 0);
+    const deduction = money(input.deduction ?? 0);
+    const netPay = subtractMoney(addMoney(baseSalary, bonus, commissionBonus), deduction);
     if (netPay < 0) throw badRequest("Net pay cannot be negative");
 
-    const netPayUsd = salCurrency === "USD" ? netPay : netPay / rate;
+    const netPayUsd = toUsdCdf(netPay, salCurrency, rate).amountUsd;
     const [record] = await tx.insert(payrollTable).values({
       payrollNumber,
       staffEmployeeId: employee.id,
@@ -106,7 +108,7 @@ export async function createPayroll(input: CreatePayrollInput, actor: string) {
       staffNumber: employee.staffNumber ?? null,
       periodStart: input.periodStart ?? null,
       periodEnd: input.periodEnd ?? null,
-      baseSalary: input.baseSalary,
+      baseSalary,
       bonus,
       commissionBonus,
       deduction,
@@ -124,22 +126,22 @@ export async function createPayroll(input: CreatePayrollInput, actor: string) {
         .set({ payrollId: record.id, status: "draft" })
         .where(and(eq(commissionsTable.staffEmployeeId, input.staffEmployeeId), eq(commissionsTable.status, "pending")));
     }
-
     return record;
   });
 }
 
 export async function payPayroll(id: number, actor: string) {
-  const rate = await getExchangeRate();
-  const paymentNumber = await getNextNumber("PAY");
-
   return withTransaction(async (tx) => {
-    const [record] = await tx.select().from(payrollTable).where(eq(payrollTable.id, id));
+    const [record] = await tx.select().from(payrollTable).where(eq(payrollTable.id, id)).for("update");
     if (!record) throw notFound("Payroll record not found");
     if (record.status === "paid") throw badRequest("Already paid");
     if (record.status === "cancelled") throw badRequest("Cannot pay a cancelled payroll");
 
-    const { amountUsd: netPayUsd, amountCdf: netPayCdf } = toUsdCdf(record.netPay, record.currency, rate);
+    const storedRate = Number(record.exchangeRate ?? 0);
+    const rate = fxRate(storedRate > 0 ? storedRate : await getExchangeRate(tx));
+    const paymentNumber = await getNextNumber("PAY", tx);
+    const netPay = money(record.netPay);
+    const { amountUsd: netPayUsd, amountCdf: netPayCdf } = toUsdCdf(netPay, record.currency, rate);
     const description = `Payroll ${record.payrollNumber} — ${record.staffName}`;
 
     const [payment] = await tx.insert(paymentsTable).values({
@@ -147,7 +149,10 @@ export async function payPayroll(id: number, actor: string) {
       direction: "out",
       category: "payroll",
       type: "payroll",
-      amount: record.netPay,
+      linkedEntity: "payroll",
+      linkedEntityId: record.id,
+      linkedEntityName: record.payrollNumber,
+      amount: netPay,
       currency: record.currency,
       exchangeRate: rate,
       amountUsd: netPayUsd,
@@ -163,7 +168,7 @@ export async function payPayroll(id: number, actor: string) {
       sourceNumber: record.payrollNumber ?? undefined,
       sourceId: record.id,
       direction: "out",
-      amount: record.netPay,
+      amount: netPay,
       currency: record.currency,
       exchangeRate: rate,
       description,
@@ -174,11 +179,11 @@ export async function payPayroll(id: number, actor: string) {
       sourceType: "payroll",
       sourceId: record.id,
       sourceNumber: record.payrollNumber ?? undefined,
-      debitName: "Payroll Expense",
+      debitName: ACCOUNTS.PAYROLL_EXPENSE,
       debitType: "expense",
-      creditName: "Cash",
+      creditName: ACCOUNTS.CASH,
       creditType: "asset",
-      amount: record.netPay,
+      amount: netPay,
       amountUsd: netPayUsd,
       amountCdf: netPayCdf,
       currency: record.currency,
@@ -202,35 +207,34 @@ export async function payPayroll(id: number, actor: string) {
       netPayUsd,
       exchangeRate: rate,
     }).where(eq(payrollTable.id, id)).returning();
-
     return updated;
   });
 }
 
 export async function cancelPayroll(id: number, reason: string, actor: string) {
   if (!reason.trim()) throw badRequest("Cancellation reason is required");
-  const rate = await getExchangeRate();
 
   return withTransaction(async (tx) => {
-    const [record] = await tx.select().from(payrollTable).where(eq(payrollTable.id, id));
+    const [record] = await tx.select().from(payrollTable).where(eq(payrollTable.id, id)).for("update");
     if (!record) throw notFound("Payroll record not found");
     if (record.status === "cancelled") throw badRequest("Already cancelled");
 
     if (record.status === "paid") {
+      const storedRate = Number(record.exchangeRate ?? 0);
+      const rate = fxRate(storedRate > 0 ? storedRate : await getExchangeRate(tx));
       await appendLedgerEntry({
         sourceType: "payroll_reversal",
         sourceNumber: record.payrollNumber ?? undefined,
         sourceId: record.id,
         direction: "in",
-        amount: record.netPay,
+        amount: money(record.netPay),
         currency: record.currency,
-        exchangeRate: record.exchangeRate ?? rate,
+        exchangeRate: rate,
         description: `Reversal of payroll ${record.payrollNumber} — ${reason}`,
         createdBy: actor,
       }, tx);
 
       await reverseEntries("payroll", record.id, "payroll_reversal", actor, tx);
-
       if (record.paymentId) {
         await tx.update(paymentsTable).set({ status: "cancelled" }).where(eq(paymentsTable.id, record.paymentId));
       }
@@ -246,7 +250,6 @@ export async function cancelPayroll(id: number, reason: string, actor: string) {
       cancelledBy: actor,
       cancelReason: reason,
     }).where(eq(payrollTable.id, id)).returning();
-
     return updated;
   });
 }
