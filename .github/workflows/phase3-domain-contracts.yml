@@ -1,0 +1,48 @@
+name: Phase 3 Domain Contracts
+
+on:
+  push:
+    branches:
+      - phase-3/contracts-boundaries-architecture
+    paths:
+      - scripts/phase3-domain-contracts.mjs
+      - .github/workflows/phase3-domain-contracts.yml
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-3/contracts-boundaries-architecture
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply generated request contracts to mounted domain routers
+        run: node scripts/phase3-domain-contracts.mjs
+      - name: Commit domain contract migration
+        run: |
+          if git diff --quiet; then
+            echo "No domain contract changes"
+          else
+            git config user.name "Phase 3 Architecture Bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add artifacts/api-server/src
+            git commit -m "Phase 3: enforce generated contracts in domain routers"
+            git push origin HEAD:phase-3/contracts-boundaries-architecture
+          fi
+      - name: Validate Phase 3 gate
+        run: pnpm run architecture:check
+      - name: Validate production build
+        run: pnpm run build
