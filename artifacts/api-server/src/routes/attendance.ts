@@ -6,9 +6,24 @@ import { db } from "@workspace/db";
 import { checkInsTable, membersTable } from "@workspace/db/schema";
 import { eq, and, gte, lte, desc, count, sql } from "drizzle-orm";
 import { lubumbashiTodayStart, lubumbashiTodayEnd } from "../lib/timezone";
+import { sqlRows } from "../lib/sql-rows";
 
 const router = Router();
 router.use(requireAuth());
+
+interface AttendanceSqlRow {
+  id?: number;
+  memberId?: number;
+  memberName?: string;
+  checkedInAt?: string | Date;
+  planName?: string | null;
+  date?: string;
+  month?: string;
+  hour?: number;
+  day?: string;
+  count?: number | string;
+  cnt?: number | string;
+}
 
 function daysAgo(n: number): Date {
   const d = new Date();
@@ -58,7 +73,7 @@ router.get("/summary", async (_req: Request, res: Response) => {
   const weekCount = Number(weekRow.c);
   const monthCount = Number(monthRow.c);
 
-  const dailyCounts = (dailyRows.rows as any[]).map((r: any) => Number(r.cnt));
+  const dailyCounts = sqlRows<AttendanceSqlRow>(dailyRows).map((r) => Number(r.cnt));
   const avgDaily = dailyCounts.length > 0
     ? Math.round(dailyCounts.reduce((a: number, b: number) => a + b, 0) / 30)
     : 0;
@@ -68,7 +83,7 @@ router.get("/summary", async (_req: Request, res: Response) => {
     SELECT COUNT(DISTINCT member_id) AS cnt FROM check_ins
     WHERE checked_in_at >= ${todayStart} AND checked_in_at <= ${todayEnd} AND member_id IS NOT NULL
   `);
-  const activeTodayRow = (activeTodayResult.rows as any[])[0];
+  const activeTodayRow = sqlRows<AttendanceSqlRow>(activeTodayResult)[0];
 
   res.json({
     today: todayCount,
@@ -102,7 +117,7 @@ router.get("/daily", async (req: Request, res: Response) => {
     ORDER BY d.day ASC
   `);
 
-  res.json((rows.rows ?? rows) as any[]);
+  res.jsonsqlRows<AttendanceSqlRow>(rows);
 });
 
 // ── Monthly chart (last N months) ─────────────────────────────────────────────
@@ -131,7 +146,7 @@ router.get("/monthly", async (req: Request, res: Response) => {
     ORDER BY m.month ASC
   `);
 
-  res.json((rows.rows ?? rows) as any[]);
+  res.jsonsqlRows<AttendanceSqlRow>(rows);
 });
 
 // ── Hourly trend ──────────────────────────────────────────────────────────────
@@ -147,7 +162,7 @@ router.get("/hourly", async (_req: Request, res: Response) => {
     ORDER BY h.hour ASC
   `);
 
-  res.json((rows.rows ?? rows) as any[]);
+  res.jsonsqlRows<AttendanceSqlRow>(rows);
 });
 
 // ── Top attending members ─────────────────────────────────────────────────────
@@ -163,7 +178,7 @@ router.get("/top-members", async (req: Request, res: Response) => {
     LIMIT ${limit}
   `);
 
-  res.json(((rows.rows ?? rows) as any[]).map((r: any) => ({
+  res.json(sqlRows<AttendanceSqlRow>(rows).map((r) => ({
     memberId: r.memberId,
     memberName: r.memberName,
     count: Number(r.count),
@@ -227,7 +242,7 @@ router.get("/list", async (req: Request, res: Response) => {
     `),
   ]);
 
-  const total = Number((countResult.rows as any[])[0]?.cnt ?? 0);
+  const total = Number(sqlRows<AttendanceSqlRow>(countResult)[0]?.cnt ?? 0);
   res.json({ items: rows.rows as any[], total, page: pageNum, limit: limitNum });
 });
 
@@ -240,7 +255,7 @@ router.get("/plans", async (_req: Request, res: Response) => {
     WHERE m.plan_name IS NOT NULL
     ORDER BY m.plan_name
   `);
-  res.json((rows.rows as any[]).map((r: any) => r.planName));
+  res.json(sqlRows<AttendanceSqlRow>(rows).map((r) => r.planName));
 });
 
 // ── Member attendance stats ───────────────────────────────────────────────────
@@ -281,7 +296,7 @@ router.get("/member/:id", async (req: Request, res: Response) => {
   `);
 
   const totalCheckins = Number(totalRow.c);
-  const monthlyHistory = (recentRows.rows ?? recentRows) as any[];
+  const monthlyHistory = sqlRows<AttendanceSqlRow>(recentRows);
   const monthsWithCheckins = monthlyHistory.filter(r => r.count > 0).length;
   const avgPerMonth = monthsWithCheckins > 0
     ? Math.round(totalCheckins / Math.max(1, monthlyHistory.length))
@@ -302,7 +317,7 @@ router.get("/member/:id", async (req: Request, res: Response) => {
     thisMonthCheckins: Number(monthRow.c),
     avgPerMonth,
     monthlyHistory,
-    calendarDays: ((calRows.rows ?? calRows) as any[]).map((r: any) => r.day),
+    calendarDays: sqlRows<AttendanceSqlRow>(calRows).map((r) => r.day),
   });
 });
 

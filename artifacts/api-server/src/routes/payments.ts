@@ -485,7 +485,7 @@ router.all("/admin/cash-cleanup", async (req: Request, res: Response) => {
             eq(paymentsTable.type, "membership"),
             eq(paymentsTable.status, "completed"),
             not(eq(paymentsTable.memberId, 0)),
-          )) as any,
+          )),
       ),
     ));
 

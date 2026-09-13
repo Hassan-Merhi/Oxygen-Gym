@@ -7,6 +7,7 @@ import { db } from "@workspace/db";
 import { membersTable, productsTable, payrollTable, notificationReadsTable } from "@workspace/db/schema";
 import { and, eq, lte, gte, sql } from "drizzle-orm";
 import { logActivity } from "../lib/activity";
+import { sqlRows } from "../lib/sql-rows";
 
 const router = Router();
 router.use(requireAuth());
@@ -19,6 +20,13 @@ type NotificationType =
   | "payroll_due"
   | "member_frozen"
   | "member_inactive";
+
+interface NotificationSqlRow {
+  id?: number;
+  name?: string;
+  quantity?: number | string;
+  alertQuantity?: number | string;
+}
 
 interface Notification {
   key: string;
@@ -35,7 +43,7 @@ function daysFromNow(d: Date | null | undefined): number | null {
   return Math.ceil((new Date(d).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
-async function computeNotifications(userId: number, permissions: any): Promise<Notification[]> {
+async function computeNotifications(userId: number, permissions: Record<string, boolean> | null): Promise<Notification[]> {
   const now = new Date();
   const in30 = new Date(now); in30.setDate(in30.getDate() + 30);
 
@@ -95,7 +103,7 @@ async function computeNotifications(userId: number, permissions: any): Promise<N
   }
 
   if (permissions?.viewCost !== false || permissions?.manageInventory !== false) {
-    for (const p of ((lowStockProducts.rows ?? lowStockProducts) as any[])) {
+    for (const p of sqlRows<NotificationSqlRow>(lowStockProducts)) {
       const key = `stock_low_${p.id}`;
       notifications.push({
         key, type: "stock_low", priority: "medium",
@@ -104,7 +112,7 @@ async function computeNotifications(userId: number, permissions: any): Promise<N
         metadata: { productId: p.id, quantity: p.quantity, alertQuantity: p.alertQuantity },
       });
     }
-    for (const p of ((outOfStockProducts.rows ?? outOfStockProducts) as any[])) {
+    for (const p of sqlRows<NotificationSqlRow>(outOfStockProducts)) {
       const key = `stock_out_${p.id}`;
       notifications.push({
         key, type: "stock_out", priority: "high",
@@ -115,7 +123,7 @@ async function computeNotifications(userId: number, permissions: any): Promise<N
     }
   }
 
-  for (const pr of draftPayrolls as any[]) {
+  for (const pr of draftPayrolls) {
     const key = `payroll_draft_${pr.id}`;
     notifications.push({
       key, type: "payroll_due", priority: "medium",
