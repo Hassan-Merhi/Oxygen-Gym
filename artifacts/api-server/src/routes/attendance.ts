@@ -117,7 +117,7 @@ router.get("/daily", async (req: Request, res: Response) => {
     ORDER BY d.day ASC
   `);
 
-  res.jsonsqlRows<AttendanceSqlRow>(rows);
+  res.json(sqlRows<AttendanceSqlRow>(rows));
 });
 
 // ── Monthly chart (last N months) ─────────────────────────────────────────────
@@ -146,7 +146,7 @@ router.get("/monthly", async (req: Request, res: Response) => {
     ORDER BY m.month ASC
   `);
 
-  res.jsonsqlRows<AttendanceSqlRow>(rows);
+  res.json(sqlRows<AttendanceSqlRow>(rows));
 });
 
 // ── Hourly trend ──────────────────────────────────────────────────────────────
@@ -162,7 +162,7 @@ router.get("/hourly", async (_req: Request, res: Response) => {
     ORDER BY h.hour ASC
   `);
 
-  res.jsonsqlRows<AttendanceSqlRow>(rows);
+  res.json(sqlRows<AttendanceSqlRow>(rows));
 });
 
 // ── Top attending members ─────────────────────────────────────────────────────
@@ -297,7 +297,7 @@ router.get("/member/:id", async (req: Request, res: Response) => {
 
   const totalCheckins = Number(totalRow.c);
   const monthlyHistory = sqlRows<AttendanceSqlRow>(recentRows);
-  const monthsWithCheckins = monthlyHistory.filter(r => r.count > 0).length;
+  const monthsWithCheckins = monthlyHistory.filter((r) => Number(r.count ?? 0) > 0).length;
   const avgPerMonth = monthsWithCheckins > 0
     ? Math.round(totalCheckins / Math.max(1, monthlyHistory.length))
     : 0;
