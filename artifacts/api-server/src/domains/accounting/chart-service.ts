@@ -27,18 +27,40 @@ function accountType(value: string): AccountType {
   return normalized;
 }
 
-function canonicalType(name: string): AccountType | undefined {
+export function canonicalAccountType(name: string): AccountType | undefined {
   return CANONICAL_TYPES.get(normalizeName(name));
 }
 
+/**
+ * Production databases can contain canonical accounts created before the type
+ * guard existed (for example Cash persisted as income). Repair those rows on
+ * read so the UI never computes debit-normal cash with credit-normal polarity,
+ * and persist the correction so every downstream accounting consumer agrees.
+ */
 export async function listChartAccounts() {
-  return db.select().from(chartOfAccountsTable).orderBy(asc(chartOfAccountsTable.type), asc(chartOfAccountsTable.name));
+  const rows = await db.select().from(chartOfAccountsTable).orderBy(asc(chartOfAccountsTable.type), asc(chartOfAccountsTable.name));
+
+  const repairs = rows.flatMap((row) => {
+    const requiredType = canonicalAccountType(row.name);
+    if (!requiredType || (row.type === requiredType && row.isActive)) return [];
+    return [
+      db.update(chartOfAccountsTable)
+        .set({ type: requiredType, isActive: true })
+        .where(eq(chartOfAccountsTable.id, row.id)),
+    ];
+  });
+  if (repairs.length > 0) await Promise.all(repairs);
+
+  return rows.map((row) => {
+    const requiredType = canonicalAccountType(row.name);
+    return requiredType ? { ...row, type: requiredType, isActive: true } : row;
+  });
 }
 
 export async function createChartAccount(name: string, type: string, description?: string) {
   const normalizedName = normalizeName(name);
   const requestedType = accountType(type);
-  const requiredType = canonicalType(normalizedName);
+  const requiredType = canonicalAccountType(normalizedName);
   if (requiredType && requestedType !== requiredType) {
     throw badRequest(`${normalizedName} is a canonical ${requiredType} account and its type cannot be changed`);
   }
@@ -61,9 +83,9 @@ export async function updateChartAccount(id: number, input: { name?: string; typ
   const [existing] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, id)).limit(1);
   if (!existing) throw notFound("Account not found");
 
-  const existingCanonicalType = canonicalType(existing.name);
+  const existingCanonicalType = canonicalAccountType(existing.name);
   const nextName = input.name !== undefined ? normalizeName(input.name) : existing.name;
-  const nextCanonicalType = canonicalType(nextName);
+  const nextCanonicalType = canonicalAccountType(nextName);
   if (existingCanonicalType && nextName !== existing.name) {
     throw badRequest(`Canonical account ${existing.name} cannot be renamed`);
   }
@@ -92,7 +114,7 @@ export async function updateChartAccount(id: number, input: { name?: string; typ
 export async function deactivateChartAccount(id: number) {
   const [existing] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, id)).limit(1);
   if (!existing) throw notFound("Account not found");
-  if (canonicalType(existing.name)) throw badRequest(`Canonical account ${existing.name} cannot be deactivated`);
+  if (canonicalAccountType(existing.name)) throw badRequest(`Canonical account ${existing.name} cannot be deactivated`);
   await db.update(chartOfAccountsTable).set({ isActive: false }).where(eq(chartOfAccountsTable.id, id));
   return { ok: true, deactivated: true };
 }

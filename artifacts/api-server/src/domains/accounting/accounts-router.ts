@@ -12,7 +12,8 @@ import {
   parsePage,
   requiredString,
 } from "../../shared/http/validation";
-import { getAccountStatement, listAccountSales } from "./accounts-service";
+import { listAccountSales } from "./accounts-service";
+import { getAccountStatementWithRecovery } from "./account-statement-recovery";
 import {
   createChartAccount,
   deactivateChartAccount,
@@ -94,7 +95,7 @@ router.get("/chart/:id/statement", async (req, res) => {
   const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.GetChartAccountStatementQueryParams);
   const dateTo = optionalDate(query.dateTo, "dateTo");
   if (dateTo) dateTo.setHours(23, 59, 59, 999);
-  res.json(await getAccountStatement(
+  res.json(await getAccountStatementWithRecovery(
     parseId(contractParams(req, ApiContracts.GetChartAccountStatementParams).id, "account id"),
     optionalDate(query.dateFrom, "dateFrom"),
     dateTo,
