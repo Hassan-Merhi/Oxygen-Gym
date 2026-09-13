@@ -58,6 +58,7 @@ if (writeIfChanged(attendancePath, (source) => {
   }
 
   text = text.replace(/\(([A-Za-z_$][\w$.]*)\.rows as any\[\]\)/g, "sqlRows<AttendanceSqlRow>($1)");
+  text = text.replace(/([A-Za-z_$][\w$.]*)\.rows as any\[\]/g, "sqlRows<AttendanceSqlRow>($1)");
   text = text.replace(/\(\(([A-Za-z_$][\w$]*)\.rows \?\? \1\) as any\[\]\)/g, "sqlRows<AttendanceSqlRow>($1)");
   text = text.replace(/\(([A-Za-z_$][\w$]*)\.rows \?\? \1\) as any\[\]/g, "sqlRows<AttendanceSqlRow>($1)");
   text = text.replace(/\(r: any\)/g, "(r)");
