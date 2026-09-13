@@ -5,6 +5,11 @@
  * Gym Management API
  * OpenAPI spec version: 0.1.0
  */
+export interface MoneyPair {
+  usd: number;
+  cdf: number;
+}
+
 export interface SupplierCredit {
   id: number;
   creditNumber?: string | null;
@@ -1570,4 +1575,189 @@ export const GetProfitLossPeriod = {
   year: 'year',
   custom: 'custom',
 } as const;
+
+export type ResetUserPasswordBody = {
+  /** @minLength 6 */
+  password: string;
+};
+
+export type ResetUserPassword200 = {
+  ok: boolean;
+};
+
+export type UploadImageBody = {
+  file: Blob;
+};
+
+export type UploadImage200 = {
+  url: string;
+};
+
+export type SendPaymentReceipt200 = {
+  ok: boolean;
+};
+
+export type ListChartAccounts200Item = { [key: string]: unknown };
+
+export type CreateChartAccountBody = {
+  /** @minLength 1 */
+  name: string;
+  /** @minLength 1 */
+  type: string;
+  description?: string | null;
+};
+
+export type CreateChartAccount201 = { [key: string]: unknown };
+
+export type UpdateChartAccountBody = {
+  name?: string;
+  type?: string;
+  description?: string | null;
+  isActive?: boolean;
+};
+
+export type UpdateChartAccount200 = { [key: string]: unknown };
+
+export type DeactivateChartAccount200 = {
+  ok: boolean;
+  deactivated: boolean;
+};
+
+export type GetChartAccountStatementParams = {
+dateFrom?: string;
+dateTo?: string;
+};
+
+export type GetChartAccountStatement200 = { [key: string]: unknown };
+
+export type GetFinancialsParams = {
+period?: GetFinancialsPeriod;
+dateFrom?: string;
+dateTo?: string;
+};
+
+export type GetFinancialsPeriod = typeof GetFinancialsPeriod[keyof typeof GetFinancialsPeriod];
+
+
+export const GetFinancialsPeriod = {
+  today: 'today',
+  month: 'month',
+  last_month: 'last_month',
+  year: 'year',
+  custom: 'custom',
+} as const;
+
+export type GetFinancials200Period = typeof GetFinancials200Period[keyof typeof GetFinancials200Period];
+
+
+export const GetFinancials200Period = {
+  today: 'today',
+  month: 'month',
+  last_month: 'last_month',
+  year: 'year',
+  custom: 'custom',
+} as const;
+
+export type GetFinancials200CurrencyBase = typeof GetFinancials200CurrencyBase[keyof typeof GetFinancials200CurrencyBase];
+
+
+export const GetFinancials200CurrencyBase = {
+  USD: 'USD',
+} as const;
+
+export type GetFinancials200CurrencyDisplay = typeof GetFinancials200CurrencyDisplay[keyof typeof GetFinancials200CurrencyDisplay];
+
+
+export const GetFinancials200CurrencyDisplay = {
+  CDF: 'CDF',
+} as const;
+
+export type GetFinancials200Currency = {
+  base: GetFinancials200CurrencyBase;
+  display: GetFinancials200CurrencyDisplay;
+};
+
+export type GetFinancials200CategoriesItemKind = typeof GetFinancials200CategoriesItemKind[keyof typeof GetFinancials200CategoriesItemKind];
+
+
+export const GetFinancials200CategoriesItemKind = {
+  revenue: 'revenue',
+  expense: 'expense',
+} as const;
+
+export type GetFinancials200CategoriesItem = {
+  category: string;
+  kind: GetFinancials200CategoriesItemKind;
+  usd: number;
+  cdf: number;
+};
+
+export type GetFinancials200MonthsItemTransactionsItemSourceType = typeof GetFinancials200MonthsItemTransactionsItemSourceType[keyof typeof GetFinancials200MonthsItemTransactionsItemSourceType];
+
+
+export const GetFinancials200MonthsItemTransactionsItemSourceType = {
+  payment: 'payment',
+  voucher: 'voucher',
+  sale_revenue: 'sale_revenue',
+  sale_cogs: 'sale_cogs',
+} as const;
+
+export type GetFinancials200MonthsItemTransactionsItemKind = typeof GetFinancials200MonthsItemTransactionsItemKind[keyof typeof GetFinancials200MonthsItemTransactionsItemKind];
+
+
+export const GetFinancials200MonthsItemTransactionsItemKind = {
+  revenue: 'revenue',
+  expense: 'expense',
+} as const;
+
+export type GetFinancials200MonthsItemTransactionsItem = {
+  id: string;
+  sourceType: GetFinancials200MonthsItemTransactionsItemSourceType;
+  sourceId: number;
+  reference: string;
+  date: string;
+  dateKey: string;
+  monthKey: string;
+  kind: GetFinancials200MonthsItemTransactionsItemKind;
+  category: string;
+  description: string;
+  party: string;
+  amountUsd: number;
+  amountCdf: number;
+};
+
+export type GetFinancials200MonthsItem = {
+  key: string;
+  label: string;
+  revenue: MoneyPair;
+  expenses: MoneyPair;
+  net: MoneyPair;
+  transactions: GetFinancials200MonthsItemTransactionsItem[];
+};
+
+export type GetFinancials200 = {
+  period: GetFinancials200Period;
+  dateFrom: string;
+  dateTo: string;
+  rate: number;
+  currency: GetFinancials200Currency;
+  revenue: MoneyPair;
+  expenses: MoneyPair;
+  net: MoneyPair;
+  categories: GetFinancials200CategoriesItem[];
+  months: GetFinancials200MonthsItem[];
+};
+
+export type GetWhatsappState200 = {
+  state: string;
+};
+
+export type BroadcastWhatsappMessageBody = {
+  /** @minLength 1 */
+  message: string;
+};
+
+export type BroadcastWhatsappMessage200 = {
+  ok: boolean;
+};
 
