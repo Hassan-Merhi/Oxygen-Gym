@@ -83,8 +83,8 @@ export default function Stock() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const canView = me?.role === "admin" || me?.permissions?.stock;
-  const canManage = me?.role === "admin" || me?.permissions?.manageInventory;
+  const canView = Boolean(me?.role === "admin" || me?.permissions?.stock);
+  const canManage = Boolean(me?.role === "admin" || me?.permissions?.manageInventory);
   const canViewCost = Boolean(me?.role === "admin" || me?.permissions?.viewCost);
 
   const [search, setSearch] = useState("");
@@ -848,7 +848,7 @@ function PurchaseModal({
     costPerUnit: String(product.costPrice),
     totalCost: String(product.costPrice),
     currency: product.currency,
-    exchangeRate: "1",
+    exchangeRate: product.currency === "USD" ? "1" : "",
     supplier: product.supplier ?? "",
     notes: "",
     paidFromCash: false,
@@ -864,7 +864,7 @@ function PurchaseModal({
       costPerUnit: String(product.costPrice),
       totalCost: String(product.costPrice),
       currency: product.currency,
-      exchangeRate: "1",
+      exchangeRate: product.currency === "USD" ? "1" : "",
       supplier: product.supplier ?? "",
       notes: "",
       paidFromCash: false,
@@ -885,11 +885,20 @@ function PurchaseModal({
     });
   }
 
+  function setCurrency(value: string) {
+    setForm((current) => ({
+      ...current,
+      currency: value,
+      exchangeRate: value === "USD" ? "1" : "",
+    }));
+  }
+
   async function save() {
     const quantity = Number.parseInt(form.quantityAdded, 10);
     const unitCost = Number.parseFloat(form.costPerUnit);
     const totalCost = Number.parseFloat(form.totalCost);
-    const exchangeRate = Number.parseFloat(form.exchangeRate);
+    const exchangeRateText = form.exchangeRate.trim();
+    const exchangeRate = exchangeRateText ? Number.parseFloat(exchangeRateText) : undefined;
 
     if (!Number.isInteger(quantity) || quantity < 1) {
       setError("Quantity must be at least 1.");
@@ -899,8 +908,8 @@ function PurchaseModal({
       setError("Cost must be zero or greater.");
       return;
     }
-    if (!Number.isFinite(exchangeRate) || exchangeRate <= 0) {
-      setError("Enter a valid exchange rate.");
+    if (exchangeRate !== undefined && (!Number.isFinite(exchangeRate) || exchangeRate <= 0)) {
+      setError("Enter a valid exchange rate or leave it blank to use the system rate.");
       return;
     }
 
@@ -912,7 +921,7 @@ function PurchaseModal({
         costPerUnit: unitCost,
         totalCost,
         currency: form.currency,
-        exchangeRate,
+        ...(exchangeRate !== undefined && { exchangeRate }),
         supplier: form.supplier.trim() || null,
         notes: form.notes.trim() || null,
         paidFromCash: form.paidFromCash,
@@ -959,7 +968,7 @@ function PurchaseModal({
             )}
             <div className="space-y-1.5">
               <Label>{t("stock.purchase.currency")}</Label>
-              <Select value={form.currency} onValueChange={(value) => set("currency", value)}>
+              <Select value={form.currency} onValueChange={setCurrency}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="USD">USD</SelectItem>
@@ -967,10 +976,19 @@ function PurchaseModal({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label>{t("stock.purchase.exchangeRate")}</Label>
-              <Input type="number" min="0.000001" step="0.01" value={form.exchangeRate} onChange={(event) => set("exchangeRate", event.target.value)} />
-            </div>
+            {form.currency === "CDF" && (
+              <div className="space-y-1.5">
+                <Label>{t("stock.purchase.exchangeRate")}</Label>
+                <Input
+                  type="number"
+                  min="0.000001"
+                  step="0.01"
+                  value={form.exchangeRate}
+                  onChange={(event) => set("exchangeRate", event.target.value)}
+                  placeholder="System rate"
+                />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label>{t("stock.purchase.supplier")}</Label>
               <Input value={form.supplier} onChange={(event) => set("supplier", event.target.value)} />
