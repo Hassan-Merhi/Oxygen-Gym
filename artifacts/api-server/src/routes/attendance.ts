@@ -260,7 +260,7 @@ router.get("/plans", async (_req: Request, res: Response) => {
 
 // ── Member attendance stats ───────────────────────────────────────────────────
 router.get("/member/:id", async (req: Request, res: Response) => {
-  const memberId = parseInt(contractParams(req, ApiContracts.GetMemberAttendanceStatsParams).id as string);
+  const memberId = Number(contractParams(req, ApiContracts.GetMemberAttendanceStatsParams).id);
   if (isNaN(memberId)) { res.status(400).json({ error: "Invalid member id" }); return; }
 
   const now = new Date();

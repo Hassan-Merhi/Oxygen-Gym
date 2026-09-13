@@ -47,7 +47,7 @@ router.get("/", async (req: Request, res: Response) => {
 
 // ── Get single ────────────────────────────────────────────────────────────────
 router.get("/:id", async (req: Request, res: Response) => {
-  const id = parseInt(contractParams(req, ApiContracts.GetStaffEmployeeParams).id as string);
+  const id = Number(contractParams(req, ApiContracts.GetStaffEmployeeParams).id);
   const [emp] = await db.select().from(staffEmployeesTable).where(eq(staffEmployeesTable.id, id));
   if (!emp) { res.status(404).json({ error: "Staff employee not found" }); return; }
   res.json(emp);
@@ -86,7 +86,7 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 router.patch("/:id", async (req: Request, res: Response) => {
-  const id = parseInt(contractParams(req, ApiContracts.UpdateStaffEmployeeParams).id as string);
+  const id = Number(contractParams(req, ApiContracts.UpdateStaffEmployeeParams).id);
   const { name, phone, email, jobTitle, hireDate, salary, salaryCurrency, paymentFrequency, linkedUserId, notes, status } = contractBodyAs<{
     name?: string; phone?: string; email?: string; jobTitle?: string; hireDate?: string;
     salary?: number; salaryCurrency?: string; paymentFrequency?: string;
@@ -116,7 +116,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
 // ── Archive ───────────────────────────────────────────────────────────────────
 router.patch("/:id/archive", async (req: Request, res: Response) => {
-  const id = parseInt(contractParams(req, ApiContracts.ArchiveStaffEmployeeParams).id as string);
+  const id = Number(contractParams(req, ApiContracts.ArchiveStaffEmployeeParams).id);
   const [existing] = await db.select().from(staffEmployeesTable).where(eq(staffEmployeesTable.id, id));
   if (!existing) { res.status(404).json({ error: "Staff employee not found" }); return; }
 

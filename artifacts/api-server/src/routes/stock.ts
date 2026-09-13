@@ -187,7 +187,7 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ── Get one ───────────────────────────────────────────────────────────────────
 router.get("/:id", async (req: Request, res: Response) => {
-  const id = parseInt(contractParams(req, ApiContracts.GetProductParams).id as string);
+  const id = Number(contractParams(req, ApiContracts.GetProductParams).id);
   const rate = await getExchangeRate();
   const [p] = await db.select().from(productsTable).where(eq(productsTable.id, id));
   if (!p) {
@@ -199,7 +199,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 router.patch("/:id", async (req: Request, res: Response) => {
-  const id = parseInt(contractParams(req, ApiContracts.UpdateProductParams).id as string);
+  const id = Number(contractParams(req, ApiContracts.UpdateProductParams).id);
   const [existing] = await db.select().from(productsTable).where(eq(productsTable.id, id));
   if (!existing) {
     res.status(404).json({ error: "Not found" });
@@ -261,7 +261,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
 // ── List purchases ────────────────────────────────────────────────────────────
 router.get("/:id/purchases", async (req: Request, res: Response) => {
-  const productId = parseInt(contractParams(req, ApiContracts.ListProductPurchasesParams).id as string);
+  const productId = Number(contractParams(req, ApiContracts.ListProductPurchasesParams).id);
   const purchases = await db
     .select()
     .from(stockPurchasesTable)
@@ -272,7 +272,7 @@ router.get("/:id/purchases", async (req: Request, res: Response) => {
 
 // ── Add stock purchase ────────────────────────────────────────────────────────
 router.post("/:id/purchases", async (req: Request, res: Response) => {
-  const productId = parseInt(contractParams(req, ApiContracts.AddStockPurchaseParams).id as string);
+  const productId = Number(contractParams(req, ApiContracts.AddStockPurchaseParams).id);
   const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
   if (!product) {
     res.status(404).json({ error: "Product not found" });
@@ -409,7 +409,7 @@ router.post("/:id/purchases", async (req: Request, res: Response) => {
 
 // ── Product history ───────────────────────────────────────────────────────────
 router.get("/:id/history", async (req: Request, res: Response) => {
-  const productId = parseInt(contractParams(req, ApiContracts.GetProductHistoryParams).id as string);
+  const productId = Number(contractParams(req, ApiContracts.GetProductHistoryParams).id);
   const entries = await db
     .select()
     .from(activityLogsTable)

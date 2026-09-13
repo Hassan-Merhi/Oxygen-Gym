@@ -535,7 +535,7 @@ router.post("/admin/cash-cleanup", cashCleanupHandler);
 
 // ── Send WhatsApp receipt for a payment ──────────────────────────────────────
 router.post("/:id/send-receipt", async (req: Request, res: Response) => {
-  const paymentId = parseInt(contractParams(req, ApiContracts.SendPaymentReceiptParams).id as string);
+  const paymentId = Number(contractParams(req, ApiContracts.SendPaymentReceiptParams).id);
   if (isNaN(paymentId)) { res.status(400).json({ error: "Invalid ID" }); return; }
 
   const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, paymentId)).limit(1);
