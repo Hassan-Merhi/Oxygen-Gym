@@ -1,435 +1,401 @@
-import { useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/i18n";
 import { useFmtDate } from "@/lib/useFmtDate";
 import { useGetMe } from "@/hooks/use-me";
-import {
-  useGetAccountSummary,
-  useGetProfitLoss,
-} from "@workspace/api-client-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Wallet,
-  TrendingUp,
-  TrendingDown,
-  BarChart3,
-  Printer,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   AlertCircle,
-  Send,
+  BarChart3,
+  CalendarRange,
   Loader2,
+  Send,
+  TrendingDown,
+  TrendingUp,
+  WalletCards,
 } from "lucide-react";
 
 const PERIODS = ["today", "month", "last_month", "year", "custom"] as const;
 type Period = (typeof PERIODS)[number];
+type Kind = "revenue" | "expense";
+
+type Money = {
+  usd: number;
+  cdf: number;
+};
+
+type FinancialTransaction = {
+  id: string;
+  sourceType: "payment" | "voucher" | "sale_cogs";
+  sourceId: number;
+  reference: string;
+  date: string;
+  dateKey: string;
+  monthKey: string;
+  kind: Kind;
+  category: string;
+  description: string;
+  party: string;
+  amountUsd: number;
+  amountCdf: number;
+};
+
+type FinancialCategory = {
+  category: string;
+  kind: Kind;
+  usd: number;
+  cdf: number;
+};
+
+type FinancialMonth = {
+  key: string;
+  label: string;
+  revenue: Money;
+  expenses: Money;
+  net: Money;
+  transactions: FinancialTransaction[];
+};
+
+type FinancialReport = {
+  period: Period;
+  dateFrom: string;
+  dateTo: string;
+  rate: number;
+  currency: { base: "USD"; display: "CDF" };
+  revenue: Money;
+  expenses: Money;
+  net: Money;
+  categories: FinancialCategory[];
+  months: FinancialMonth[];
+};
+
+const PERIOD_LABELS: Record<Period, string> = {
+  today: "Today",
+  month: "This Month",
+  last_month: "Last Month",
+  year: "This Year",
+  custom: "Custom Range",
+};
 
 export default function Financials() {
   const { t } = useI18n();
+  const { locale } = useFmtDate();
   const me = useGetMe();
+  const { toast } = useToast();
 
   const canView = me?.role === "admin" || me?.permissions?.viewAccounting;
   const canViewProfit = me?.role === "admin" || me?.permissions?.viewProfit;
 
-  const summaryQuery = useGetAccountSummary({ query: { enabled: canView, queryKey: ["accounts-summary"] } });
-  const summary = summaryQuery.data;
+  const [period, setPeriod] = useState<Period>("month");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [report, setReport] = useState<FinancialReport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sharingWA, setSharingWA] = useState(false);
+
+  useEffect(() => {
+    if (!canView || !canViewProfit) return;
+    if (period === "custom" && (!dateFrom || !dateTo)) {
+      setReport(null);
+      setError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({ period });
+    if (period === "custom") {
+      params.set("dateFrom", dateFrom);
+      params.set("dateTo", dateTo);
+    }
+
+    setLoading(true);
+    setError(null);
+
+    fetch(`/api/financials?${params.toString()}`, {
+      credentials: "include",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({})) as { error?: string };
+          throw new Error(body.error || "Unable to load financials.");
+        }
+        return response.json() as Promise<FinancialReport>;
+      })
+      .then((body) => setReport(body))
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setError(err instanceof Error ? err.message : "Unable to load financials.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [canView, canViewProfit, period, dateFrom, dateTo]);
+
+  const selectedRange = useMemo(() => {
+    if (!report) return "";
+    const from = formatDateKey(toDateKey(report.dateFrom), locale);
+    const to = formatDateKey(toDateKey(report.dateTo), locale);
+    return from === to ? from : `${from} – ${to}`;
+  }, [report, locale]);
 
   if (!canView) {
     return (
-      <div className="flex flex-col items-center justify-center h-[60vh] gap-3">
-        <AlertCircle className="w-10 h-10 text-muted-foreground" />
+      <div className="flex h-[60vh] flex-col items-center justify-center gap-3">
+        <AlertCircle className="h-10 w-10 text-muted-foreground" />
         <p className="text-muted-foreground">{t("acc.restricted")}</p>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        icon={BarChart3}
-        iconClass="bg-violet-500/10 text-violet-600"
-        title={t("acc.title")}
-      />
-
-      {/* Account cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <AccCard
-          icon={<Wallet className="w-5 h-5 text-indigo-600" />}
-          label={t("acc.card.cash")}
-          mainValue={`$${fmt(summary?.cash.balanceUsd)}`}
-          subValue={`${fmtCdf(summary?.cash.balanceCdf)} CDF`}
-          todayLabel={t("acc.today")}
-          todayValue={`$${fmt(summary?.cash.todayInUsd)} / $${fmt(summary?.cash.todayOutUsd)}`}
-          monthLabel={t("acc.month")}
-          monthValue={`$${fmt(summary?.cash.monthInUsd)} / $${fmt(summary?.cash.monthOutUsd)}`}
-          color="indigo"
+  if (!canViewProfit) {
+    return (
+      <div className="space-y-5">
+        <PageHeader
+          icon={BarChart3}
+          iconClass="bg-violet-500/10 text-violet-600"
+          title="Financials"
         />
-        <AccCard
-          icon={<TrendingUp className="w-5 h-5 text-emerald-600" />}
-          label={t("acc.card.sales")}
-          mainValue={`$${fmt(summary?.sales.monthUsd)}`}
-          subValue={`${fmtCdf(summary?.sales.monthCdf)} CDF`}
-          todayLabel={t("acc.today")}
-          todayValue={`$${fmt(summary?.sales.todayUsd)}`}
-          monthLabel={t("acc.month")}
-          monthValue={`$${fmt(summary?.sales.monthUsd)}`}
-          color="emerald"
-        />
-        <AccCard
-          icon={<TrendingDown className="w-5 h-5 text-rose-600" />}
-          label={t("acc.card.expenses")}
-          mainValue={`$${fmt(summary?.expenses.monthUsd)}`}
-          subValue={`${fmtCdf(summary?.expenses.monthCdf)} CDF`}
-          todayLabel={t("acc.today")}
-          todayValue={`$${fmt(summary?.expenses.todayUsd)}`}
-          monthLabel={t("acc.month")}
-          monthValue={`$${fmt(summary?.expenses.monthUsd)}`}
-          color="rose"
-        />
-        {canViewProfit ? (
-          <AccCard
-            icon={<BarChart3 className="w-5 h-5 text-blue-600" />}
-            label={t("acc.card.profit")}
-            mainValue={`$${fmt(summary?.profit.monthUsd)}`}
-            subValue={`${fmtCdf(summary?.profit.monthCdf)} CDF`}
-            todayLabel={t("acc.today")}
-            todayValue={`$${fmt(summary?.profit.todayUsd)}`}
-            monthLabel={t("acc.month")}
-            monthValue={`$${fmt(summary?.profit.monthUsd)}`}
-            color="blue"
-            profit
-          />
-        ) : (
-          <div className="rounded-xl border border-border bg-muted/30 p-4 flex items-center justify-center">
-            <span className="text-xs text-muted-foreground text-center">{t("acc.profitRestricted")}</span>
-          </div>
-        )}
-      </div>
-
-      {canViewProfit ? (
-        <ProfitLossTab t={t} />
-      ) : (
-        <div className="rounded-xl border border-border bg-muted/30 p-8 flex items-center justify-center">
-          <span className="text-sm text-muted-foreground">{t("acc.profitRestricted")}</span>
+        <div className="rounded-xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">
+          {t("acc.profitRestricted")}
         </div>
-      )}
-    </div>
-  );
-}
-
-// ── Profit / Loss ─────────────────────────────────────────────────────────────
-
-interface DetailRow {
-  id: string;
-  date: string;
-  description: string;
-  party: string;
-  amount: number;
-  currency: string;
-  amountUsd: number;
-  sourceType: string;
-}
-
-function ProfitLossTab({ t }: { t: (k: string) => string }) {
-  const { locale } = useFmtDate();
-  const [period, setPeriod] = useState<Period>("month");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [expandedCat, setExpandedCat] = useState<string | null>(null);
-  const [catDetails, setCatDetails] = useState<Record<string, DetailRow[]>>({});
-  const [catLoading, setCatLoading] = useState<Record<string, boolean>>({});
-  const [sharingWA, setSharingWA] = useState(false);
-  const { toast } = useToast();
-
-  const fetchCategoryDetails = useCallback(
-    async (cat: string, from: string, to: string) => {
-      const cacheKey = `${cat}::${from.slice(0, 10)}::${to.slice(0, 10)}`;
-      if (catDetails[cacheKey]) return; // already loaded for this period
-      setCatLoading((prev) => ({ ...prev, [cacheKey]: true }));
-      try {
-        const params = new URLSearchParams({ dateFrom: from.slice(0, 10), dateTo: to.slice(0, 10), limit: "1000" });
-        const [salesRes, expRes] = await Promise.all([
-          fetch(`/api/accounts/sales?${params}`, { credentials: "include" }),
-          fetch(`/api/accounts/expenses?${params}`, { credentials: "include" }),
-        ]);
-        const salesJson = salesRes.ok ? await salesRes.json() : { items: [] };
-        const expJson = expRes.ok ? await expRes.json() : { items: [] };
-
-        // Normalize both API shapes into one DetailRow shape.
-        // Sales endpoint: raw DB rows → paymentDate, notes, memberName, linkedEntityName.
-        // Expenses endpoint: normalized rows → date, description, party.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const normalize = (r: any): DetailRow => ({
-          id: r.id,
-          date: r.date ?? r.paymentDate ?? r.voucherDate ?? "",
-          description: r.description ?? r.notes ?? r.category ?? "",
-          party: r.party ?? r.memberName ?? r.linkedEntityName ?? "",
-          amount: Number(r.amount ?? 0),
-          currency: r.currency ?? "USD",
-          amountUsd: Number(r.amountUsd ?? 0),
-          sourceType: r.sourceType ?? "payment",
-        });
-
-        const matchCat = cat.toLowerCase().replace(/[_ ]/g, "");
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const filterByCat = (raw: any[]) =>
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          raw.filter((r: any) => {
-            const rowCat = (r.category ?? r.voucherType ?? "").toLowerCase().replace(/[_ ]/g, "");
-            return rowCat === matchCat;
-          }).map(normalize);
-
-        const catRows: DetailRow[] = [
-          ...filterByCat(salesJson.items ?? []),
-          ...filterByCat(expJson.items ?? []),
-        ].sort((a, b) => new Date(a.date as string).getTime() - new Date(b.date as string).getTime());
-
-        setCatDetails((prev) => ({ ...prev, [cacheKey]: catRows }));
-      } finally {
-        setCatLoading((prev) => ({ ...prev, [cacheKey]: false }));
-      }
-    },
-    [catDetails],
-  );
-
-  function toggleCat(cat: string, from: string, to: string) {
-    if (expandedCat === cat) {
-      setExpandedCat(null);
-    } else {
-      setExpandedCat(cat);
-      fetchCategoryDetails(cat, from, to);
-    }
+      </div>
+    );
   }
 
-  const query = useGetProfitLoss({
-    period,
-    ...(period === "custom" && dateFrom && { dateFrom }),
-    ...(period === "custom" && dateTo && { dateTo }),
-  });
-
-  const pl = query.data;
-
   async function shareOnWhatsApp() {
-    if (!pl) return;
+    if (!report) return;
     setSharingWA(true);
     try {
-      const fmtUsd = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const fmtCdf = (n: number) => Math.round(n).toLocaleString("fr-FR");
-      const from = new Date(pl.dateFrom).toLocaleDateString("fr-FR");
-      const to   = new Date(pl.dateTo).toLocaleDateString("fr-FR");
-      const netEmoji = pl.net.usd >= 0 ? "✅" : "🔴";
-      const breakdownLines = Object.entries(pl.breakdown)
-        .map(([cat, v]) => `   ${cat}: $${fmtUsd(v.usd)} / FC ${fmtCdf(v.cdf)}`)
+      const lines = report.categories
+        .map((category) => `${category.category}: $${fmtUsd(category.usd)} / FC ${fmtFc(category.cdf)}`)
         .join("\n");
       const message = [
-        `📊 *Rapport P&L — ${from} → ${to}*`,
-        ``,
-        `💰 *Revenus :* $${fmtUsd(pl.revenue.usd)} / FC ${fmtCdf(pl.revenue.cdf)}`,
-        `💸 *Dépenses :* $${fmtUsd(pl.expenses.usd)} / FC ${fmtCdf(pl.expenses.cdf)}`,
-        `${netEmoji} *Net :* $${fmtUsd(pl.net.usd)} / FC ${fmtCdf(pl.net.cdf)}`,
-        ``,
-        `*Détail par catégorie :*`,
-        breakdownLines,
-        ``,
-        `_OxygenGym — rapport financier_`,
+        `📊 *Oxygen Gym Financials*`,
+        selectedRange,
+        "",
+        `Revenue: $${fmtUsd(report.revenue.usd)} / FC ${fmtFc(report.revenue.cdf)}`,
+        `Expenses: $${fmtUsd(report.expenses.usd)} / FC ${fmtFc(report.expenses.cdf)}`,
+        `Net: $${fmtUsd(report.net.usd)} / FC ${fmtFc(report.net.cdf)}`,
+        "",
+        "*Breakdown*",
+        lines,
       ].join("\n");
 
-      const res = await fetch("/api/whatsapp/broadcast", {
+      const response = await fetch("/api/whatsapp/broadcast", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
       });
-      if (res.ok) {
-        toast({ title: "Rapport envoyé sur WhatsApp ✓" });
-      } else {
-        const j = await res.json().catch(() => ({})) as Record<string, unknown>;
-        toast({ title: (j.error as string) ?? "Erreur envoi WhatsApp", variant: "destructive" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error || "Unable to send WhatsApp report.");
       }
+      toast({ title: "Financial report sent on WhatsApp ✓" });
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : "Unable to send WhatsApp report.",
+        variant: "destructive",
+      });
     } finally {
       setSharingWA(false);
     }
   }
 
-  function printReport() {
-    if (!pl) return;
-    const breakdownRows = Object.entries(pl.breakdown)
-      .map(([cat, v]) => `<tr><td>${cat}</td><td>${v.usd.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td><td>${v.cdf.toLocaleString(undefined, { minimumFractionDigits: 0 })}</td></tr>`)
-      .join("");
-
-    const content = `
-      <h2>Profit / Loss — ${pl.period}</h2>
-      <p>${new Date(pl.dateFrom).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })} — ${new Date(pl.dateTo).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>
-      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-        <tr style="background:#f0f0f0"><td style="padding:8px;font-weight:600">Item</td><td style="padding:8px;font-weight:600">USD</td><td style="padding:8px;font-weight:600">CDF</td></tr>
-        <tr><td style="padding:8px">Revenue</td><td style="padding:8px">${pl.revenue.usd.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td><td style="padding:8px">${pl.revenue.cdf.toLocaleString(undefined, { minimumFractionDigits: 0 })}</td></tr>
-        <tr><td style="padding:8px">Expenses</td><td style="padding:8px">${pl.expenses.usd.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td><td style="padding:8px">${pl.expenses.cdf.toLocaleString(undefined, { minimumFractionDigits: 0 })}</td></tr>
-        <tr style="background:#f0f0f0;font-weight:bold"><td style="padding:8px">Net Profit / Loss</td><td style="padding:8px;color:${pl.net.usd >= 0 ? "green" : "red"}">${pl.net.usd.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td><td style="padding:8px;color:${pl.net.cdf >= 0 ? "green" : "red"}">${pl.net.cdf.toLocaleString(undefined, { minimumFractionDigits: 0 })}</td></tr>
-      </table>
-      <h3>Category Breakdown</h3>
-      <table style="width:100%;border-collapse:collapse;">
-        <tr style="background:#f0f0f0"><td style="padding:8px;font-weight:600">Category</td><td style="padding:8px;font-weight:600">USD</td><td style="padding:8px;font-weight:600">CDF</td></tr>
-        ${breakdownRows}
-      </table>
-    `;
-    const w = window.open("", "_blank", "width=800,height=600");
-    if (w) {
-      w.document.write(`<html><head><title>P&L Report</title><style>body{font-family:Arial,sans-serif;padding:40px;}table{width:100%;}td{border:1px solid #ddd;}</style></head><body>${content}</body></html>`);
-      w.document.close();
-      w.print();
-    }
-  }
-
   return (
-    <div className="space-y-6">
-      {/* Period selector */}
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm font-medium text-muted-foreground">{t("acc.period")}:</span>
-        <div className="flex gap-2 flex-wrap">
-          {PERIODS.map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={`px-3 py-1.5 text-sm rounded-full font-medium transition-colors ${
-                period === p
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-              }`}
-            >
-              {t(`acc.${p === "last_month" ? "lastMonth" : p}`)}
-            </button>
-          ))}
-        </div>
-        {period === "custom" && (
-          <>
-            <Input type="date" className="w-36" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-            <span className="text-muted-foreground">→</span>
-            <Input type="date" className="w-36" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          </>
-        )}
-        <div className="flex gap-2 ml-auto">
-          <Button variant="outline" size="sm" onClick={printReport} className="gap-2" disabled={!pl}>
-            <Printer className="w-4 h-4" />{t("acc.print")}
-          </Button>
-          <Button variant="outline" size="sm" onClick={shareOnWhatsApp} className="gap-2 text-green-600 border-green-200 hover:bg-green-50" disabled={!pl || sharingWA}>
-            {sharingWA ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            WhatsApp
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        icon={BarChart3}
+        iconClass="bg-violet-500/10 text-violet-600"
+        title="Financials"
+      />
 
-      {query.isLoading ? (
-        <p className="text-muted-foreground py-8 text-center">{t("common.loading")}</p>
-      ) : pl ? (
-        <>
-          {/* P&L Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <PLCard label={t("acc.pl.revenue")} usd={pl.revenue.usd} cdf={pl.revenue.cdf} color="emerald" />
-            <PLCard label={t("acc.pl.expenses")} usd={pl.expenses.usd} cdf={pl.expenses.cdf} color="rose" />
-            <PLCard label={t("acc.pl.net")} usd={pl.net.usd} cdf={pl.net.cdf} color={pl.net.usd >= 0 ? "emerald" : "rose"} large />
+      <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <p className="text-sm font-semibold">Financial period</p>
+            <p className="text-xs text-muted-foreground">
+              Revenue, expenses and profit update from the selected period only.
+            </p>
           </div>
 
-          {/* Category breakdown — expandable */}
-          <div>
-            <h3 className="text-sm font-semibold text-muted-foreground mb-3">{t("acc.pl.breakdown")}</h3>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Select value={period} onValueChange={(value) => setPeriod(value as Period)}>
+              <SelectTrigger className="w-full sm:w-[190px]">
+                <span className="flex items-center gap-2">
+                  <CalendarRange className="h-4 w-4 text-muted-foreground" />
+                  <SelectValue />
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                {PERIODS.map((item) => (
+                  <SelectItem key={item} value={item}>{PERIOD_LABELS[item]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-            {/* Mobile card rows — shown below md */}
-            <div className="md:hidden rounded-xl border border-border overflow-hidden bg-card divide-y divide-border/40">
-              {Object.entries(pl.breakdown).map(([cat, v]) => (
-                <div key={cat} className="flex items-center gap-3 px-4 py-3">
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full capitalize">
-                      {cat.replace(/_/g, " ")}
-                    </span>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="font-semibold text-sm tabular-nums">{fmt(v.usd)}</p>
-                    <p className="text-xs text-muted-foreground tabular-nums">{fmtCdf(v.cdf)} CDF</p>
-                  </div>
+            {period === "custom" && (
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  aria-label="Start date"
+                  className="w-[150px]"
+                  value={dateFrom}
+                  onChange={(event) => setDateFrom(event.target.value)}
+                />
+                <span className="text-xs text-muted-foreground">to</span>
+                <Input
+                  type="date"
+                  aria-label="End date"
+                  className="w-[150px]"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={(event) => setDateTo(event.target.value)}
+                />
+              </div>
+            )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={shareOnWhatsApp}
+              disabled={!report || sharingWA}
+              className="gap-2"
+            >
+              {sharingWA ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              WhatsApp
+            </Button>
+          </div>
+        </div>
+
+        {report && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+            <span>{selectedRange}</span>
+            <span className="hidden h-3 w-px bg-border sm:block" />
+            <span>Reporting currency: USD</span>
+            <span className="hidden h-3 w-px bg-border sm:block" />
+            <span>Taux: 1 USD = FC {fmtFc(report.rate)}</span>
+          </div>
+        )}
+      </div>
+
+      {period === "custom" && (!dateFrom || !dateTo) ? (
+        <EmptyState message="Choose a start and end date to view the report." />
+      ) : loading ? (
+        <div className="flex min-h-44 items-center justify-center rounded-xl border border-border bg-card">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : error ? (
+        <div className="flex min-h-44 items-center justify-center rounded-xl border border-destructive/30 bg-destructive/5 px-6 text-center text-sm text-destructive">
+          {error}
+        </div>
+      ) : report ? (
+        <>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <MetricCard
+              label="Revenue"
+              icon={<TrendingUp className="h-4 w-4" />}
+              value={report.revenue}
+              tone="positive"
+            />
+            <MetricCard
+              label="Expenses"
+              icon={<TrendingDown className="h-4 w-4" />}
+              value={report.expenses}
+              tone="negative"
+            />
+            <MetricCard
+              label={report.net.usd >= 0 ? "Net Profit" : "Net Loss"}
+              icon={<WalletCards className="h-4 w-4" />}
+              value={report.net}
+              tone={report.net.usd >= 0 ? "positive" : "negative"}
+              emphasize
+            />
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            <div className="border-b border-border px-4 py-4 sm:px-5">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="font-semibold">Breakdown by category</h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Every transaction below follows the period filter above. FC is converted from USD using the current taux.
+                  </p>
                 </div>
-              ))}
+                <span className="text-xs text-muted-foreground">{report.months.reduce((sum, month) => sum + month.transactions.length, 0)} transactions</span>
+              </div>
             </div>
 
-            {/* Desktop expandable table — hidden on mobile */}
-            <div className="hidden md:block rounded-xl border border-border overflow-hidden bg-card">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/40">
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground w-8"></th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">{t("acc.col.category")}</th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">$</th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">FC</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(pl.breakdown).map(([cat, v]) => {
-                    const isOpen = expandedCat === cat;
-                    const cacheKey = `${cat}::${pl.dateFrom.slice(0, 10)}::${pl.dateTo.slice(0, 10)}`;
-                    const rows = catDetails[cacheKey] ?? [];
-                    const loading = catLoading[cacheKey];
-                    return (
-                      <>
-                        <tr
-                          key={cat}
-                          className="border-b border-border/50 hover:bg-muted/20 cursor-pointer select-none"
-                          onClick={() => toggleCat(cat, pl.dateFrom, pl.dateTo)}
-                        >
-                          <td className="px-4 py-3 text-muted-foreground">
-                            <span className={`inline-block transition-transform duration-150 text-xs ${isOpen ? "rotate-90" : ""}`}>▶</span>
-                          </td>
+            {report.categories.length > 0 ? (
+              <>
+                <div className="hidden border-b border-border md:block">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-muted/35 text-xs text-muted-foreground">
+                        <th className="px-5 py-2.5 text-left font-medium">Category</th>
+                        <th className="px-4 py-2.5 text-left font-medium">Type</th>
+                        <th className="px-4 py-2.5 text-right font-medium">USD</th>
+                        <th className="px-5 py-2.5 text-right font-medium">FC</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {report.categories.map((category) => (
+                        <tr key={`${category.kind}-${category.category}`} className="border-t border-border/50 first:border-t-0">
+                          <td className="px-5 py-3 font-medium">{category.category}</td>
                           <td className="px-4 py-3">
-                            <span className="text-xs font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full capitalize">{cat.replace(/_/g, " ")}</span>
+                            <KindBadge kind={category.kind} />
                           </td>
-                          <td className="px-4 py-3 text-right font-semibold">{fmt(v.usd)}</td>
-                          <td className="px-4 py-3 text-right text-muted-foreground">{fmtCdf(v.cdf)}</td>
+                          <td className="px-4 py-3 text-right font-semibold tabular-nums">${fmtUsd(category.usd)}</td>
+                          <td className="px-5 py-3 text-right text-muted-foreground tabular-nums">FC {fmtFc(category.cdf)}</td>
                         </tr>
-                        {isOpen && (
-                          <tr key={`${cat}-detail`} className="bg-muted/10">
-                            <td colSpan={4} className="px-0 py-0">
-                              {loading ? (
-                                <p className="text-xs text-muted-foreground text-center py-4">Loading…</p>
-                              ) : rows.length === 0 ? (
-                                <p className="text-xs text-muted-foreground text-center py-4">No transactions found for this category in this period.</p>
-                              ) : (
-                                <div className="overflow-x-auto">
-                                  <table className="w-full text-xs border-t border-border/40 min-w-[560px]">
-                                    <thead>
-                                      <tr className="bg-muted/30">
-                                        <th className="text-left px-8 py-2 font-medium text-muted-foreground">Date</th>
-                                        <th className="text-left px-4 py-2 font-medium text-muted-foreground">Description</th>
-                                        <th className="text-left px-4 py-2 font-medium text-muted-foreground">Party</th>
-                                        <th className="text-right px-4 py-2 font-medium text-muted-foreground">Amount</th>
-                                        <th className="text-right px-4 py-2 font-medium text-muted-foreground">$</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {rows.map((r) => (
-                                        <tr key={r.id} className="border-t border-border/20 hover:bg-muted/20">
-                                          <td className="px-8 py-2 tabular-nums text-muted-foreground">
-                                            {new Date(r.date).toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" })}
-                                          </td>
-                                          <td className="px-4 py-2 max-w-[200px] truncate">{r.description ?? "—"}</td>
-                                          <td className="px-4 py-2 text-muted-foreground">{r.party ?? "—"}</td>
-                                          <td className="px-4 py-2 text-right tabular-nums">
-                                            {Number(r.amount).toLocaleString()} <span className="text-muted-foreground">{r.currency}</span>
-                                          </td>
-                                          <td className="px-4 py-2 text-right tabular-nums font-medium">{fmt(Number(r.amountUsd))}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        )}
-                      </>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="divide-y divide-border md:hidden">
+                  {report.categories.map((category) => (
+                    <div key={`${category.kind}-${category.category}`} className="flex items-center justify-between gap-3 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{category.category}</p>
+                        <div className="mt-1"><KindBadge kind={category.kind} /></div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold tabular-nums">${fmtUsd(category.usd)}</p>
+                        <p className="text-xs text-muted-foreground tabular-nums">FC {fmtFc(category.cdf)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-muted/15 px-4 py-3 sm:px-5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Transactions</p>
+                </div>
+
+                <div className="divide-y divide-border">
+                  {report.months.map((month) => (
+                    <MonthSection key={month.key} month={month} locale={locale} />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="px-5 py-12 text-center text-sm text-muted-foreground">
+                No financial transactions were found for this period.
+              </div>
+            )}
           </div>
         </>
       ) : null}
@@ -437,86 +403,188 @@ function ProfitLossTab({ t }: { t: (k: string) => string }) {
   );
 }
 
-// ── Shared components ─────────────────────────────────────────────────────────
-
-function AccCard({
-  icon, label, mainValue, subValue, todayLabel, todayValue, monthLabel, monthValue, color, profit,
+function MetricCard({
+  label,
+  icon,
+  value,
+  tone,
+  emphasize = false,
 }: {
-  icon: React.ReactNode;
   label: string;
-  mainValue: string;
-  subValue: string;
-  todayLabel: string;
-  todayValue: string;
-  monthLabel: string;
-  monthValue: string;
-  color: "indigo" | "emerald" | "rose" | "blue";
-  profit?: boolean;
+  icon: React.ReactNode;
+  value: Money;
+  tone: "positive" | "negative";
+  emphasize?: boolean;
 }) {
-  const bg = { indigo: "bg-indigo-50 border-indigo-100", emerald: "bg-emerald-50 border-emerald-100", rose: "bg-rose-50 border-rose-100", blue: "bg-blue-50 border-blue-100" }[color];
-  const isNeg = profit && mainValue.startsWith("-") || (mainValue.includes("-0") && mainValue !== "$0.00");
+  const toneClass = tone === "positive"
+    ? "text-emerald-600 dark:text-emerald-400"
+    : "text-rose-600 dark:text-rose-400";
+  const iconClass = tone === "positive"
+    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+    : "bg-rose-500/10 text-rose-600 dark:text-rose-400";
+
   return (
-    <div className={`rounded-xl border p-4 ${bg}`}>
-      <div className="flex items-center gap-2 mb-2">
-        {icon}
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
+    <div className={`rounded-xl border border-border bg-card p-4 shadow-sm ${emphasize ? "ring-1 ring-border/50" : ""}`}>
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${iconClass}`}>{icon}</span>
+        {label}
       </div>
-      <p className={`text-xl font-bold ${profit && isNeg ? "text-rose-700" : "text-foreground"}`}>{mainValue}</p>
-      <p className="text-xs text-muted-foreground mt-0.5">{subValue}</p>
-      <div className="mt-3 pt-3 border-t border-black/5 space-y-1">
-        <div className="flex justify-between text-xs">
-          <span className="text-muted-foreground">{todayLabel}</span>
-          <span className="font-medium">{todayValue}</span>
-        </div>
-        <div className="flex justify-between text-xs">
-          <span className="text-muted-foreground">{monthLabel}</span>
-          <span className="font-medium">{monthValue}</span>
-        </div>
-      </div>
+      <p className={`mt-3 text-2xl font-bold tracking-tight tabular-nums ${toneClass}`}>
+        {value.usd < 0 ? "-" : ""}${fmtUsd(Math.abs(value.usd))}
+      </p>
+      <p className="mt-1 text-sm text-muted-foreground tabular-nums">
+        {value.cdf < 0 ? "-" : ""}FC {fmtFc(Math.abs(value.cdf))}
+      </p>
     </div>
   );
 }
 
-function PLCard({ label, usd, cdf, color, large }: { label: string; usd: number; cdf: number; color: "emerald" | "rose"; large?: boolean }) {
-  const bg = color === "emerald" ? "bg-emerald-50 border-emerald-100" : "bg-rose-50 border-rose-100";
-  const textColor = color === "emerald" ? "text-emerald-700" : "text-rose-700";
+function MonthSection({ month, locale }: { month: FinancialMonth; locale: string }) {
+  const dayGroups = useMemo(() => {
+    const grouped = new Map<string, FinancialTransaction[]>();
+    for (const transaction of month.transactions) {
+      const rows = grouped.get(transaction.dateKey) ?? [];
+      rows.push(transaction);
+      grouped.set(transaction.dateKey, rows);
+    }
+    return [...grouped.entries()].sort(([a], [b]) => b.localeCompare(a));
+  }, [month.transactions]);
+
   return (
-    <div className={`rounded-xl border p-5 ${bg}`}>
-      <p className="text-xs font-medium text-muted-foreground mb-1">{label}</p>
-      <p className={`${large ? "text-3xl" : "text-2xl"} font-bold ${textColor}`}>${fmt(usd)}</p>
-      <p className="text-sm text-muted-foreground mt-0.5">{fmtCdf(cdf)} CDF</p>
+    <section>
+      <div className="flex flex-col gap-3 bg-muted/25 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div>
+          <p className="text-sm font-semibold">{month.label}</p>
+          <p className="text-xs text-muted-foreground">{month.transactions.length} transactions</p>
+        </div>
+        <div className="grid grid-cols-3 gap-4 text-right text-xs sm:gap-6">
+          <MonthTotal label="Revenue" value={month.revenue} />
+          <MonthTotal label="Expenses" value={month.expenses} />
+          <MonthTotal label="Net" value={month.net} strong />
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-sm">
+          <thead>
+            <tr className="border-y border-border/60 bg-background text-xs text-muted-foreground">
+              <th className="w-[130px] px-5 py-2.5 text-left font-medium">Date</th>
+              <th className="w-[155px] px-4 py-2.5 text-left font-medium">Category</th>
+              <th className="px-4 py-2.5 text-left font-medium">Transaction</th>
+              <th className="w-[130px] px-4 py-2.5 text-right font-medium">USD</th>
+              <th className="w-[155px] px-5 py-2.5 text-right font-medium">FC</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dayGroups.map(([dateKey, transactions]) => (
+              <DayRows key={dateKey} dateKey={dateKey} transactions={transactions} locale={locale} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function DayRows({
+  dateKey,
+  transactions,
+  locale,
+}: {
+  dateKey: string;
+  transactions: FinancialTransaction[];
+  locale: string;
+}) {
+  return (
+    <>
+      <tr className="border-t border-border/60 bg-muted/10">
+        <td colSpan={5} className="px-5 py-2 text-xs font-medium text-muted-foreground">
+          {formatDateKey(dateKey, locale)}
+        </td>
+      </tr>
+      {transactions.map((transaction) => {
+        const sign = transaction.kind === "expense" ? "-" : "+";
+        const amountClass = transaction.kind === "expense"
+          ? "text-rose-600 dark:text-rose-400"
+          : "text-emerald-600 dark:text-emerald-400";
+        return (
+          <tr key={transaction.id} className="border-t border-border/40 hover:bg-muted/15">
+            <td className="px-5 py-3 text-xs text-muted-foreground">{transaction.reference}</td>
+            <td className="px-4 py-3">
+              <p className="font-medium">{transaction.category}</p>
+              <div className="mt-1"><KindBadge kind={transaction.kind} /></div>
+            </td>
+            <td className="px-4 py-3">
+              <p className="font-medium">{transaction.description || "—"}</p>
+              {transaction.party && transaction.party !== "—" && (
+                <p className="mt-0.5 text-xs text-muted-foreground">{transaction.party}</p>
+              )}
+            </td>
+            <td className={`px-4 py-3 text-right font-semibold tabular-nums ${amountClass}`}>
+              {sign}${fmtUsd(transaction.amountUsd)}
+            </td>
+            <td className={`px-5 py-3 text-right tabular-nums ${amountClass}`}>
+              {sign}FC {fmtFc(transaction.amountCdf)}
+            </td>
+          </tr>
+        );
+      })}
+    </>
+  );
+}
+
+function KindBadge({ kind }: { kind: Kind }) {
+  return (
+    <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+      kind === "revenue"
+        ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+        : "bg-rose-500/10 text-rose-700 dark:text-rose-400"
+    }`}>
+      {kind}
+    </span>
+  );
+}
+
+function MonthTotal({ label, value, strong = false }: { label: string; value: Money; strong?: boolean }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={`${strong ? "font-bold" : "font-semibold"} tabular-nums`}>${fmtUsd(value.usd)}</p>
+      <p className="text-[10px] text-muted-foreground tabular-nums">FC {fmtFc(value.cdf)}</p>
     </div>
   );
 }
 
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function fmt(n: number | null | undefined): string {
-  if (n === null || n === undefined) return "—";
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex min-h-44 items-center justify-center rounded-xl border border-dashed border-border bg-card px-6 text-center text-sm text-muted-foreground">
+      {message}
+    </div>
+  );
 }
 
-function fmtCdf(n: number | null | undefined): string {
-  if (n === null || n === undefined) return "—";
-  return Math.round(n).toLocaleString();
+function toDateKey(iso: string): string {
+  const date = new Date(iso);
+  const local = new Date(date.getTime() + 2 * 60 * 60 * 1000);
+  return local.toISOString().slice(0, 10);
 }
 
-function printTable(title: string, headers: string[], rows: string) {
-  const w = window.open("", "_blank", "width=900,height=600");
-  if (!w) return;
-  w.document.write(`<html><head><title>${title}</title><style>
-    body{font-family:Arial,sans-serif;padding:32px;}
-    h2{margin-bottom:4px;}
-    table{width:100%;border-collapse:collapse;font-size:13px;margin-top:16px;}
-    th{background:#f0f0f0;padding:8px;border:1px solid #ccc;text-align:left;}
-    td{padding:7px 8px;border:1px solid #e5e5e5;}
-    @media print{button{display:none;}}
-  </style></head><body>
-    <h2>${title}</h2>
-    <p style="color:#666;font-size:12px">Printed: ${new Date().toLocaleString()}</p>
-    <table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>
-  </body></html>`);
-  w.document.close();
-  w.print();
+function formatDateKey(dateKey: string, locale: string): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, month - 1, day, 12).toLocaleDateString(locale, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function fmtUsd(value: number | null | undefined): string {
+  return Number(value ?? 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function fmtFc(value: number | null | undefined): string {
+  return Math.round(Number(value ?? 0)).toLocaleString("en-US");
 }
