@@ -35,7 +35,7 @@ type Money = {
 
 type FinancialTransaction = {
   id: string;
-  sourceType: "payment" | "voucher" | "sale_cogs";
+  sourceType: "payment" | "voucher" | "sale_revenue" | "sale_cogs";
   sourceId: number;
   reference: string;
   date: string;
@@ -335,7 +335,9 @@ export default function Financials() {
                     Every transaction below follows the period filter above. FC is converted from USD using the current taux.
                   </p>
                 </div>
-                <span className="text-xs text-muted-foreground">{report.months.reduce((sum, month) => sum + month.transactions.length, 0)} transactions</span>
+                <span className="text-xs text-muted-foreground">
+                  {report.months.reduce((sum, month) => sum + month.transactions.length, 0)} accounting lines
+                </span>
               </div>
             </div>
 
@@ -355,9 +357,7 @@ export default function Financials() {
                       {report.categories.map((category) => (
                         <tr key={`${category.kind}-${category.category}`} className="border-t border-border/50 first:border-t-0">
                           <td className="px-5 py-3 font-medium">{category.category}</td>
-                          <td className="px-4 py-3">
-                            <KindBadge kind={category.kind} />
-                          </td>
+                          <td className="px-4 py-3"><KindBadge kind={category.kind} /></td>
                           <td className="px-4 py-3 text-right font-semibold tabular-nums">${fmtUsd(category.usd)}</td>
                           <td className="px-5 py-3 text-right text-muted-foreground tabular-nums">FC {fmtFc(category.cdf)}</td>
                         </tr>
@@ -382,7 +382,7 @@ export default function Financials() {
                 </div>
 
                 <div className="bg-muted/15 px-4 py-3 sm:px-5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Transactions</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Transactions by date</p>
                 </div>
 
                 <div className="divide-y divide-border">
@@ -430,10 +430,10 @@ function MetricCard({
         {label}
       </div>
       <p className={`mt-3 text-2xl font-bold tracking-tight tabular-nums ${toneClass}`}>
-        {value.usd < 0 ? "-" : ""}${fmtUsd(Math.abs(value.usd))}
+        {formatSignedMoney(value.usd, "$", fmtUsd)}
       </p>
       <p className="mt-1 text-sm text-muted-foreground tabular-nums">
-        {value.cdf < 0 ? "-" : ""}FC {fmtFc(Math.abs(value.cdf))}
+        {formatSignedMoney(value.cdf, "FC ", fmtFc)}
       </p>
     </div>
   );
@@ -455,7 +455,7 @@ function MonthSection({ month, locale }: { month: FinancialMonth; locale: string
       <div className="flex flex-col gap-3 bg-muted/25 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div>
           <p className="text-sm font-semibold">{month.label}</p>
-          <p className="text-xs text-muted-foreground">{month.transactions.length} transactions</p>
+          <p className="text-xs text-muted-foreground">{month.transactions.length} accounting lines</p>
         </div>
         <div className="grid grid-cols-3 gap-4 text-right text-xs sm:gap-6">
           <MonthTotal label="Revenue" value={month.revenue} />
@@ -468,8 +468,8 @@ function MonthSection({ month, locale }: { month: FinancialMonth; locale: string
         <table className="w-full min-w-[760px] text-sm">
           <thead>
             <tr className="border-y border-border/60 bg-background text-xs text-muted-foreground">
-              <th className="w-[130px] px-5 py-2.5 text-left font-medium">Date</th>
-              <th className="w-[155px] px-4 py-2.5 text-left font-medium">Category</th>
+              <th className="w-[140px] px-5 py-2.5 text-left font-medium">Reference</th>
+              <th className="w-[165px] px-4 py-2.5 text-left font-medium">Category</th>
               <th className="px-4 py-2.5 text-left font-medium">Transaction</th>
               <th className="w-[130px] px-4 py-2.5 text-right font-medium">USD</th>
               <th className="w-[155px] px-5 py-2.5 text-right font-medium">FC</th>
@@ -549,8 +549,8 @@ function MonthTotal({ label, value, strong = false }: { label: string; value: Mo
   return (
     <div>
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className={`${strong ? "font-bold" : "font-semibold"} tabular-nums`}>${fmtUsd(value.usd)}</p>
-      <p className="text-[10px] text-muted-foreground tabular-nums">FC {fmtFc(value.cdf)}</p>
+      <p className={`${strong ? "font-bold" : "font-semibold"} tabular-nums`}>{formatSignedMoney(value.usd, "$", fmtUsd)}</p>
+      <p className="text-[10px] text-muted-foreground tabular-nums">{formatSignedMoney(value.cdf, "FC ", fmtFc)}</p>
     </div>
   );
 }
@@ -576,6 +576,11 @@ function formatDateKey(dateKey: string, locale: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+function formatSignedMoney(value: number, prefix: string, formatter: (value: number) => string): string {
+  const sign = value < 0 ? "-" : "";
+  return `${sign}${prefix}${formatter(Math.abs(value))}`;
 }
 
 function fmtUsd(value: number | null | undefined): string {
