@@ -377,7 +377,7 @@ export async function getAccountStatement(id: number, dateFrom?: Date, dateTo?: 
         creditUsd: deltaUsd < 0 ? -deltaUsd : 0,
         debitCdf: 0,
         creditCdf: 0,
-        exchangeRate: null,
+        exchangeRate: 1,
         runningBalance: 0,
       });
     }
@@ -396,7 +396,7 @@ export async function getAccountStatement(id: number, dateFrom?: Date, dateTo?: 
         creditUsd: 0,
         debitCdf: deltaCdf > 0 ? deltaCdf : 0,
         creditCdf: deltaCdf < 0 ? -deltaCdf : 0,
-        exchangeRate: null,
+        exchangeRate: 1,
         runningBalance: 0,
       });
     }
