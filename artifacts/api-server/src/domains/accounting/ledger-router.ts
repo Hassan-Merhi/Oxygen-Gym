@@ -1,3 +1,5 @@
+import { contractBody, contractQueryAs } from "../../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { getCurrentUser } from "../../shared/auth/permissions";
@@ -19,7 +21,7 @@ router.get("/balance", async (_req, res) => {
 });
 
 router.post("/opening-balance", async (req, res) => {
-  const body = asRecord(req.body);
+  const body = asRecord(contractBody(req, ApiContracts.SetOpeningBalanceBody));
   res.json(await setOpeningBalance({
     targetAmountUsd: nonNegativeNumber(body.targetAmountUsd, "targetAmountUsd"),
     date: optionalDate(body.date, "date"),
@@ -28,7 +30,7 @@ router.post("/opening-balance", async (req, res) => {
 });
 
 router.get("/", async (req, res) => {
-  const query = req.query as Record<string, string | undefined>;
+  const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListLedgerQueryParams);
   const dateTo = optionalDate(query.dateTo, "dateTo");
   if (dateTo) dateTo.setHours(23, 59, 59, 999);
   res.json(await listLedger({

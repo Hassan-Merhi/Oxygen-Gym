@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "architecture:audit": "tsx ./src/architecture-audit.ts && tsx ./src/request-boundary-audit.ts",
+    "contracts:check": "tsx ./src/check-contract-drift.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

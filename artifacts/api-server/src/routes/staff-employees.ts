@@ -1,3 +1,5 @@
+import { contractBodyAs, contractParams, contractQueryAs } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
@@ -10,12 +12,12 @@ const router = Router();
 router.use(requireAuth());
 
 function callerName(req: Request): string {
-  return (req as unknown as { __gymproUserName?: string }).__gymproUserName ?? "System";
+  return req.__gymproUserName ?? "System";
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────
 router.get("/", async (req: Request, res: Response) => {
-  const { page = "1", limit = "20", search, status } = req.query as Record<string, string>;
+  const { page = "1", limit = "20", search, status } = contractQueryAs<Record<string, string>>(req, ApiContracts.ListStaffEmployeesQueryParams);
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
   const offset = (pageNum - 1) * limitNum;
@@ -45,7 +47,7 @@ router.get("/", async (req: Request, res: Response) => {
 
 // ── Get single ────────────────────────────────────────────────────────────────
 router.get("/:id", async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id as string);
+  const id = Number(contractParams(req, ApiContracts.GetStaffEmployeeParams).id);
   const [emp] = await db.select().from(staffEmployeesTable).where(eq(staffEmployeesTable.id, id));
   if (!emp) { res.status(404).json({ error: "Staff employee not found" }); return; }
   res.json(emp);
@@ -53,11 +55,11 @@ router.get("/:id", async (req: Request, res: Response) => {
 
 // ── Create ────────────────────────────────────────────────────────────────────
 router.post("/", async (req: Request, res: Response) => {
-  const { name, phone, email, jobTitle, hireDate, salary, salaryCurrency, paymentFrequency, linkedUserId, notes } = req.body as {
+  const { name, phone, email, jobTitle, hireDate, salary, salaryCurrency, paymentFrequency, linkedUserId, notes } = contractBodyAs<{
     name: string; phone?: string; email?: string; jobTitle?: string; hireDate?: string;
     salary?: number; salaryCurrency?: string; paymentFrequency?: string;
     linkedUserId?: number; notes?: string;
-  };
+  }>(req, ApiContracts.CreateStaffEmployeeBody);
 
   if (!name) { res.status(400).json({ error: "Name is required" }); return; }
 
@@ -84,12 +86,12 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 router.patch("/:id", async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id as string);
-  const { name, phone, email, jobTitle, hireDate, salary, salaryCurrency, paymentFrequency, linkedUserId, notes, status } = req.body as {
+  const id = Number(contractParams(req, ApiContracts.UpdateStaffEmployeeParams).id);
+  const { name, phone, email, jobTitle, hireDate, salary, salaryCurrency, paymentFrequency, linkedUserId, notes, status } = contractBodyAs<{
     name?: string; phone?: string; email?: string; jobTitle?: string; hireDate?: string;
     salary?: number; salaryCurrency?: string; paymentFrequency?: string;
     linkedUserId?: number; notes?: string; status?: string;
-  };
+  }>(req, ApiContracts.UpdateStaffEmployeeBody);
 
   const [existing] = await db.select().from(staffEmployeesTable).where(eq(staffEmployeesTable.id, id));
   if (!existing) { res.status(404).json({ error: "Staff employee not found" }); return; }
@@ -114,7 +116,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
 // ── Archive ───────────────────────────────────────────────────────────────────
 router.patch("/:id/archive", async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id as string);
+  const id = Number(contractParams(req, ApiContracts.ArchiveStaffEmployeeParams).id);
   const [existing] = await db.select().from(staffEmployeesTable).where(eq(staffEmployeesTable.id, id));
   if (!existing) { res.status(404).json({ error: "Staff employee not found" }); return; }
 

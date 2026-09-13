@@ -1,3 +1,5 @@
+import { contractBody, contractParams, contractQueryAs } from "../../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { logActivity } from "../../lib/activity";
@@ -43,15 +45,15 @@ router.get("/summary", async (_req, res) => {
 });
 
 router.get("/sales", async (req, res) => {
-  res.json(await listAccountSales(listInput(req.query as Record<string, string | undefined>)));
+  res.json(await listAccountSales(listInput(contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListSalesEntriesQueryParams))));
 });
 
 router.get("/expenses", async (req, res) => {
-  res.json(await listAccountExpenses(listInput(req.query as Record<string, string | undefined>)));
+  res.json(await listAccountExpenses(listInput(contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListExpenseEntriesQueryParams))));
 });
 
 router.get("/profit-loss", async (req, res) => {
-  const query = req.query as Record<string, string | undefined>;
+  const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.GetProfitLossQueryParams);
   const dateTo = optionalDate(query.dateTo, "dateTo");
   if (dateTo) dateTo.setHours(23, 59, 59, 999);
   const period = query.period ?? "month";
@@ -69,7 +71,7 @@ router.get("/chart", async (_req, res) => {
 });
 
 router.post("/chart", async (req, res) => {
-  const body = asRecord(req.body);
+  const body = asRecord(contractBody(req, ApiContracts.CreateChartAccountBody));
   res.status(201).json(await createChartAccount(
     requiredString(body.name, "name"),
     requiredString(body.type, "type"),
@@ -78,8 +80,8 @@ router.post("/chart", async (req, res) => {
 });
 
 router.put("/chart/:id", async (req, res) => {
-  const body = asRecord(req.body);
-  res.json(await updateChartAccount(parseId(req.params.id, "account id"), {
+  const body = asRecord(contractBody(req, ApiContracts.UpdateChartAccountBody));
+  res.json(await updateChartAccount(parseId(contractParams(req, ApiContracts.UpdateChartAccountParams).id, "account id"), {
     name: optionalString(body.name),
     type: optionalString(body.type),
     description: optionalString(body.description),
@@ -88,15 +90,15 @@ router.put("/chart/:id", async (req, res) => {
 });
 
 router.delete("/chart/:id", async (req, res) => {
-  res.json(await deactivateChartAccount(parseId(req.params.id, "account id")));
+  res.json(await deactivateChartAccount(parseId(contractParams(req, ApiContracts.DeactivateChartAccountParams).id, "account id")));
 });
 
 router.get("/chart/:id/statement", async (req, res) => {
-  const query = req.query as Record<string, string | undefined>;
+  const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.GetChartAccountStatementQueryParams);
   const dateTo = optionalDate(query.dateTo, "dateTo");
   if (dateTo) dateTo.setHours(23, 59, 59, 999);
   res.json(await getAccountStatement(
-    parseId(req.params.id, "account id"),
+    parseId(contractParams(req, ApiContracts.GetChartAccountStatementParams).id, "account id"),
     optionalDate(query.dateFrom, "dateFrom"),
     dateTo,
   ));

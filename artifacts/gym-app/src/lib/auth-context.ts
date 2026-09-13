@@ -1,6 +1,7 @@
 import { createContext, useContext } from "react";
+import { AUTH_TOKEN_KEY } from "@/config/env";
 
-export const TOKEN_KEY = "gym_token";
+export const TOKEN_KEY = AUTH_TOKEN_KEY;
 
 export interface AuthUser {
   id: number;

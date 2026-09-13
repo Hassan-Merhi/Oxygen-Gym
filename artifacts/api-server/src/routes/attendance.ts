@@ -1,12 +1,29 @@
+import { contractParams, contractQueryAs } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
 import { checkInsTable, membersTable } from "@workspace/db/schema";
 import { eq, and, gte, lte, desc, count, sql } from "drizzle-orm";
 import { lubumbashiTodayStart, lubumbashiTodayEnd } from "../lib/timezone";
+import { sqlRows } from "../lib/sql-rows";
 
 const router = Router();
 router.use(requireAuth());
+
+interface AttendanceSqlRow {
+  id?: number;
+  memberId?: number;
+  memberName?: string;
+  checkedInAt?: string | Date;
+  planName?: string | null;
+  date?: string;
+  month?: string;
+  hour?: number;
+  day?: string;
+  count?: number | string;
+  cnt?: number | string;
+}
 
 function daysAgo(n: number): Date {
   const d = new Date();
@@ -56,7 +73,7 @@ router.get("/summary", async (_req: Request, res: Response) => {
   const weekCount = Number(weekRow.c);
   const monthCount = Number(monthRow.c);
 
-  const dailyCounts = (dailyRows.rows as any[]).map((r: any) => Number(r.cnt));
+  const dailyCounts = sqlRows<AttendanceSqlRow>(dailyRows).map((r) => Number(r.cnt));
   const avgDaily = dailyCounts.length > 0
     ? Math.round(dailyCounts.reduce((a: number, b: number) => a + b, 0) / 30)
     : 0;
@@ -66,7 +83,7 @@ router.get("/summary", async (_req: Request, res: Response) => {
     SELECT COUNT(DISTINCT member_id) AS cnt FROM check_ins
     WHERE checked_in_at >= ${todayStart} AND checked_in_at <= ${todayEnd} AND member_id IS NOT NULL
   `);
-  const activeTodayRow = (activeTodayResult.rows as any[])[0];
+  const activeTodayRow = sqlRows<AttendanceSqlRow>(activeTodayResult)[0];
 
   res.json({
     today: todayCount,
@@ -79,7 +96,7 @@ router.get("/summary", async (_req: Request, res: Response) => {
 
 // ── Daily chart (last N days) ─────────────────────────────────────────────────
 router.get("/daily", async (req: Request, res: Response) => {
-  const days = Math.min(90, Math.max(7, parseInt((req.query as any).days ?? "30")));
+  const days = Math.min(90, Math.max(7, parseInt((contractQueryAs<Record<string, string>>(req, ApiContracts.GetAttendanceDailyQueryParams)).days ?? "30")));
   const from = daysAgo(days);
 
   const rows = await db.execute(sql`
@@ -100,12 +117,12 @@ router.get("/daily", async (req: Request, res: Response) => {
     ORDER BY d.day ASC
   `);
 
-  res.json((rows.rows ?? rows) as any[]);
+  res.json(sqlRows<AttendanceSqlRow>(rows));
 });
 
 // ── Monthly chart (last N months) ─────────────────────────────────────────────
 router.get("/monthly", async (req: Request, res: Response) => {
-  const months = Math.min(24, Math.max(3, parseInt((req.query as any).months ?? "12")));
+  const months = Math.min(24, Math.max(3, parseInt((contractQueryAs<Record<string, string>>(req, ApiContracts.GetAttendanceMonthlyQueryParams)).months ?? "12")));
   const from = new Date();
   from.setMonth(from.getMonth() - months);
   from.setDate(1);
@@ -129,7 +146,7 @@ router.get("/monthly", async (req: Request, res: Response) => {
     ORDER BY m.month ASC
   `);
 
-  res.json((rows.rows ?? rows) as any[]);
+  res.json(sqlRows<AttendanceSqlRow>(rows));
 });
 
 // ── Hourly trend ──────────────────────────────────────────────────────────────
@@ -145,12 +162,12 @@ router.get("/hourly", async (_req: Request, res: Response) => {
     ORDER BY h.hour ASC
   `);
 
-  res.json((rows.rows ?? rows) as any[]);
+  res.json(sqlRows<AttendanceSqlRow>(rows));
 });
 
 // ── Top attending members ─────────────────────────────────────────────────────
 router.get("/top-members", async (req: Request, res: Response) => {
-  const limit = Math.min(50, Math.max(5, parseInt((req.query as any).limit ?? "10")));
+  const limit = Math.min(50, Math.max(5, parseInt((contractQueryAs<Record<string, string>>(req, ApiContracts.GetAttendanceTopMembersQueryParams)).limit ?? "10")));
 
   const rows = await db.execute(sql`
     SELECT member_id AS "memberId", member_name AS "memberName", COUNT(*) AS count
@@ -161,7 +178,7 @@ router.get("/top-members", async (req: Request, res: Response) => {
     LIMIT ${limit}
   `);
 
-  res.json(((rows.rows ?? rows) as any[]).map((r: any) => ({
+  res.json(sqlRows<AttendanceSqlRow>(rows).map((r) => ({
     memberId: r.memberId,
     memberName: r.memberName,
     count: Number(r.count),
@@ -191,7 +208,7 @@ router.get("/week", async (_req: Request, res: Response) => {
 
 // ── Filtered attendance list ──────────────────────────────────────────────────
 router.get("/list", async (req: Request, res: Response) => {
-  const q = req.query as Record<string, string>;
+  const q = contractQueryAs<Record<string, string>>(req, ApiContracts.ListAttendanceQueryParams);
   const pageNum = Math.max(1, parseInt(q.page ?? "1"));
   const limitNum = Math.min(200, Math.max(1, parseInt(q.limit ?? "50")));
   const offset = (pageNum - 1) * limitNum;
@@ -225,8 +242,8 @@ router.get("/list", async (req: Request, res: Response) => {
     `),
   ]);
 
-  const total = Number((countResult.rows as any[])[0]?.cnt ?? 0);
-  res.json({ items: rows.rows as any[], total, page: pageNum, limit: limitNum });
+  const total = Number(sqlRows<AttendanceSqlRow>(countResult)[0]?.cnt ?? 0);
+  res.json({ items: sqlRows<AttendanceSqlRow>(rows), total, page: pageNum, limit: limitNum });
 });
 
 // ── Available plan names (for filter dropdown) ────────────────────────────────
@@ -238,12 +255,12 @@ router.get("/plans", async (_req: Request, res: Response) => {
     WHERE m.plan_name IS NOT NULL
     ORDER BY m.plan_name
   `);
-  res.json((rows.rows as any[]).map((r: any) => r.planName));
+  res.json(sqlRows<AttendanceSqlRow>(rows).map((r) => r.planName));
 });
 
 // ── Member attendance stats ───────────────────────────────────────────────────
 router.get("/member/:id", async (req: Request, res: Response) => {
-  const memberId = parseInt(req.params.id as string);
+  const memberId = Number(contractParams(req, ApiContracts.GetMemberAttendanceStatsParams).id);
   if (isNaN(memberId)) { res.status(400).json({ error: "Invalid member id" }); return; }
 
   const now = new Date();
@@ -279,8 +296,8 @@ router.get("/member/:id", async (req: Request, res: Response) => {
   `);
 
   const totalCheckins = Number(totalRow.c);
-  const monthlyHistory = (recentRows.rows ?? recentRows) as any[];
-  const monthsWithCheckins = monthlyHistory.filter(r => r.count > 0).length;
+  const monthlyHistory = sqlRows<AttendanceSqlRow>(recentRows);
+  const monthsWithCheckins = monthlyHistory.filter((r) => Number(r.count ?? 0) > 0).length;
   const avgPerMonth = monthsWithCheckins > 0
     ? Math.round(totalCheckins / Math.max(1, monthlyHistory.length))
     : 0;
@@ -300,7 +317,7 @@ router.get("/member/:id", async (req: Request, res: Response) => {
     thisMonthCheckins: Number(monthRow.c),
     avgPerMonth,
     monthlyHistory,
-    calendarDays: ((calRows.rows ?? calRows) as any[]).map((r: any) => r.day),
+    calendarDays: sqlRows<AttendanceSqlRow>(calRows).map((r) => r.day),
   });
 });
 

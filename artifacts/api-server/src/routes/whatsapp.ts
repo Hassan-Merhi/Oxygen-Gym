@@ -1,3 +1,5 @@
+import { contractBodyAs, contractParams } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { whatsappChatsTable, settingsTable, membersTable, plansTable } from "@workspace/db/schema";
@@ -10,7 +12,7 @@ router.use(requireAuth());
 
 // All WhatsApp routes require admin role
 function requireAdmin(req: Request, res: Response): boolean {
-  const caller = (req as any).__gymproUser;
+  const caller = req.__gymproUser;
   if (caller?.role !== "admin") {
     res.status(403).json({ error: "Admin only" });
     return false;
@@ -33,7 +35,7 @@ router.get("/chats", async (req: Request, res: Response) => {
 // POST /api/whatsapp/chats
 router.post("/chats", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
-  const { label, chatId } = req.body as Record<string, unknown>;
+  const { label, chatId } = contractBodyAs<Record<string, unknown>>(req, ApiContracts.CreateWhatsappChatBody);
   if (typeof label !== "string" || !label.trim()) {
     res.status(400).json({ error: "label is required" });
     return;
@@ -54,10 +56,10 @@ router.post("/chats", async (req: Request, res: Response) => {
 // PATCH /api/whatsapp/chats/:id
 router.patch("/chats/:id", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
-  const id = parseInt(req.params.id as string, 10);
+  const id = Number(contractParams(req, ApiContracts.UpdateWhatsappChatParams).id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const { label, chatId, enabled } = req.body as Record<string, unknown>;
+  const { label, chatId, enabled } = contractBodyAs<Record<string, unknown>>(req, ApiContracts.UpdateWhatsappChatBody);
   const updates: Partial<{ label: string; chatId: string; enabled: boolean }> = {};
   if (typeof label === "string" && label.trim()) updates.label = label.trim();
   if (typeof chatId === "string" && chatId.trim()) updates.chatId = chatId.trim();
@@ -83,7 +85,7 @@ router.patch("/chats/:id", async (req: Request, res: Response) => {
 // DELETE /api/whatsapp/chats/:id
 router.delete("/chats/:id", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
-  const id = parseInt(req.params.id as string, 10);
+  const id = Number(contractParams(req, ApiContracts.DeleteWhatsappChatParams).id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     await db.delete(whatsappChatsTable).where(eq(whatsappChatsTable.id, id));
@@ -203,7 +205,7 @@ router.post("/test", async (req: Request, res: Response) => {
 // POST /api/whatsapp/send-member/:id — send a per-member notification
 router.post("/send-member/:id", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.SendMemberWhatsappParams).id);
   try {
     const settings = await db.query.settingsTable.findFirst();
     if (!settings?.greenApiInstanceId || !settings?.greenApiToken) {
@@ -247,7 +249,7 @@ router.post("/send-member/:id", async (req: Request, res: Response) => {
 // POST /api/whatsapp/broadcast — send a custom message to all enabled chats
 router.post("/broadcast", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
-  const { message } = req.body as { message?: string };
+  const { message } = contractBodyAs<{ message?: string }>(req, ApiContracts.BroadcastWhatsappMessageBody);
   if (!message?.trim()) { res.status(400).json({ error: "message required" }); return; }
   try {
     const settings = await db.query.settingsTable.findFirst();

@@ -7,10 +7,10 @@ export async function logActivity(
   action: string,
   entity: string,
   entityId?: number,
-  details?: Record<string, unknown>
+  details?: Record<string, unknown>,
 ) {
   try {
-    const user = (req as unknown as { dbUser?: { id: number; name?: string } }).dbUser;
+    const user = req.__gymproUser;
     await db.insert(activityLogsTable).values({
       userId: user?.id,
       userName: user?.name ?? "System",
@@ -20,6 +20,6 @@ export async function logActivity(
       details: details ?? {},
     });
   } catch {
-    // non-fatal
+    // Activity logging is best-effort and must not break the primary action.
   }
 }

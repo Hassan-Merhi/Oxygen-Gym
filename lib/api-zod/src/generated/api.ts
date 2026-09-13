@@ -2857,3 +2857,226 @@ export const GetProfitLossResponse = zod.object({
 })
 
 
+/**
+ * @summary Reset a user's password
+ */
+export const ResetUserPasswordParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const resetUserPasswordBodyPasswordMin = 6;
+
+
+
+export const ResetUserPasswordBody = zod.object({
+  "password": zod.string().min(resetUserPasswordBodyPasswordMin)
+})
+
+export const ResetUserPasswordResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Upload an image
+ */
+export const UploadImageBody = zod.object({
+  "file": zod.instanceof(File)
+})
+
+export const UploadImageResponse = zod.object({
+  "url": zod.string()
+})
+
+
+/**
+ * @summary Send a payment receipt through WhatsApp
+ */
+export const SendPaymentReceiptParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const SendPaymentReceiptResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary List chart of accounts
+ */
+export const ListChartAccountsResponseItem = zod.record(zod.string(), zod.unknown())
+export const ListChartAccountsResponse = zod.array(ListChartAccountsResponseItem)
+
+
+/**
+ * @summary Create chart account
+ */
+
+
+
+
+export const CreateChartAccountBody = zod.object({
+  "name": zod.string().min(1),
+  "type": zod.string().min(1),
+  "description": zod.string().nullish()
+})
+
+
+/**
+ * @summary Update chart account
+ */
+export const UpdateChartAccountParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateChartAccountBody = zod.object({
+  "name": zod.string().optional(),
+  "type": zod.string().optional(),
+  "description": zod.string().nullish(),
+  "isActive": zod.boolean().optional()
+})
+
+export const UpdateChartAccountResponse = zod.record(zod.string(), zod.unknown())
+
+
+/**
+ * @summary Deactivate chart account
+ */
+export const DeactivateChartAccountParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeactivateChartAccountResponse = zod.object({
+  "ok": zod.boolean(),
+  "deactivated": zod.boolean()
+})
+
+
+/**
+ * @summary Get account statement
+ */
+export const GetChartAccountStatementParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetChartAccountStatementQueryParams = zod.object({
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional()
+})
+
+export const GetChartAccountStatementResponse = zod.record(zod.string(), zod.unknown())
+
+
+/**
+ * @summary Get filtered financial report
+ */
+export const getFinancialsQueryPeriodDefault = `month`;
+
+export const GetFinancialsQueryParams = zod.object({
+  "period": zod.enum(['today', 'month', 'last_month', 'year', 'custom']).default(getFinancialsQueryPeriodDefault),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional()
+})
+
+export const GetFinancialsResponse = zod.object({
+  "period": zod.enum(['today', 'month', 'last_month', 'year', 'custom']),
+  "dateFrom": zod.string(),
+  "dateTo": zod.string(),
+  "rate": zod.number(),
+  "currency": zod.object({
+  "base": zod.enum(['USD']),
+  "display": zod.enum(['CDF'])
+}),
+  "revenue": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "expenses": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "net": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "categories": zod.array(zod.object({
+  "category": zod.string(),
+  "kind": zod.enum(['revenue', 'expense']),
+  "usd": zod.number(),
+  "cdf": zod.number()
+})),
+  "months": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "revenue": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "expenses": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "net": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "transactions": zod.array(zod.object({
+  "id": zod.string(),
+  "sourceType": zod.enum(['payment', 'voucher', 'sale_revenue', 'sale_cogs']),
+  "sourceId": zod.number(),
+  "reference": zod.string(),
+  "date": zod.string(),
+  "dateKey": zod.string(),
+  "monthKey": zod.string(),
+  "kind": zod.enum(['revenue', 'expense']),
+  "category": zod.string(),
+  "description": zod.string(),
+  "party": zod.string(),
+  "amountUsd": zod.number(),
+  "amountCdf": zod.number()
+}))
+}))
+})
+
+
+/**
+ * @summary Get WhatsApp instance state
+ */
+export const GetWhatsappStateResponse = zod.object({
+  "state": zod.string()
+})
+
+
+/**
+ * @summary Broadcast a WhatsApp message
+ */
+
+
+
+export const BroadcastWhatsappMessageBody = zod.object({
+  "message": zod.string().min(1)
+})
+
+export const BroadcastWhatsappMessageResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Preview one-time cash cleanup
+ */
+export const PreviewCashCleanupResponse = zod.record(zod.string(), zod.unknown())
+
+
+/**
+ * @summary Apply one-time cash cleanup
+ */
+export const applyCashCleanupBodyDryRunDefault = false;
+
+export const ApplyCashCleanupBody = zod.object({
+  "dry_run": zod.boolean().default(applyCashCleanupBodyDryRunDefault)
+})
+
+export const ApplyCashCleanupResponse = zod.record(zod.string(), zod.unknown())
+
+

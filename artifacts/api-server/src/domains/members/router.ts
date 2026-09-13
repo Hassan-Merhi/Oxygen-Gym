@@ -1,3 +1,5 @@
+import { contractBody, contractParams, contractQueryAs } from "../../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { logActivity } from "../../lib/activity";
@@ -49,7 +51,7 @@ function nullablePositiveInt(value: unknown, field: string): number | null | und
 }
 
 router.get("/", async (req, res) => {
-  const query = req.query as Record<string, string | undefined>;
+  const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListMembersQueryParams);
   const sortBy = query.sortBy === "joinDate" || query.sortBy === "expiryDate" ? query.sortBy : "name";
   const sortOrder = query.sortOrder === "desc" ? "desc" : "asc";
   const expiryWindowDays = query.expiryWindow === undefined
@@ -70,7 +72,7 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const body = asRecord(req.body);
+  const body = asRecord(contractBody(req, ApiContracts.CreateMemberBody));
   const member = await createMember({
     name: requiredString(body.name, "name"),
     phone: optionalString(body.phone),
@@ -99,12 +101,12 @@ router.post("/", async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  res.json(await getMember(parseId(req.params.id, "member id")));
+  res.json(await getMember(parseId(contractParams(req, ApiContracts.GetMemberParams).id, "member id")));
 });
 
 router.patch("/:id", async (req, res) => {
-  const id = parseId(req.params.id, "member id");
-  const body = asRecord(req.body);
+  const id = parseId(contractParams(req, ApiContracts.UpdateMemberParams).id, "member id");
+  const body = asRecord(contractBody(req, ApiContracts.UpdateMemberBody));
   const input: UpdateMemberInput = {
     name: body.name === undefined ? undefined : requiredString(body.name, "name"),
     phone: nullableString(body.phone),
@@ -132,15 +134,15 @@ router.patch("/:id", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
-  const id = parseId(req.params.id, "member id");
+  const id = parseId(contractParams(req, ApiContracts.DeleteMemberParams).id, "member id");
   const member = await archiveMember(id);
   await logActivity(req, "archive_member", "member", id, { name: member.name });
   res.json({ ok: true });
 });
 
 router.post("/:id/checkin", async (req, res) => {
-  const id = parseId(req.params.id, "member id");
-  const body = req.body && typeof req.body === "object" ? req.body as Record<string, unknown> : {};
+  const id = parseId(contractParams(req, ApiContracts.CheckInMemberParams).id, "member id");
+  const body = contractBody(req, ApiContracts.CheckInMemberBody);
   const result = await checkInMember(id, body.force === true);
   if (result.alreadyCheckedIn || !result.checkIn) {
     res.json({ success: false, alreadyCheckedIn: true, checkIn: null });
@@ -163,8 +165,8 @@ router.post("/:id/checkin", async (req, res) => {
 });
 
 router.post("/:id/renew", async (req, res) => {
-  const id = parseId(req.params.id, "member id");
-  const body = asRecord(req.body);
+  const id = parseId(contractParams(req, ApiContracts.RenewMemberParams).id, "member id");
+  const body = asRecord(contractBody(req, ApiContracts.RenewMemberBody));
   const startDate = optionalDate(body.startDate, "startDate");
   const expiryDate = optionalDate(body.expiryDate, "expiryDate");
   if (!startDate || !expiryDate) throw badRequest("startDate and expiryDate are required");
@@ -186,8 +188,8 @@ router.post("/:id/renew", async (req, res) => {
 });
 
 router.post("/:id/freeze", async (req, res) => {
-  const id = parseId(req.params.id, "member id");
-  const body = asRecord(req.body);
+  const id = parseId(contractParams(req, ApiContracts.FreezeMemberParams).id, "member id");
+  const body = asRecord(contractBody(req, ApiContracts.FreezeMemberBody));
   const frozenAt = optionalDate(body.frozenAt, "frozenAt");
   const frozenUntil = optionalDate(body.frozenUntil, "frozenUntil");
   if (!frozenAt || !frozenUntil) throw badRequest("frozenAt and frozenUntil are required");
@@ -201,26 +203,26 @@ router.post("/:id/freeze", async (req, res) => {
 });
 
 router.post("/:id/reactivate", async (req, res) => {
-  const id = parseId(req.params.id, "member id");
+  const id = parseId(contractParams(req, ApiContracts.ReactivateMemberParams).id, "member id");
   const member = await reactivateMember(id);
   await logActivity(req, "reactivate_member", "member", id, { name: member.name, newStatus: member.status });
   res.json(member);
 });
 
 router.patch("/:id/status", async (req, res) => {
-  const id = parseId(req.params.id, "member id");
-  const status = requiredString(asRecord(req.body).status, "status");
+  const id = parseId(contractParams(req, ApiContracts.SetMemberStatusParams).id, "member id");
+  const status = requiredString(asRecord(contractBody(req, ApiContracts.SetMemberStatusBody)).status, "status");
   const member = await setMemberStatus(id, status);
   await logActivity(req, `set_member_status_${status}`, "member", id, { name: member.name });
   res.json(member);
 });
 
 router.get("/:id/payments", async (req, res) => {
-  res.json(await getMemberPayments(parseId(req.params.id, "member id")));
+  res.json(await getMemberPayments(parseId(contractParams(req, ApiContracts.GetMemberPaymentsParams).id, "member id")));
 });
 
 router.get("/:id/checkins", async (req, res) => {
-  res.json(await getMemberCheckIns(parseId(req.params.id, "member id")));
+  res.json(await getMemberCheckIns(parseId(contractParams(req, ApiContracts.GetMemberCheckinsParams).id, "member id")));
 });
 
 export default router;

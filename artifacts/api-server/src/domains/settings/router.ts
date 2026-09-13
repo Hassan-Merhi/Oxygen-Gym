@@ -1,3 +1,5 @@
+import { contractBody } from "../../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { UpdateSettingsBody } from "@workspace/api-zod";
 import { requireAuth } from "../../middlewares/auth";
@@ -14,7 +16,7 @@ router.get("/", async (req, res) => {
 });
 
 router.patch("/", async (req, res) => {
-  const parsed = UpdateSettingsBody.safeParse(req.body);
+  const parsed = UpdateSettingsBody.safeParse(contractBody(req, ApiContracts.UpdateSettingsBody));
   if (!parsed.success) throw badRequest("Invalid input", parsed.error.issues);
 
   const isAdmin = getCurrentUser(req).role === "admin";

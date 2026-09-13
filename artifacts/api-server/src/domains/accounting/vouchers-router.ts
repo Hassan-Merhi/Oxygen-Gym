@@ -1,3 +1,5 @@
+import { contractBody, contractParams, contractQueryAs } from "../../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { logActivity } from "../../lib/activity";
@@ -31,7 +33,7 @@ function nullablePositiveInt(value: unknown, field: string): number | null | und
 }
 
 router.get("/", async (req, res) => {
-  const query = req.query as Record<string, string | undefined>;
+  const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListVouchersQueryParams);
   const dateTo = optionalDate(query.dateTo, "dateTo");
   if (dateTo) dateTo.setHours(23, 59, 59, 999);
   res.json(await listVouchers({
@@ -46,7 +48,7 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const body = asRecord(req.body);
+  const body = asRecord(contractBody(req, ApiContracts.CreateVoucherBody));
   const actor = getCurrentUser(req).name;
   const voucher = await createVoucher({
     voucherType: requiredString(body.voucherType, "voucherType"),
@@ -73,12 +75,12 @@ router.post("/", async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  res.json(await getVoucher(parseId(req.params.id, "voucher id")));
+  res.json(await getVoucher(parseId(contractParams(req, ApiContracts.GetVoucherParams).id, "voucher id")));
 });
 
 router.patch("/:id", async (req, res) => {
-  const id = parseId(req.params.id, "voucher id");
-  const body = asRecord(req.body);
+  const id = parseId(contractParams(req, ApiContracts.UpdateVoucherParams).id, "voucher id");
+  const body = asRecord(contractBody(req, ApiContracts.UpdateVoucherBody));
   const input: UpdateVoucherInput = {
     voucherType: optionalString(body.voucherType),
     voucherDate: optionalDate(body.voucherDate, "voucherDate"),
@@ -100,7 +102,7 @@ router.patch("/:id", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
-  const id = parseId(req.params.id, "voucher id");
+  const id = parseId(contractParams(req, ApiContracts.DeleteVoucherParams).id, "voucher id");
   const voucher = await cancelVoucher(id, getCurrentUser(req).name);
   await logActivity(req, "voucher_archived", "voucher", id, { number: voucher.voucherNumber });
   res.json({ ok: true });

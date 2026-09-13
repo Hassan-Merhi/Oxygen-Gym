@@ -1,3 +1,5 @@
+import { contractQuery } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db, activityLogsTable } from "@workspace/db";
@@ -9,8 +11,8 @@ router.use(requireAuth());
 
 // GET /api/activity-logs
 router.get("/", async (req, res) => {
-  const limit = Math.min(parseInt(String(req.query.limit ?? "50")), 200);
-  const offset = parseInt(String(req.query.offset ?? "0"));
+  const limit = Math.min(parseInt(String(contractQuery(req, ApiContracts.ListActivityLogsQueryParams).limit ?? "50")), 200);
+  const offset = parseInt(String(contractQuery(req, ApiContracts.ListActivityLogsQueryParams).offset ?? "0"));
 
   if (isNaN(limit) || isNaN(offset)) {
     res.status(400).json({ error: "Invalid pagination params" });
