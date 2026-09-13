@@ -13,6 +13,7 @@ import { useGetMe } from "@/hooks/use-me";
 import Dashboard from "@/pages/dashboard";
 import Staff from "@/pages/staff";
 import Settings from "@/pages/settings";
+import PeriodReset from "@/pages/period-reset";
 import Members from "@/pages/members";
 import MembersOverview from "@/pages/members-overview";
 import MemberProfile from "@/pages/member-profile";
@@ -202,6 +203,7 @@ function AppShell() {
         <Route path="/dashboard"><ProtectedRoute component={Dashboard} permKey="dashboard" /></Route>
         <Route path="/staff"><ProtectedRoute component={Staff} permKey="staff" /></Route>
         <Route path="/settings"><ProtectedRoute component={Settings} permKey="settings" /></Route>
+        <Route path="/period-reset"><ProtectedRoute component={PeriodReset} permKey="settings" /></Route>
         <Route path="/members"><ProtectedRoute component={Members} permKey="members" /></Route>
         <Route path="/members-overview"><ProtectedRoute component={MembersOverview} permKey="members" /></Route>
         <Route path="/members/:id">{(params) => <ProtectedMemberProfile id={Number(params.id)} />}</Route>
