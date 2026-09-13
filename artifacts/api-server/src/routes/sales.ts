@@ -1,30 +1,27 @@
 import { Router, type Request, type Response } from "express";
 import { PatchSaleBody as PatchSaleBodySchema } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
-import { db } from "@workspace/db";
+import { db, withTransaction } from "@workspace/db";
 import {
   productsTable,
   salesTable,
-  settingsTable,
   paymentsTable,
 } from "@workspace/db/schema";
-import { eq, and, ilike, or, desc, count, gte, lte } from "drizzle-orm";
+import { eq, and, ilike, or, desc, count, gte, lte, sql } from "drizzle-orm";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 import { reverseEntries } from "../lib/accounting";
 import { appendLedgerEntry } from "../lib/ledger";
+import { getExchangeRate } from "../repositories/settings";
 import type { SaleItem } from "@workspace/db/schema";
 
 const router = Router();
 router.use(requireAuth());
 
+class SaleTransactionError extends Error {}
+
 function callerName(req: Request): string {
   return (req as unknown as { __gymproUserName?: string }).__gymproUserName ?? "System";
-}
-
-async function getSettings() {
-  const [s] = await db.select().from(settingsTable);
-  return s ?? { usdToCdfRate: 2800, defaultCurrency: "USD" };
 }
 
 // ── Lookup product by barcode ──────────────────────────────────────────────────
@@ -107,14 +104,11 @@ router.post("/", async (req: Request, res: Response) => {
     return;
   }
 
-  const settings = await getSettings();
-  const rate = settings.usdToCdfRate ?? 2800;
-
+  const rate = await getExchangeRate();
   const productIds = [...new Set(items.map((i) => i.productId))];
   const products = await db.select().from(productsTable).where(
     or(...productIds.map((pid) => eq(productsTable.id, pid))) as ReturnType<typeof eq>
   );
-
   const productMap = new Map(products.map((p) => [p.id, p]));
 
   for (const item of items) {
@@ -178,99 +172,114 @@ router.post("/", async (req: Request, res: Response) => {
   });
 
   const changeDue = Math.max(0, paymentAmount - totalAmount);
-
   const toUsd = (amount: number) => currency === "USD" ? amount : amount / rate;
   const totalAmountUsd = toUsd(totalAmount);
   const totalCostUsd = toUsd(totalCost);
   const totalProfitUsd = toUsd(totalProfit);
   const amountCdf = currency === "CDF" ? totalAmount : totalAmount * rate;
-
-  const saleNumber = await getNextNumber("sale");
-  const paymentNumber = await getNextNumber("PAY");
   const creator = callerName(req);
 
-  const { sale } = await db.transaction(async (tx) => {
-    // 1. Create sale record
-    const [sale] = await tx.insert(salesTable).values({
-      saleNumber,
-      items: saleItems,
-      totalAmount,
-      totalDiscount,
-      totalCost,
-      totalProfit,
-      totalAmountUsd,
-      totalCostUsd,
-      totalProfitUsd,
-      currency,
-      exchangeRate: rate,
-      paymentAmount,
-      changeDue,
-      notes: notes ?? null,
-      createdBy: creator,
-      status: "completed",
-    }).returning();
-
-    // 2. Deduct stock
-    for (const item of items) {
-      const product = productMap.get(item.productId)!;
-      await tx
-        .update(productsTable)
-        .set({ quantity: product.quantity - item.quantity })
-        .where(eq(productsTable.id, item.productId));
-    }
-
-    // 3. Create payment record so it appears in the Cash Book
-    const amountUsd = currency === "USD" ? totalAmount : totalAmount / rate;
-    const amountCdf = currency === "CDF" ? totalAmount : totalAmount * rate;
-    const itemSummary = saleItems
-      .map((i) => `${i.quantity > 1 ? `${i.quantity}× ` : ""}${i.productName}`)
-      .join(", ");
-    await tx.insert(paymentsTable).values({
-      paymentNumber,
-      direction: "in",
-      category: "product_sale",
-      type: "product_sale",
-      linkedEntity: "sale",
-      linkedEntityId: sale.id,
-      linkedEntityName: saleNumber,
-      amount: totalAmount,
-      currency,
-      exchangeRate: rate,
-      amountUsd,
-      amountCdf,
-      account: "cash",
-      notes: itemSummary || notes || null,
-      paymentDate: new Date(),
-      status: "completed",
-      createdBy: creator,
-    });
-
-    return { sale };
-  });
-
-  // 4. Append ledger entry for the cash balance
   try {
-    await appendLedgerEntry({
-      sourceType: "sale",
-      sourceNumber: saleNumber,
-      sourceId: sale.id,
-      direction: "in",
-      amount: totalAmount,
-      currency,
-      exchangeRate: rate,
-      description: `Sale ${saleNumber}`,
-      createdBy: creator,
+    const result = await withTransaction(async (tx) => {
+      const saleNumber = await getNextNumber("sale", tx);
+      const paymentNumber = await getNextNumber("PAY", tx);
+
+      const [sale] = await tx.insert(salesTable).values({
+        saleNumber,
+        items: saleItems,
+        totalAmount,
+        totalDiscount,
+        totalCost,
+        totalProfit,
+        totalAmountUsd,
+        totalCostUsd,
+        totalProfitUsd,
+        currency,
+        exchangeRate: rate,
+        paymentAmount,
+        changeDue,
+        notes: notes ?? null,
+        createdBy: creator,
+        status: "completed",
+      }).returning();
+      if (!sale) throw new Error("Unable to create sale");
+
+      // Atomic guarded decrements make concurrent POS checkouts safe. If another
+      // checkout consumed the last units after the preview read, this whole sale
+      // rolls back instead of overselling or leaving partial rows behind.
+      for (const item of items) {
+        const [updatedProduct] = await tx
+          .update(productsTable)
+          .set({ quantity: sql`${productsTable.quantity} - ${item.quantity}` })
+          .where(and(
+            eq(productsTable.id, item.productId),
+            eq(productsTable.status, "active"),
+            gte(productsTable.quantity, item.quantity),
+          ))
+          .returning({ id: productsTable.id });
+        if (!updatedProduct) {
+          const product = productMap.get(item.productId);
+          throw new SaleTransactionError(
+            product
+              ? `Insufficient stock for "${product.name}". Please refresh the cart.`
+              : `Product ${item.productId} is unavailable.`,
+          );
+        }
+      }
+
+      const amountUsd = currency === "USD" ? totalAmount : totalAmount / rate;
+      const itemSummary = saleItems
+        .map((i) => `${i.quantity > 1 ? `${i.quantity}× ` : ""}${i.productName}`)
+        .join(", ");
+      await tx.insert(paymentsTable).values({
+        paymentNumber,
+        direction: "in",
+        category: "product_sale",
+        type: "product_sale",
+        linkedEntity: "sale",
+        linkedEntityId: sale.id,
+        linkedEntityName: saleNumber,
+        amount: totalAmount,
+        currency,
+        exchangeRate: rate,
+        amountUsd,
+        amountCdf,
+        account: "cash",
+        notes: itemSummary || notes || null,
+        paymentDate: new Date(),
+        status: "completed",
+        createdBy: creator,
+      });
+
+      await appendLedgerEntry({
+        sourceType: "sale",
+        sourceNumber: saleNumber,
+        sourceId: sale.id,
+        direction: "in",
+        amount: totalAmount,
+        currency,
+        exchangeRate: rate,
+        description: `Sale ${saleNumber}`,
+        createdBy: creator,
+      }, tx);
+
+      return { sale, saleNumber };
     });
-  } catch { /* non-fatal */ }
 
-  await logActivity(req, "sale_created", "sale", sale.id, {
-    saleNumber,
-    totalAmount,
-    currency,
-    itemCount: items.length,
-  });
-
-  res.status(201).json(sale);
+    await logActivity(req, "sale_created", "sale", result.sale.id, {
+      saleNumber: result.saleNumber,
+      totalAmount,
+      currency,
+      itemCount: items.length,
+    });
+    res.status(201).json(result.sale);
+  } catch (error) {
+    if (error instanceof SaleTransactionError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
 });
 
 // ── Patch sale (admin: edit currency, date, notes, item prices) ───────────────
@@ -296,8 +305,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
     return;
   }
 
-  const editSettings = await getSettings();
-  const rate = editSettings.usdToCdfRate ?? 2800;
+  const rate = await getExchangeRate();
   const existingItems = (existing.items ?? []) as SaleItem[];
 
   let newItems: SaleItem[] = existingItems;
@@ -332,8 +340,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
     : (existing.paymentAmount ?? 0);
   const newChangeDue = Math.max(0, newPaymentAmount - newTotalAmount);
 
-  // Recompute USD equivalents for cost and profit
-  const newTotalCostUsd   = (currency ?? existing.currency) === "CDF" ? newTotalCost   / rate : newTotalCost;
+  const newTotalCostUsd = (currency ?? existing.currency) === "CDF" ? newTotalCost / rate : newTotalCost;
   const newTotalProfitUsd = (currency ?? existing.currency) === "CDF" ? newTotalProfit / rate : newTotalProfit;
 
   const [updated] = await db
@@ -368,64 +375,45 @@ router.patch("/:id", async (req: Request, res: Response) => {
 router.patch("/:id/void", async (req: Request, res: Response) => {
   const id = parseInt(req.params.id as string);
   const { reason } = req.body as { reason: string };
-
-  const [sale] = await db.select().from(salesTable).where(eq(salesTable.id, id));
-  if (!sale) {
-    res.status(404).json({ error: "Sale not found" });
-    return;
-  }
-  if (sale.status === "voided") {
-    res.status(400).json({ error: "Sale is already voided" });
-    return;
-  }
-
-  const settings = await getSettings();
-  const rate = settings.usdToCdfRate ?? 2800;
   const creator = callerName(req);
 
-  // 1. Restore stock quantities
-  const saleItems = (sale.items ?? []) as SaleItem[];
-  for (const item of saleItems) {
-    const [product] = await db.select({ quantity: productsTable.quantity })
-      .from(productsTable)
-      .where(eq(productsTable.id, item.productId));
-    if (product) {
-      await db
+  const result = await withTransaction(async (tx) => {
+    const [sale] = await tx
+      .select()
+      .from(salesTable)
+      .where(eq(salesTable.id, id))
+      .for("update");
+    if (!sale) return { kind: "not_found" as const };
+    if (sale.status === "voided") return { kind: "already_voided" as const };
+
+    const rate = await getExchangeRate(tx);
+    const saleItems = (sale.items ?? []) as SaleItem[];
+
+    for (const item of saleItems) {
+      await tx
         .update(productsTable)
-        .set({ quantity: product.quantity + item.quantity })
+        .set({ quantity: sql`${productsTable.quantity} + ${item.quantity}` })
         .where(eq(productsTable.id, item.productId));
     }
-  }
 
-  // 2. Mark sale as voided
-  const [voided] = await db
-    .update(salesTable)
-    .set({
-      status: "voided",
-      voidedAt: new Date(),
-      voidedBy: creator,
-      voidReason: reason,
-    })
-    .where(eq(salesTable.id, id))
-    .returning();
+    const [voided] = await tx
+      .update(salesTable)
+      .set({
+        status: "voided",
+        voidedAt: new Date(),
+        voidedBy: creator,
+        voidReason: reason,
+      })
+      .where(eq(salesTable.id, id))
+      .returning();
+    if (!voided) throw new Error("Unable to void sale");
 
-  // 3. Reverse accounting entries
-  try {
-    await reverseEntries("sale", sale.id, "void_sale", creator);
-  } catch { /* non-fatal */ }
-
-  // 4. Cancel the corresponding payment record so it's removed from Cash Book balance
-  try {
-    await db
+    await reverseEntries("sale", sale.id, "void_sale", creator, tx);
+    await tx
       .update(paymentsTable)
       .set({ status: "cancelled" })
       .where(and(eq(paymentsTable.linkedEntity, "sale"), eq(paymentsTable.linkedEntityId, id)));
-  } catch { /* non-fatal */ }
 
-  // 5. Reverse the ledger entry for the void
-  try {
-    const voidSettings = await getSettings();
-    const voidRate = voidSettings.usdToCdfRate ?? 2800;
     await appendLedgerEntry({
       sourceType: "sale_void",
       sourceNumber: sale.saleNumber ?? undefined,
@@ -433,19 +421,30 @@ router.patch("/:id/void", async (req: Request, res: Response) => {
       direction: "out",
       amount: sale.totalAmount ?? 0,
       currency: sale.currency ?? "USD",
-      exchangeRate: voidRate,
+      exchangeRate: rate,
       description: `Void Sale ${sale.saleNumber}`,
       createdBy: creator,
-    });
-  } catch { /* non-fatal */ }
+    }, tx);
 
-  await logActivity(req, "sale_voided", "sale", sale.id, {
-    saleNumber: sale.saleNumber,
+    return { kind: "ok" as const, sale, voided };
+  });
+
+  if (result.kind === "not_found") {
+    res.status(404).json({ error: "Sale not found" });
+    return;
+  }
+  if (result.kind === "already_voided") {
+    res.status(400).json({ error: "Sale is already voided" });
+    return;
+  }
+
+  await logActivity(req, "sale_voided", "sale", result.sale.id, {
+    saleNumber: result.sale.saleNumber,
     reason,
     voidedBy: creator,
   });
 
-  res.json(voided);
+  res.json(result.voided);
 });
 
 export default router;
