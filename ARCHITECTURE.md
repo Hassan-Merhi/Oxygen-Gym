@@ -14,7 +14,9 @@
 
 ## HTTP boundary rules
 
-Routes validate external input with generated Zod schemas before using it. Request bodies, params, and query strings are treated as untrusted data; manual request casts and `as any` escapes are prohibited by the architecture audit. Important response boundaries should use generated response schemas as the contract is migrated.
+Routes validate external input with generated Zod schemas before using it. Request bodies, params, and query strings are treated as untrusted data; manual request casts and `as any` request-context escapes are prohibited by the architecture audit. Legacy route implementations may use the centralized `contract*As` adapters while being migrated, but validation and normalization still happen through the generated OpenAPI/Zod schema before route logic executes. New route code should consume the generated contract output directly.
+
+Contract violations are handled centrally by the API contract error middleware, so invalid inputs return a consistent `400` response rather than leaking parsing details into every route. Important response boundaries should use generated response schemas as the contract is migrated.
 
 ## Startup and migrations
 
