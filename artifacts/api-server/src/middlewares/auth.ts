@@ -37,6 +37,18 @@ function attachUser(req: Request, user: NonNullable<Request["__gymproUser"]>): v
   req.__gymproUserName = user.name;
 }
 
+/**
+ * Routes mounted behind requireAuth can use this helper to narrow the optional
+ * Express request augmentation to the authenticated user invariant.
+ */
+export function authenticatedUser(req: Request): NonNullable<Request["__gymproUser"]> {
+  const user = req.__gymproUser;
+  if (!user) {
+    throw new Error("Authenticated user context is missing after requireAuth middleware");
+  }
+  return user;
+}
+
 export function requireAuth() {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const header = req.headers.authorization;
