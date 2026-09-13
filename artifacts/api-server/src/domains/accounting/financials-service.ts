@@ -1,24 +1,16 @@
-import { Router, type Request, type Response } from "express";
-import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
-import {
-  paymentsTable,
-  vouchersTable,
-  salesTable,
-  settingsTable,
-} from "@workspace/db/schema";
+import { paymentsTable, salesTable, vouchersTable } from "@workspace/db/schema";
 import { and, eq, gte, isNull, lte } from "drizzle-orm";
 import {
   lubumbashiMonthBounds,
   lubumbashiTodayEnd,
   lubumbashiTodayStart,
   lubumbashiYearBounds,
-} from "../lib/timezone";
+} from "../../lib/timezone";
+import { getExchangeRate } from "../../shared/accounting/currency";
+import { badRequest } from "../../shared/http/errors";
 
-const router = Router();
-router.use(requireAuth());
-
-type Period = "today" | "month" | "last_month" | "year" | "custom";
+export type FinancialPeriod = "today" | "month" | "last_month" | "year" | "custom";
 type Kind = "revenue" | "expense";
 
 type FinancialTransaction = {
@@ -45,52 +37,38 @@ function localDateKey(value: Date): string {
 }
 
 function prettyCategory(value: string): string {
-  return value
-    .replace(/[_-]+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+  return value.replace(/[_-]+/g, " ").trim().replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function amountUsd(
-  storedUsd: number | null | undefined,
-  amount: number | null | undefined,
-  currency: string | null | undefined,
-  exchangeRate: number | null | undefined,
-): number {
-  if (storedUsd !== null && storedUsd !== undefined && Number.isFinite(Number(storedUsd))) {
-    return Number(storedUsd);
-  }
+function amountUsd(storedUsd: number | null | undefined, amount: number | null | undefined, currency: string | null | undefined, exchangeRate: number | null | undefined): number {
+  if (storedUsd !== null && storedUsd !== undefined && Number.isFinite(Number(storedUsd))) return Number(storedUsd);
   const raw = Number(amount ?? 0);
   if ((currency ?? "USD").toUpperCase() === "USD") return raw;
   const rate = Number(exchangeRate ?? 0);
   return rate > 0 ? raw / rate : 0;
 }
 
-function rangeFor(period: Period, dateFrom?: string, dateTo?: string): { from: Date; to: Date } | null {
+function rangeFor(period: FinancialPeriod, dateFrom?: string, dateTo?: string): { from: Date; to: Date } {
   const now = new Date();
-
   if (period === "custom") {
-    if (!dateFrom || !dateTo) return null;
+    if (!dateFrom || !dateTo) throw badRequest("A valid start and end date are required for a custom range.");
     const from = new Date(`${dateFrom}T00:00:00+02:00`);
     const to = new Date(`${dateTo}T23:59:59.999+02:00`);
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) return null;
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) throw badRequest("A valid start and end date are required for a custom range.");
     return { from, to };
   }
-
-  if (period === "today") {
-    return { from: lubumbashiTodayStart(now), to: lubumbashiTodayEnd(now) };
-  }
+  if (period === "today") return { from: lubumbashiTodayStart(now), to: lubumbashiTodayEnd(now) };
   if (period === "year") {
     const { start, end } = lubumbashiYearBounds(now);
     return { from: start, to: end };
   }
   if (period === "last_month") {
     const current = lubumbashiMonthBounds(now);
-    const { start, end } = lubumbashiMonthBounds(new Date(current.start.getTime() - 1));
-    return { from: start, to: end };
+    const previous = lubumbashiMonthBounds(new Date(current.start.getTime() - 1));
+    return { from: previous.start, to: previous.end };
   }
-  const { start, end } = lubumbashiMonthBounds(now);
-  return { from: start, to: end };
+  const current = lubumbashiMonthBounds(now);
+  return { from: current.start, to: current.end };
 }
 
 function monthLabel(monthKey: string): string {
@@ -106,9 +84,6 @@ function categoryForPayment(category: string, direction: string): string | null 
     if (category === "other") return "Other Income";
     return prettyCategory(category || "Other Income");
   }
-
-  // Stock purchases create inventory (an asset). They are not a P&L expense;
-  // the expense is recognized as COGS when the stock is sold.
   if (category === "stock_purchase") return null;
   if (category === "payroll") return "Payroll";
   if (category === "expense") return "Expenses";
@@ -121,11 +96,7 @@ function isInventoryCategory(category?: string | null): boolean {
   return normalized === "inventory" || normalized === "stockpurchase" || normalized === "stock";
 }
 
-function addTransaction(
-  list: FinancialTransaction[],
-  input: Omit<FinancialTransaction, "date" | "dateKey" | "monthKey" | "amountCdf"> & { date: Date },
-  rate: number,
-): void {
+function addTransaction(list: FinancialTransaction[], input: Omit<FinancialTransaction, "date" | "dateKey" | "monthKey" | "amountCdf"> & { date: Date }, rate: number): void {
   const dateKey = localDateKey(input.date);
   const usd = Math.abs(Number(input.amountUsd ?? 0));
   if (usd < EPSILON) return;
@@ -139,20 +110,13 @@ function addTransaction(
   });
 }
 
-router.get("/", async (req: Request, res: Response) => {
-  const { period = "month", dateFrom, dateTo } = req.query as Record<string, string>;
-  const selectedPeriod: Period = ["today", "month", "last_month", "year", "custom"].includes(period)
-    ? (period as Period)
+export async function getFinancialReport(input: { period?: string; dateFrom?: string; dateTo?: string }) {
+  const selectedPeriod: FinancialPeriod = ["today", "month", "last_month", "year", "custom"].includes(input.period ?? "month")
+    ? input.period as FinancialPeriod
     : "month";
-  const range = rangeFor(selectedPeriod, dateFrom, dateTo);
-
-  if (!range) {
-    res.status(400).json({ error: "A valid start and end date are required for a custom range." });
-    return;
-  }
-
-  const [settings] = await db.select({ rate: settingsTable.usdToCdfRate }).from(settingsTable).limit(1);
-  const rate = Number(settings?.rate ?? 2800) > 0 ? Number(settings?.rate ?? 2800) : 2800;
+  const range = rangeFor(selectedPeriod, input.dateFrom, input.dateTo);
+  const rateRaw = await getExchangeRate();
+  const rate = rateRaw > 0 ? rateRaw : 2800;
 
   const [payments, vouchers, sales] = await Promise.all([
     db.select({
@@ -171,13 +135,11 @@ router.get("/", async (req: Request, res: Response) => {
       linkedEntityId: paymentsTable.linkedEntityId,
       linkedEntityName: paymentsTable.linkedEntityName,
       planName: paymentsTable.planName,
-    })
-      .from(paymentsTable)
-      .where(and(
-        eq(paymentsTable.status, "completed"),
-        gte(paymentsTable.paymentDate, range.from),
-        lte(paymentsTable.paymentDate, range.to),
-      )),
+    }).from(paymentsTable).where(and(
+      eq(paymentsTable.status, "completed"),
+      gte(paymentsTable.paymentDate, range.from),
+      lte(paymentsTable.paymentDate, range.to),
+    )),
     db.select({
       id: vouchersTable.id,
       voucherNumber: vouchersTable.voucherNumber,
@@ -193,14 +155,12 @@ router.get("/", async (req: Request, res: Response) => {
       paidTo: vouchersTable.paidTo,
       receivedFrom: vouchersTable.receivedFrom,
       linkedEntityName: vouchersTable.linkedEntityName,
-    })
-      .from(vouchersTable)
-      .where(and(
-        eq(vouchersTable.status, "recorded"),
-        isNull(vouchersTable.deletedAt),
-        gte(vouchersTable.voucherDate, range.from),
-        lte(vouchersTable.voucherDate, range.to),
-      )),
+    }).from(vouchersTable).where(and(
+      eq(vouchersTable.status, "recorded"),
+      isNull(vouchersTable.deletedAt),
+      gte(vouchersTable.voucherDate, range.from),
+      lte(vouchersTable.voucherDate, range.to),
+    )),
     db.select({
       id: salesTable.id,
       saleNumber: salesTable.saleNumber,
@@ -213,27 +173,20 @@ router.get("/", async (req: Request, res: Response) => {
       exchangeRate: salesTable.exchangeRate,
       notes: salesTable.notes,
       items: salesTable.items,
-    })
-      .from(salesTable)
-      .where(and(
-        eq(salesTable.status, "completed"),
-        gte(salesTable.saleDate, range.from),
-        lte(salesTable.saleDate, range.to),
-      )),
+    }).from(salesTable).where(and(
+      eq(salesTable.status, "completed"),
+      gte(salesTable.saleDate, range.from),
+      lte(salesTable.saleDate, range.to),
+    )),
   ]);
 
   const transactions: FinancialTransaction[] = [];
-
   for (const payment of payments) {
-    // POS creates a linked payment for cash-book purposes. Product revenue is
-    // read from the sale itself below so edits to sale date/value stay aligned
-    // with COGS and the same sale is never counted twice.
-    const isLinkedPosSale = payment.direction === "in"
+    const linkedPosSale = payment.direction === "in"
       && payment.category === "product_sale"
       && payment.linkedEntity === "sale"
       && payment.linkedEntityId !== null;
-    if (isLinkedPosSale) continue;
-
+    if (linkedPosSale) continue;
     const category = categoryForPayment(payment.category, payment.direction);
     if (!category) continue;
     const kind: Kind = payment.direction === "in" ? "revenue" : "expense";
@@ -252,7 +205,6 @@ router.get("/", async (req: Request, res: Response) => {
   }
 
   for (const voucher of vouchers) {
-    // Inventory purchases are balance-sheet movements, not period expenses.
     if (voucher.direction === "out" && isInventoryCategory(voucher.category)) continue;
     const kind: Kind = voucher.direction === "in" ? "revenue" : "expense";
     const fallback = kind === "revenue" ? "Other Income" : "Expenses";
@@ -272,13 +224,8 @@ router.get("/", async (req: Request, res: Response) => {
   }
 
   for (const sale of sales) {
-    const itemSummary = (sale.items ?? [])
-      .map((item) => `${item.quantity > 1 ? `${item.quantity}× ` : ""}${item.productName}`)
-      .join(", ");
-    const saleDescription = itemSummary || sale.notes || "Product sale";
-
-    // Gross sale value is revenue. Use salesTable as the authoritative source
-    // so sale edits and the P&L period remain synchronized.
+    const itemSummary = (sale.items ?? []).map((item) => `${item.quantity > 1 ? `${item.quantity}× ` : ""}${item.productName}`).join(", ");
+    const description = itemSummary || sale.notes || "Product sale";
     addTransaction(transactions, {
       id: `sale-revenue-${sale.id}`,
       sourceType: "sale_revenue",
@@ -287,13 +234,10 @@ router.get("/", async (req: Request, res: Response) => {
       date: sale.saleDate,
       kind: "revenue",
       category: "Product Sales",
-      description: saleDescription,
+      description,
       party: "POS",
       amountUsd: amountUsd(sale.totalAmountUsd, sale.totalAmount, sale.currency, sale.exchangeRate),
     }, rate);
-
-    // Product purchases are inventory assets. Recognize cost only when sold,
-    // using the cost captured by the POS at the time of sale.
     addTransaction(transactions, {
       id: `sale-cogs-${sale.id}`,
       sourceType: "sale_cogs",
@@ -302,42 +246,25 @@ router.get("/", async (req: Request, res: Response) => {
       date: sale.saleDate,
       kind: "expense",
       category: "Cost of Goods Sold",
-      description: saleDescription,
+      description,
       party: "POS",
       amountUsd: amountUsd(sale.totalCostUsd, sale.totalCost, sale.currency, sale.exchangeRate),
     }, rate);
   }
 
-  transactions.sort((a, b) => {
-    const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
-    return dateDiff !== 0 ? dateDiff : b.id.localeCompare(a.id);
-  });
-
+  transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.id.localeCompare(a.id));
   const categoryMap = new Map<string, { category: string; kind: Kind; usd: number }>();
-  const monthMap = new Map<string, {
-    key: string;
-    label: string;
-    revenueUsd: number;
-    expensesUsd: number;
-    transactions: FinancialTransaction[];
-  }>();
-
+  const monthMap = new Map<string, { key: string; label: string; revenueUsd: number; expensesUsd: number; transactions: FinancialTransaction[] }>();
   let revenueUsd = 0;
   let expensesUsd = 0;
 
   for (const transaction of transactions) {
     if (transaction.kind === "revenue") revenueUsd += transaction.amountUsd;
     else expensesUsd += transaction.amountUsd;
-
     const categoryKey = `${transaction.kind}:${transaction.category}`;
-    const category = categoryMap.get(categoryKey) ?? {
-      category: transaction.category,
-      kind: transaction.kind,
-      usd: 0,
-    };
+    const category = categoryMap.get(categoryKey) ?? { category: transaction.category, kind: transaction.kind, usd: 0 };
     category.usd += transaction.amountUsd;
     categoryMap.set(categoryKey, category);
-
     const month = monthMap.get(transaction.monthKey) ?? {
       key: transaction.monthKey,
       label: monthLabel(transaction.monthKey),
@@ -351,42 +278,31 @@ router.get("/", async (req: Request, res: Response) => {
     monthMap.set(transaction.monthKey, month);
   }
 
-  const toMoney = (usd: number) => ({ usd, cdf: usd * rate });
-
+  const money = (usd: number) => ({ usd, cdf: usd * rate });
   const categories = [...categoryMap.values()]
-    .sort((a, b) => {
-      if (a.kind !== b.kind) return a.kind === "revenue" ? -1 : 1;
-      return b.usd - a.usd;
-    })
-    .map((category) => ({
-      category: category.category,
-      kind: category.kind,
-      ...toMoney(category.usd),
-    }));
-
+    .sort((a, b) => a.kind !== b.kind ? (a.kind === "revenue" ? -1 : 1) : b.usd - a.usd)
+    .map((category) => ({ category: category.category, kind: category.kind, ...money(category.usd) }));
   const months = [...monthMap.values()]
     .sort((a, b) => b.key.localeCompare(a.key))
     .map((month) => ({
       key: month.key,
       label: month.label,
-      revenue: toMoney(month.revenueUsd),
-      expenses: toMoney(month.expensesUsd),
-      net: toMoney(month.revenueUsd - month.expensesUsd),
+      revenue: money(month.revenueUsd),
+      expenses: money(month.expensesUsd),
+      net: money(month.revenueUsd - month.expensesUsd),
       transactions: month.transactions,
     }));
 
-  res.json({
+  return {
     period: selectedPeriod,
     dateFrom: range.from.toISOString(),
     dateTo: range.to.toISOString(),
     rate,
     currency: { base: "USD", display: "CDF" },
-    revenue: toMoney(revenueUsd),
-    expenses: toMoney(expensesUsd),
-    net: toMoney(revenueUsd - expensesUsd),
+    revenue: money(revenueUsd),
+    expenses: money(expensesUsd),
+    net: money(revenueUsd - expensesUsd),
     categories,
     months,
-  });
-});
-
-export default router;
+  };
+}

@@ -4,6 +4,7 @@ import pinoHttp from "pino-http";
 import path from "path";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { errorHandler } from "./shared/http/errors";
 
 const app: Express = express();
 
@@ -46,5 +47,8 @@ if (staticDir) {
     res.sendFile(path.join(resolvedStaticDir, "index.html"));
   });
 }
+
+// Centralized error mapping must remain last so domain services can throw typed errors.
+app.use(errorHandler);
 
 export default app;
