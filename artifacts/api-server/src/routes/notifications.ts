@@ -1,3 +1,4 @@
+import { authenticatedUser } from "../middlewares/auth";
 import { contractQueryAs } from "../http/contracts";
 import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
@@ -155,7 +156,7 @@ async function computeNotifications(userId: number, permissions: any): Promise<N
 
 // ── List notifications ────────────────────────────────────────────────────────
 router.get("/", async (req: Request, res: Response) => {
-  const user = req.__gymproUser;
+  const user = authenticatedUser(req);
   const typeFilter = (contractQueryAs<Record<string, string>>(req, ApiContracts.ListNotificationsQueryParams)).type as string | undefined;
   const readFilter = (contractQueryAs<Record<string, string>>(req, ApiContracts.ListNotificationsQueryParams)).read as string | undefined;
   const permissions = (user?.permissions ?? {}) as Record<string, boolean>;
@@ -171,7 +172,7 @@ router.get("/", async (req: Request, res: Response) => {
 
 // ── Unread count ──────────────────────────────────────────────────────────────
 router.get("/count", async (req: Request, res: Response) => {
-  const user = req.__gymproUser;
+  const user = authenticatedUser(req);
   const permissions = (user?.permissions ?? {}) as Record<string, boolean>;
   const isAdmin = user?.role === "admin";
   const items = await computeNotifications(user.id, isAdmin ? null : permissions);
@@ -180,7 +181,7 @@ router.get("/count", async (req: Request, res: Response) => {
 
 // ── Mark one as read ──────────────────────────────────────────────────────────
 router.patch("/:key/read", async (req: Request, res: Response) => {
-  const user = req.__gymproUser;
+  const user = authenticatedUser(req);
   const key = req.params.key as string;
 
   await db.insert(notificationReadsTable).values({
@@ -194,7 +195,7 @@ router.patch("/:key/read", async (req: Request, res: Response) => {
 
 // ── Mark all read ─────────────────────────────────────────────────────────────
 router.patch("/read-all", async (req: Request, res: Response) => {
-  const user = req.__gymproUser;
+  const user = authenticatedUser(req);
   const permissions = (user?.permissions ?? {}) as Record<string, boolean>;
   const isAdmin = user?.role === "admin";
 

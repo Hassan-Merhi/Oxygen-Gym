@@ -1,3 +1,4 @@
+import { authenticatedUser } from "../middlewares/auth";
 import { Router, type Request, type Response } from "express";
 import bcrypt from "bcryptjs";
 import { db, usersTable, defaultAdminPermissions, activityLogsTable } from "@workspace/db";
@@ -168,7 +169,7 @@ router.post("/login", async (req: Request, res: Response) => {
 });
 
 router.post("/logout", requireAuth(), async (req: Request, res: Response) => {
-  const user = req.__gymproUser;
+  const user = authenticatedUser(req);
   await db.insert(activityLogsTable).values({
     userId: user?.id,
     userName: user?.name ?? "Unknown",
@@ -181,7 +182,7 @@ router.post("/logout", requireAuth(), async (req: Request, res: Response) => {
 });
 
 router.get("/me", requireAuth(), async (req: Request, res: Response) => {
-  const user = req.__gymproUser;
+  const user = authenticatedUser(req);
   if (!user) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -190,7 +191,7 @@ router.get("/me", requireAuth(), async (req: Request, res: Response) => {
 });
 
 router.post("/change-password", requireAuth(), async (req: Request, res: Response) => {
-  const user = req.__gymproUser;
+  const user = authenticatedUser(req);
   if (!user) {
     res.status(401).json({ error: "Unauthorized" });
     return;
