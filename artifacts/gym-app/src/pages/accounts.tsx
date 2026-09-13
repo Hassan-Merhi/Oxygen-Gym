@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useGetMe } from "@/hooks/use-me";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -22,18 +22,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Plus,
   ArrowLeft,
   TrendingUp,
   TrendingDown,
-  Printer,
   Trash2,
   Wallet,
   AlertCircle,
@@ -43,13 +35,16 @@ import {
   Scale,
   ChevronRight,
   FileText,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useFmtDate } from "@/lib/useFmtDate";
-import { Textarea } from "@/components/ui/textarea";
+
 
 type AccountType = "asset" | "liability" | "income" | "expense" | "equity";
+type PeriodFilter = "day" | "month" | "year" | "custom";
+type CurrencyView = "USD" | "CDF" | "BOTH";
 
 interface Account {
   id: number;
@@ -82,59 +77,179 @@ interface Statement {
   rows: StatementRow[];
 }
 
-const TYPE_CONF: Record<AccountType, {
-  label: string;
-  plural: string;
-  icon: React.ReactNode;
-  iconBg: string;
-  iconColor: string;
-  accent: string;
-  badge: string;
-  pillActive: string;
-  sectionBorder: string;
-}> = {
-  asset:     { label: "Asset",     plural: "Assets",      icon: <Wallet className="w-4 h-4" />,       iconBg: "bg-blue-500/10 dark:bg-blue-500/20",      iconColor: "text-blue-600 dark:text-blue-400",    accent: "ring-blue-200 dark:ring-blue-800",     badge: "bg-blue-100 text-blue-700 border border-blue-200/60 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700/40",   pillActive: "bg-blue-600 text-white shadow-sm",    sectionBorder: "border-blue-200/60 dark:border-blue-800/60" },
-  income:    { label: "Income",    plural: "Income",      icon: <TrendingUp className="w-4 h-4" />,    iconBg: "bg-emerald-500/10 dark:bg-emerald-500/20", iconColor: "text-emerald-600 dark:text-emerald-400", accent: "ring-emerald-200 dark:ring-emerald-800", badge: "bg-emerald-100 text-emerald-700 border border-emerald-200/60 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700/40", pillActive: "bg-emerald-600 text-white shadow-sm", sectionBorder: "border-emerald-200/60 dark:border-emerald-800/60" },
-  expense:   { label: "Expense",   plural: "Expenses",    icon: <Receipt className="w-4 h-4" />,       iconBg: "bg-rose-500/10 dark:bg-rose-500/20",       iconColor: "text-rose-600 dark:text-rose-400",    accent: "ring-rose-200 dark:ring-rose-800",     badge: "bg-rose-100 text-rose-700 border border-rose-200/60 dark:bg-rose-900/40 dark:text-rose-300 dark:border-rose-700/40",     pillActive: "bg-rose-600 text-white shadow-sm",    sectionBorder: "border-rose-200/60 dark:border-rose-800/60" },
-  liability: { label: "Liability", plural: "Liabilities", icon: <AlertCircle className="w-4 h-4" />,  iconBg: "bg-amber-500/10 dark:bg-amber-500/20",     iconColor: "text-amber-600 dark:text-amber-400",  accent: "ring-amber-200 dark:ring-amber-800",   badge: "bg-amber-100 text-amber-700 border border-amber-200/60 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/40",  pillActive: "bg-amber-600 text-white shadow-sm",   sectionBorder: "border-amber-200/60 dark:border-amber-800/60" },
-  equity:    { label: "Equity",    plural: "Equity",      icon: <Scale className="w-4 h-4" />,         iconBg: "bg-violet-500/10 dark:bg-violet-500/20",   iconColor: "text-violet-600 dark:text-violet-400", accent: "ring-violet-200 dark:ring-violet-800", badge: "bg-violet-100 text-violet-700 border border-violet-200/60 dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-700/40", pillActive: "bg-violet-600 text-white shadow-sm",  sectionBorder: "border-violet-200/60 dark:border-violet-800/60" },
-};
+interface EffectiveRow extends StatementRow {
+  debitUsd: number;
+  creditUsd: number;
+  debitCdf: number;
+  creditCdf: number;
+}
+
+interface DisplayRow extends EffectiveRow {
+  inAmount: number;
+  outAmount: number;
+  balance: number;
+}
 
 const TYPE_ORDER: AccountType[] = ["asset", "income", "expense", "liability", "equity"];
 
-const ICON_COLOR: Record<AccountType, string> = {
-  asset: "text-blue-500", income: "text-emerald-500",
-  expense: "text-rose-500", liability: "text-amber-500", equity: "text-violet-500",
+const TYPE_CONF: Record<AccountType, {
+  label: string;
+  plural: string;
+  icon: React.ElementType;
+  iconBg: string;
+  iconColor: string;
+  badge: string;
+}> = {
+  asset: {
+    label: "Asset",
+    plural: "Assets",
+    icon: Wallet,
+    iconBg: "bg-blue-500/10",
+    iconColor: "text-blue-500",
+    badge: "bg-blue-500/10 text-blue-500",
+  },
+  income: {
+    label: "Income",
+    plural: "Income",
+    icon: TrendingUp,
+    iconBg: "bg-emerald-500/10",
+    iconColor: "text-emerald-500",
+    badge: "bg-emerald-500/10 text-emerald-500",
+  },
+  expense: {
+    label: "Expense",
+    plural: "Expenses",
+    icon: Receipt,
+    iconBg: "bg-rose-500/10",
+    iconColor: "text-rose-500",
+    badge: "bg-rose-500/10 text-rose-500",
+  },
+  liability: {
+    label: "Liability",
+    plural: "Liabilities",
+    icon: AlertCircle,
+    iconBg: "bg-amber-500/10",
+    iconColor: "text-amber-500",
+    badge: "bg-amber-500/10 text-amber-500",
+  },
+  equity: {
+    label: "Equity",
+    plural: "Equity",
+    icon: Scale,
+    iconBg: "bg-violet-500/10",
+    iconColor: "text-violet-500",
+    badge: "bg-violet-500/10 text-violet-500",
+  },
 };
 
-function fmt(n: number) {
-  return n % 1 === 0 ? `$${n.toLocaleString()}` : `$${n.toFixed(2)}`;
+const numberFormat = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+function formatMoney(value: number, currency: "USD" | "CDF") {
+  const sign = value < 0 ? "−" : "";
+  const formatted = numberFormat.format(Math.abs(value));
+  return currency === "CDF" ? `${sign}FC ${formatted}` : `${sign}$${formatted}`;
 }
 
-function voucherTypeLabel(type: string) {
-  const map: Record<string, string> = {
-    cash_receipt: "Cash Receipt",
-    customer_payment: "Payment In",
-    cash_payment: "Cash Payment",
-    expense: "Expense",
-  };
-  return map[type] ?? type;
+function localDateInput(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-function sourceTypeLabel(sourceType: string) {
-  const map: Record<string, string> = {
-    voucher: "Voucher",
-    payment: "Payment",
-    sale: "Sale",
-    membership: "Membership",
-    expense: "Expense",
+function getPresetRange(period: Exclude<PeriodFilter, "custom">) {
+  const now = new Date();
+  if (period === "day") {
+    const today = localDateInput(now);
+    return { from: today, to: today };
+  }
+  if (period === "month") {
+    return {
+      from: localDateInput(new Date(now.getFullYear(), now.getMonth(), 1)),
+      to: localDateInput(now),
+    };
+  }
+  return {
+    from: localDateInput(new Date(now.getFullYear(), 0, 1)),
+    to: localDateInput(now),
   };
-  return map[sourceType] ?? sourceType;
+}
+
+function logicalSourceType(sourceType: string) {
+  return sourceType.replace(/_(correction|reversal)$/i, "");
+}
+
+function collapseAccountingRows(rows: StatementRow[]): EffectiveRow[] {
+  const groups = new Map<string, StatementRow[]>();
+
+  for (const row of rows) {
+    const base = logicalSourceType(row.sourceType || "entry");
+    const key = row.sourceId != null ? `${base}:${row.sourceId}` : `row:${row.id}`;
+    const group = groups.get(key) ?? [];
+    group.push(row);
+    groups.set(key, group);
+  }
+
+  const EPSILON = 0.000001;
+  const effective: EffectiveRow[] = [];
+
+  for (const group of groups.values()) {
+    const ordered = [...group].sort((a, b) => {
+      const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+      return dateDiff || a.id - b.id;
+    });
+
+    const latest = ordered[ordered.length - 1];
+    const original = ordered.find((row) => !/_(correction|reversal)$/i.test(row.sourceType));
+
+    const netUsd = ordered.reduce(
+      (sum, row) => sum + Number(row.debitUsd ?? 0) - Number(row.creditUsd ?? 0),
+      0,
+    );
+    const netCdf = ordered.reduce(
+      (sum, row) => sum + Number(row.debitCdf ?? 0) - Number(row.creditCdf ?? 0),
+      0,
+    );
+
+    if (Math.abs(netUsd) < EPSILON && Math.abs(netCdf) < EPSILON) continue;
+
+    const debitSide = Math.abs(netUsd) >= EPSILON ? netUsd > 0 : netCdf > 0;
+    effective.push({
+      ...latest,
+      date: original?.date ?? latest.date,
+      description: original?.description || latest.description,
+      currency: latest.currency,
+      amount: latest.amount,
+      exchangeRate: latest.exchangeRate,
+      debitUsd: debitSide ? Math.abs(netUsd) : 0,
+      creditUsd: debitSide ? 0 : Math.abs(netUsd),
+      debitCdf: debitSide ? Math.abs(netCdf) : 0,
+      creditCdf: debitSide ? 0 : Math.abs(netCdf),
+      runningBalance: 0,
+    });
+  }
+
+  return effective.sort((a, b) => {
+    const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+    return dateDiff || a.id - b.id;
+  });
+}
+
+function withinDateRange(row: EffectiveRow, from: string, to: string) {
+  const date = new Date(row.date);
+  if (Number.isNaN(date.getTime())) return false;
+  if (from && date < new Date(`${from}T00:00:00`)) return false;
+  if (to && date > new Date(`${to}T23:59:59.999`)) return false;
+  return true;
 }
 
 async function apiFetch(path: string, options?: RequestInit) {
   const token = localStorage.getItem("gym_token");
-  return fetch(path, {
+  const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
+  return fetch(`${apiBase}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -152,12 +267,15 @@ export default function AccountsPage() {
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [selected, setSelected] = useState<Account | null>(null);
   const [statement, setStatement] = useState<Statement | null>(null);
   const [stmtLoading, setStmtLoading] = useState(false);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+
+  const [period, setPeriod] = useState<PeriodFilter>("month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [currencyView, setCurrencyView] = useState<CurrencyView>("BOTH");
 
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: "", type: "asset" as AccountType, description: "" });
@@ -165,280 +283,313 @@ export default function AccountsPage() {
   const [deleteAccountId, setDeleteAccountId] = useState<number | null>(null);
   const [filterType, setFilterType] = useState<AccountType | "all">("all");
 
-  async function loadAccounts() {
-    setLoading(true);
+  const preset = period === "custom" ? null : getPresetRange(period);
+  const dateFrom = period === "custom" ? customFrom : preset?.from ?? "";
+  const dateTo = period === "custom" ? customTo : preset?.to ?? "";
+
+  async function loadAccounts(silent = false) {
+    if (!silent) setLoading(true);
     try {
-      const r = await apiFetch("/api/accounts/chart");
-      if (r.ok) setAccounts(await r.json());
+      const response = await apiFetch("/api/accounts/chart");
+      if (!response.ok) return;
+      const next: Account[] = await response.json();
+      setAccounts(next);
+      setSelected((current) => current ? (next.find((account) => account.id === current.id) ?? current) : current);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
-  async function loadStatement(acc: Account) {
-    setStmtLoading(true);
-    setStatement(null);
+  async function loadStatement(account: Account, silent = false) {
+    if (!silent) setStmtLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (dateFrom) params.set("dateFrom", dateFrom);
-      if (dateTo) params.set("dateTo", dateTo);
-      const r = await apiFetch(`/api/accounts/chart/${acc.id}/statement?${params}`);
-      if (r.ok) setStatement(await r.json());
+      // Always fetch the complete ledger before collapsing corrections. Filtering
+      // corrections server-side by date can separate a reversal from its original
+      // row and produce a false balance.
+      const response = await apiFetch(`/api/accounts/chart/${account.id}/statement`);
+      if (!response.ok) return;
+      setStatement(await response.json());
+      setLastRefresh(new Date());
     } finally {
-      setStmtLoading(false);
+      if (!silent) setStmtLoading(false);
     }
   }
 
-  useEffect(() => { if (canView !== undefined) loadAccounts(); }, [canView]);
-  useEffect(() => { if (selected) loadStatement(selected); }, [selected, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (canView === undefined) return;
+    void loadAccounts();
+    const timer = window.setInterval(() => void loadAccounts(true), 60_000);
+    return () => window.clearInterval(timer);
+  }, [canView]);
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
+  useEffect(() => {
+    if (!selected) return;
+    void loadStatement(selected);
+
+    const refresh = () => void loadStatement(selected, true);
+    const timer = window.setInterval(refresh, 20_000);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function changePeriod(next: PeriodFilter) {
+    if (next === "custom" && !customFrom && !customTo) {
+      const month = getPresetRange("month");
+      setCustomFrom(month.from);
+      setCustomTo(month.to);
+    }
+    setPeriod(next);
+  }
+
+  async function handleCreate(event: React.FormEvent) {
+    event.preventDefault();
     setSaving(true);
     try {
-      const r = await apiFetch("/api/accounts/chart", {
+      const response = await apiFetch("/api/accounts/chart", {
         method: "POST",
         body: JSON.stringify(form),
       });
-      if (!r.ok) {
-        const err = await r.json();
-        toast({ title: err.error ?? "Error", variant: "destructive" });
+      if (!response.ok) {
+        const error = await response.json();
+        toast({ title: error.error ?? "Unable to create account", variant: "destructive" });
         return;
       }
-      const created: Account = await r.json();
-      setAccounts((prev) =>
-        [...prev, created].sort(
-          (a, b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type) || a.name.localeCompare(b.name),
-        ),
-      );
       setShowCreate(false);
       setForm({ name: "", type: "asset", description: "" });
+      await loadAccounts(true);
       toast({ title: "Account created" });
     } finally {
       setSaving(false);
     }
   }
 
-  function handleDelete(id: number, e: React.MouseEvent) {
-    e.stopPropagation();
-    setDeleteAccountId(id);
-  }
-
   async function doDeleteAccount() {
     if (!deleteAccountId) return;
-    const r = await apiFetch(`/api/accounts/chart/${deleteAccountId}`, { method: "DELETE" });
+    const id = deleteAccountId;
+    const response = await apiFetch(`/api/accounts/chart/${id}`, { method: "DELETE" });
     setDeleteAccountId(null);
-    if (!r.ok) { toast({ title: "Cannot delete account with transactions", variant: "destructive" }); return; }
-    setAccounts((prev) => prev.filter((a) => a.id !== deleteAccountId));
-    if (selected?.id === deleteAccountId) setSelected(null);
-    toast({ title: "Account deleted" });
+    if (!response.ok) {
+      toast({ title: "Cannot delete an account with transactions", variant: "destructive" });
+      return;
+    }
+    setAccounts((current) => current.filter((account) => account.id !== id));
+    if (selected?.id === id) setSelected(null);
+    toast({ title: "Account removed" });
   }
 
   if (!canView) {
     return (
-      <div className="flex flex-col items-center justify-center h-[60vh] gap-3">
-        <AlertCircle className="w-10 h-10 text-muted-foreground" />
+      <div className="flex h-[60vh] flex-col items-center justify-center gap-3">
+        <AlertCircle className="h-10 w-10 text-muted-foreground" />
         <p className="text-muted-foreground">You don't have permission to view accounts.</p>
       </div>
     );
   }
 
-  // ── Statement view ───────────────────────────────────────────────────────────
   if (selected) {
     const conf = TYPE_CONF[selected.type];
-    const rows = statement?.rows ?? [];
+    const Icon = conf.icon;
     const isDebitNormal = selected.type === "asset" || selected.type === "expense";
-    const totalIn  = rows.reduce((s, r) => s + (isDebitNormal ? (r.debitUsd ?? 0) : (r.creditUsd ?? 0)), 0);
-    const totalOut = rows.reduce((s, r) => s + (isDebitNormal ? (r.creditUsd ?? 0) : (r.debitUsd ?? 0)), 0);
-    const balance  = rows.at(-1)?.runningBalance ?? 0;
+    const effectiveRows = collapseAccountingRows(statement?.rows ?? []);
+
+    const periodRows = effectiveRows.filter((row) => withinDateRange(row, dateFrom, dateTo));
+    const nativeRows = periodRows.filter((row) => {
+      const nativeCurrency = (row.currency ?? "USD").toUpperCase();
+      if (currencyView === "USD") return nativeCurrency === "USD";
+      if (currencyView === "CDF") return nativeCurrency === "CDF";
+      return true;
+    });
+
+    const displayCurrency: "USD" | "CDF" = currencyView === "CDF" ? "CDF" : "USD";
+    let runningBalance = 0;
+    const rows: DisplayRow[] = nativeRows.map((row) => {
+      const debit = displayCurrency === "CDF" ? row.debitCdf : row.debitUsd;
+      const credit = displayCurrency === "CDF" ? row.creditCdf : row.creditUsd;
+      const inAmount = isDebitNormal ? debit : credit;
+      const outAmount = isDebitNormal ? credit : debit;
+      runningBalance += isDebitNormal ? debit - credit : credit - debit;
+      return { ...row, inAmount, outAmount, balance: runningBalance };
+    });
+
+    const totalIn = rows.reduce((sum, row) => sum + row.inAmount, 0);
+    const totalOut = rows.reduce((sum, row) => sum + row.outAmount, 0);
+    const balance = rows.at(-1)?.balance ?? 0;
 
     return (
-      <div className="space-y-6 max-w-5xl">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
+      <div className="mx-auto max-w-6xl space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <Button variant="outline" size="sm" onClick={() => setSelected(null)} className="h-9 gap-1.5">
               <ArrowLeft className="h-4 w-4" /> Back
             </Button>
-            <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", conf.iconBg)}>
-              <span className={ICON_COLOR[selected.type]}>{conf.icon}</span>
+            <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", conf.iconBg)}>
+              <Icon className={cn("h-5 w-5", conf.iconColor)} />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">{selected.name}</h1>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", conf.badge)}>
-                  {conf.label}
-                </span>
-                {selected.description && (
-                  <span className="text-xs text-muted-foreground">{selected.description}</span>
-                )}
+            <div className="min-w-0">
+              <h1 className="truncate text-2xl font-bold tracking-tight">{selected.name}</h1>
+              <div className="mt-0.5 flex items-center gap-2">
+                <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", conf.badge)}>{conf.label}</span>
+                {selected.description && <span className="truncate text-xs text-muted-foreground">{selected.description}</span>}
               </div>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => window.print()} className="h-9 gap-1.5">
-            <Printer className="h-4 w-4" /> Print
-          </Button>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <RefreshCw className={cn("h-3.5 w-3.5", stmtLoading && "animate-spin")} />
+            <span>Auto-refresh 20s{lastRefresh ? ` · ${lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}</span>
+          </div>
         </div>
 
-        {/* KPI cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="rounded-xl border border-border bg-card shadow-sm p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
-                <TrendingUp className="w-4 h-4 text-emerald-500" />
-              </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="flex min-h-[112px] flex-col justify-between rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-muted-foreground">Total In</span>
+              <TrendingUp className="h-4 w-4 text-emerald-500" />
             </div>
-            <p className="text-2xl font-bold text-emerald-600 tabular-nums">{fmt(totalIn)}</p>
+            <p className="mt-3 text-right text-2xl font-bold tabular-nums text-emerald-500">{formatMoney(totalIn, displayCurrency)}</p>
           </div>
-          <div className="rounded-xl border border-border bg-card shadow-sm p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center">
-                <TrendingDown className="w-4 h-4 text-rose-500" />
-              </div>
+          <div className="flex min-h-[112px] flex-col justify-between rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-muted-foreground">Total Out</span>
+              <TrendingDown className="h-4 w-4 text-rose-500" />
             </div>
-            <p className="text-2xl font-bold text-rose-600 tabular-nums">{fmt(totalOut)}</p>
+            <p className="mt-3 text-right text-2xl font-bold tabular-nums text-rose-500">{formatMoney(totalOut, displayCurrency)}</p>
           </div>
-          <div className="rounded-xl border border-border bg-card shadow-sm p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", balance >= 0 ? "bg-blue-50" : "bg-amber-50")}>
-                <BarChart3 className={cn("w-4 h-4", balance >= 0 ? "text-blue-500" : "text-amber-500")} />
-              </div>
+          <div className="flex min-h-[112px] flex-col justify-between rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-muted-foreground">Balance</span>
+              <BarChart3 className="h-4 w-4 text-blue-500" />
             </div>
-            <p className={cn("text-2xl font-bold tabular-nums", balance >= 0 ? "text-blue-600" : "text-amber-600")}>
-              {fmt(balance)}
+            <p className={cn("mt-3 text-right text-2xl font-bold tabular-nums", balance < 0 ? "text-rose-500" : "text-blue-500")}>
+              {formatMoney(balance, displayCurrency)}
             </p>
           </div>
         </div>
 
-        {/* Date filter bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <div className="flex items-center gap-2">
-            <Label className="text-sm text-muted-foreground whitespace-nowrap w-8">From</Label>
-            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="flex-1 sm:w-36 sm:flex-none h-9 text-sm" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-sm text-muted-foreground whitespace-nowrap w-8">To</Label>
-            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="flex-1 sm:w-36 sm:flex-none h-9 text-sm" />
-          </div>
-          {(dateFrom || dateTo) && (
-            <Button variant="ghost" size="sm" onClick={() => { setDateFrom(""); setDateTo(""); }}>
-              Clear
-            </Button>
-          )}
-        </div>
-
-        {/* Mobile statement cards */}
-        <div className="md:hidden rounded-xl border border-border bg-card shadow-sm overflow-hidden divide-y divide-border/50">
-          {stmtLoading ? (
-            <div className="p-6 text-center text-muted-foreground text-sm">Loading…</div>
-          ) : rows.length === 0 ? (
-            <div className="p-10 text-center">
-              <FileText className="w-9 h-9 mx-auto text-muted-foreground/30 mb-2" />
-              <p className="text-sm text-muted-foreground">No transactions yet</p>
+        <div className="rounded-xl border border-border bg-card p-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-1 rounded-lg bg-muted/50 p-1">
+              {(["day", "month", "year", "custom"] as PeriodFilter[]).map((value) => (
+                <Button
+                  key={value}
+                  variant={period === value ? "default" : "ghost"}
+                  size="sm"
+                  className="h-8 capitalize"
+                  onClick={() => changePeriod(value)}
+                >
+                  {value}
+                </Button>
+              ))}
             </div>
-          ) : rows.map((row) => {
-            const inAmt  = isDebitNormal ? (row.debitUsd ?? 0) : (row.creditUsd ?? 0);
-            const outAmt = isDebitNormal ? (row.creditUsd ?? 0) : (row.debitUsd ?? 0);
-            const incoming = inAmt > 0;
-            const amt = incoming ? inAmt : outAmt;
-            return (
-              <div key={row.id} className="px-3 py-3 flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-muted-foreground">{fmtDate(row.date)}</span>
-                  </div>
-                  {row.description && <p className="text-xs text-muted-foreground mt-0.5 truncate">{row.description}</p>}
-                  {row.party && <p className="text-xs text-muted-foreground/70 truncate">{row.party}</p>}
-                </div>
-                <div className="text-right shrink-0">
-                  <p className={`font-bold tabular-nums text-sm ${incoming ? "text-emerald-600" : "text-rose-600"}`}>
-                    {incoming ? "" : "−"}{fmt(amt)}
-                  </p>
-                  <p className={cn("text-xs tabular-nums", row.runningBalance >= 0 ? "text-muted-foreground" : "text-rose-600")}>
-                    Bal: {fmt(row.runningBalance)}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        {/* Mobile totals footer */}
-        {rows.length > 0 && !stmtLoading && (
-          <div className="md:hidden flex items-center justify-between gap-3 px-3 py-2.5 bg-muted/30 rounded-lg border border-border text-xs font-medium">
-            <span className="text-muted-foreground">{rows.length} txn</span>
-            <span className="text-emerald-600">In: {fmt(totalIn)}</span>
-            <span className="text-rose-600">Out: {fmt(totalOut)}</span>
-            <span className={cn("font-bold", balance >= 0 ? "text-blue-600" : "text-amber-600")}>Bal: {fmt(balance)}</span>
-          </div>
-        )}
 
-        {/* Desktop statement table */}
-        <div className="hidden md:block rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-          <div className="overflow-x-auto min-w-0">
-            <table className="w-full text-sm">
+            <div className="flex flex-wrap items-center gap-1 rounded-lg bg-muted/50 p-1">
+              <Button
+                variant={currencyView === "USD" ? "default" : "ghost"}
+                size="sm"
+                className="h-8 min-w-16"
+                onClick={() => setCurrencyView("USD")}
+              >
+                USD
+              </Button>
+              <Button
+                variant={currencyView === "CDF" ? "default" : "ghost"}
+                size="sm"
+                className="h-8 min-w-20"
+                onClick={() => setCurrencyView("CDF")}
+              >
+                CFA / FC
+              </Button>
+              <Button
+                variant={currencyView === "BOTH" ? "default" : "ghost"}
+                size="sm"
+                className="h-8 min-w-24"
+                onClick={() => setCurrencyView("BOTH")}
+              >
+                Both (USD)
+              </Button>
+            </div>
+          </div>
+
+          {period === "custom" && (
+            <div className="mt-3 flex flex-col gap-2 border-t border-border/60 pt-3 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2">
+                <Label className="w-10 text-xs text-muted-foreground">From</Label>
+                <Input type="date" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} className="h-9 sm:w-40" />
+              </div>
+              <div className="flex items-center gap-2">
+                <Label className="w-10 text-xs text-muted-foreground">To</Label>
+                <Input type="date" value={customTo} onChange={(event) => setCustomTo(event.target.value)} className="h-9 sm:w-40" />
+              </div>
+            </div>
+          )}
+
+          <p className="mt-2 text-xs text-muted-foreground">
+            {currencyView === "USD" && "Showing only transactions originally paid in USD."}
+            {currencyView === "CDF" && "Showing only transactions originally paid in FC/CDF, with no USD conversion."}
+            {currencyView === "BOTH" && "Showing USD and FC/CDF transactions together in USD using each transaction's saved exchange rate."}
+          </p>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <div className="overflow-x-auto">
+            <table className="w-full table-fixed text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Date</th>
-                  <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Description</th>
-                  <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Party</th>
-                  <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">In</th>
-                  <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Out</th>
-                  <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">Balance</th>
+                  <th className="w-[150px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Description</th>
+                  <th className="w-[150px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">In</th>
+                  <th className="w-[150px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Out</th>
+                  <th className="w-[170px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Balance</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
-                {stmtLoading && (
-                  <tr><td colSpan={6} className="text-center py-14 text-muted-foreground">Loading…</td></tr>
+                {stmtLoading && !statement && (
+                  <tr><td colSpan={5} className="py-16 text-center text-muted-foreground">Loading account…</td></tr>
                 )}
                 {!stmtLoading && rows.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-center py-20">
-                      <FileText className="w-9 h-9 mx-auto text-muted-foreground/30 mb-2" />
-                      <p className="text-muted-foreground font-medium">No transactions yet</p>
-                      <p className="text-xs text-muted-foreground/60 mt-0.5">Vouchers linked to this account will appear here</p>
+                    <td colSpan={5} className="py-16 text-center">
+                      <FileText className="mx-auto mb-2 h-8 w-8 text-muted-foreground/30" />
+                      <p className="font-medium text-muted-foreground">No transactions for this view</p>
+                      <p className="mt-1 text-xs text-muted-foreground/60">Try another period or currency.</p>
                     </td>
                   </tr>
                 )}
-                {!stmtLoading && rows.map((row) => {
-                  const inAmt  = isDebitNormal ? (row.debitUsd ?? 0) : (row.creditUsd ?? 0);
-                  const outAmt = isDebitNormal ? (row.creditUsd ?? 0) : (row.debitUsd ?? 0);
-                  const incoming = inAmt > 0;
-                  return (
-                    <tr key={row.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-5 py-3.5 whitespace-nowrap tabular-nums text-sm font-medium">{fmtDate(row.date)}</td>
-                      <td className="px-5 py-3.5 max-w-[200px]">
-                        <p className="text-sm truncate">{row.description || "—"}</p>
-                      </td>
-                      <td className="px-5 py-3.5 text-sm text-muted-foreground whitespace-nowrap">
-                        {row.party || "—"}
-                      </td>
-                      <td className="px-5 py-3.5 text-right tabular-nums">
-                        {inAmt > 0 ? <span className="font-semibold text-emerald-600">{fmt(inAmt)}</span> : <span className="text-muted-foreground/40">—</span>}
-                      </td>
-                      <td className="px-5 py-3.5 text-right tabular-nums">
-                        {outAmt > 0 ? <span className="font-semibold text-rose-600">{fmt(outAmt)}</span> : <span className="text-muted-foreground/40">—</span>}
-                      </td>
-                      <td className={cn(
-                        "px-5 py-3.5 text-right tabular-nums font-bold text-sm",
-                        row.runningBalance >= 0 ? "text-foreground" : "text-rose-600",
-                      )}>
-                        {fmt(row.runningBalance)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {rows.map((row) => (
+                  <tr key={`${row.sourceType}-${row.sourceId ?? row.id}-${row.id}`} className="transition-colors hover:bg-muted/20">
+                    <td className="whitespace-nowrap px-4 py-3.5 align-middle font-medium tabular-nums">{fmtDate(row.date)}</td>
+                    <td className="px-4 py-3.5 align-middle">
+                      <p className="truncate" title={row.description || ""}>{row.description || "—"}</p>
+                    </td>
+                    <td className="px-4 py-3.5 text-right align-middle tabular-nums">
+                      {row.inAmount > 0 ? <span className="font-semibold text-emerald-500">{formatMoney(row.inAmount, displayCurrency)}</span> : <span className="text-muted-foreground/30">—</span>}
+                    </td>
+                    <td className="px-4 py-3.5 text-right align-middle tabular-nums">
+                      {row.outAmount > 0 ? <span className="font-semibold text-rose-500">{formatMoney(row.outAmount, displayCurrency)}</span> : <span className="text-muted-foreground/30">—</span>}
+                    </td>
+                    <td className={cn("px-4 py-3.5 text-right align-middle font-semibold tabular-nums", row.balance < 0 && "text-rose-500")}>
+                      {formatMoney(row.balance, displayCurrency)}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
+
           {rows.length > 0 && (
-            <div className="px-5 py-3 border-t border-border/60 bg-muted/20 flex items-center justify-end gap-8 text-sm">
-              <span className="text-muted-foreground">{rows.length} transactions</span>
-              <span className="text-emerald-600 font-semibold">In: {fmt(totalIn)}</span>
-              <span className="text-rose-600 font-semibold">Out: {fmt(totalOut)}</span>
-              <span className={cn("font-bold", balance >= 0 ? "text-blue-600" : "text-amber-600")}>Balance: {fmt(balance)}</span>
+            <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-2 border-t border-border bg-muted/20 px-4 py-3 text-sm">
+              <span className="mr-auto text-muted-foreground">{rows.length.toLocaleString()} transactions</span>
+              <span className="font-medium text-emerald-500">In {formatMoney(totalIn, displayCurrency)}</span>
+              <span className="font-medium text-rose-500">Out {formatMoney(totalOut, displayCurrency)}</span>
+              <span className="font-bold">Balance {formatMoney(balance, displayCurrency)}</span>
             </div>
           )}
         </div>
@@ -446,218 +597,146 @@ export default function AccountsPage() {
     );
   }
 
-  // ── Account list ─────────────────────────────────────────────────────────────
-  const grouped = TYPE_ORDER.reduce((acc, type) => {
-    acc[type] = accounts.filter((a) => a.type === type && a.isActive);
-    return acc;
-  }, {} as Record<AccountType, Account[]>);
-
-  const totalActive = accounts.filter((a) => a.isActive).length;
+  const activeAccounts = accounts.filter((account) => account.isActive);
+  const visibleAccounts = activeAccounts.filter((account) => filterType === "all" || account.type === filterType);
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="mx-auto max-w-5xl space-y-5">
       <PageHeader
         icon={BookOpen}
-        iconClass="bg-indigo-500/10 text-indigo-600"
-        title="Chart of Accounts"
-        subtitle={`${totalActive} ${totalActive === 1 ? "account" : "accounts"} · click any to view its ledger`}
+        iconClass="bg-indigo-500/10 text-indigo-500"
+        title="Accounts"
+        subtitle="Income, expenses, cash and other account ledgers"
         actions={canManage ? (
           <Button onClick={() => setShowCreate(true)} className="gap-2">
-            <Plus className="w-4 h-4" /> New Account
+            <Plus className="h-4 w-4" /> New Account
           </Button>
         ) : undefined}
       />
 
-      {/* Type filter pills */}
-      {!loading && totalActive > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setFilterType("all")}
-            className={cn(
-              "inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium transition-all",
-              filterType === "all"
-                ? "bg-foreground text-background shadow-sm"
-                : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60"
-            )}
+      <div className="flex flex-wrap gap-2">
+        <Button variant={filterType === "all" ? "default" : "outline"} size="sm" onClick={() => setFilterType("all")}>All</Button>
+        {TYPE_ORDER.map((type) => (
+          <Button
+            key={type}
+            variant={filterType === type ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilterType(type)}
           >
-            All · {totalActive}
-          </button>
-          {TYPE_ORDER.map((type) => {
-            const count = grouped[type]?.length ?? 0;
-            if (!count) return null;
-            const conf = TYPE_CONF[type];
-            const active = filterType === type;
-            return (
-              <button
-                key={type}
-                onClick={() => setFilterType(active ? "all" : type)}
-                className={cn(
-                  "inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium transition-all",
-                  active
-                    ? conf.pillActive
-                    : cn(conf.badge, "hover:opacity-90 hover:shadow-sm"),
-                )}
-              >
-                <span className={active ? "opacity-90" : ICON_COLOR[type]}>{conf.icon}</span>
-                {count} {conf.plural}
-              </button>
-            );
-          })}
-        </div>
-      )}
+            {TYPE_CONF[type].plural}
+          </Button>
+        ))}
+      </div>
 
-      {loading && (
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 rounded-xl bg-muted/40 animate-pulse" />
-          ))}
-        </div>
-      )}
-
-      {/* Grouped accounts */}
-      {!loading && TYPE_ORDER.map((type) => {
-        const items = grouped[type];
-        if (!items || items.length === 0) return null;
-        if (filterType !== "all" && filterType !== type) return null;
-        const conf = TYPE_CONF[type];
-        return (
-          <div key={type} className="space-y-3">
-            {/* Section header */}
-            <div className="flex items-center gap-3">
-              <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0", conf.iconBg)}>
-                <span className={conf.iconColor}>{conf.icon}</span>
-              </div>
-              <h3 className={cn("text-sm font-semibold tracking-wide", conf.iconColor)}>{conf.plural}</h3>
-              <div className="flex-1 h-px bg-border/50" />
-              <span className={cn("text-xs px-2 py-0.5 rounded-full font-semibold", conf.badge)}>{items.length}</span>
-            </div>
-
-            {/* Account cards */}
-            <div className="grid gap-2">
-              {items.map((acc) => (
-                <div
-                  key={acc.id}
-                  className="group relative flex items-center gap-3 px-4 py-3.5 rounded-xl border border-border/70 bg-card hover:border-border hover:shadow-md hover:shadow-black/5 dark:hover:shadow-black/20 transition-all cursor-pointer"
-                  onClick={() => setSelected(acc)}
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        {loading ? (
+          <div className="py-16 text-center text-sm text-muted-foreground">Loading accounts…</div>
+        ) : visibleAccounts.length === 0 ? (
+          <div className="py-16 text-center text-sm text-muted-foreground">No accounts in this category.</div>
+        ) : (
+          <div className="divide-y divide-border/50">
+            {visibleAccounts.map((account) => {
+              const conf = TYPE_CONF[account.type];
+              const Icon = conf.icon;
+              return (
+                <button
+                  key={account.id}
+                  type="button"
+                  onClick={() => setSelected(account)}
+                  className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-muted/30"
                 >
-                  {/* Icon */}
-                  <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105", conf.iconBg)}>
-                    <span className={conf.iconColor}>{conf.icon}</span>
+                  <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", conf.iconBg)}>
+                    <Icon className={cn("h-4 w-4", conf.iconColor)} />
                   </div>
-
-                  {/* Name + description */}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-foreground leading-tight">{acc.name}</p>
-                    {acc.description && (
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">{acc.description}</p>
-                    )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate font-semibold">{account.name}</p>
+                      <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", conf.badge)}>{conf.label}</span>
+                    </div>
+                    {account.description && <p className="mt-0.5 truncate text-xs text-muted-foreground">{account.description}</p>}
                   </div>
-
-                  {/* Ledger link — appears on hover */}
-                  <div className={cn(
-                    "flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg transition-all",
-                    "opacity-0 group-hover:opacity-100 bg-muted text-muted-foreground group-hover:text-foreground",
-                  )}>
-                    Ledger <ChevronRight className="w-3.5 h-3.5" />
-                  </div>
-
-                  {/* Delete button */}
                   {canManage && (
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10 flex-shrink-0"
-                      onClick={(e) => handleDelete(acc.id, e)}
+                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-rose-500"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setDeleteAccountId(account.id);
+                      }}
+                      aria-label={`Delete ${account.name}`}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   )}
-                </div>
-              ))}
-            </div>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </button>
+              );
+            })}
           </div>
-        );
-      })}
-
-      {!loading && totalActive === 0 && (
-        <div className="flex flex-col items-center justify-center py-24 gap-3">
-          <div className="w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center">
-            <BookOpen className="w-8 h-8 text-muted-foreground/40" />
-          </div>
-          <p className="font-semibold text-muted-foreground">No accounts yet</p>
-          <p className="text-sm text-muted-foreground/60">Create your first account to get started</p>
-          {canManage && (
-            <Button onClick={() => setShowCreate(true)} className="mt-2 gap-2">
-              <Plus className="w-4 h-4" /> New Account
-            </Button>
-          )}
-        </div>
-      )}
-
-      {/* Create dialog */}
-      <AlertDialog open={!!deleteAccountId} onOpenChange={(o) => { if (!o) setDeleteAccountId(null); }}>
-        <AlertDialogContent className="w-[95vw] max-w-sm">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Account?</AlertDialogTitle>
-            <AlertDialogDescription>This cannot be undone. Accounts with existing transactions cannot be deleted.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={doDeleteAccount} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        )}
+      </div>
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>New Account</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-4 pt-1">
+          <form onSubmit={handleCreate} className="space-y-4">
             <div className="space-y-1.5">
-              <Label>Account Name <span className="text-destructive">*</span></Label>
+              <Label htmlFor="account-name">Name</Label>
               <Input
-                required
+                id="account-name"
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g. Cash on Hand"
+                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder="e.g. Cash, Rent Expense"
+                required
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Account Type <span className="text-destructive">*</span></Label>
-              <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v as AccountType })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {TYPE_ORDER.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      <div className="flex items-center gap-2">
-                        <span className={ICON_COLOR[type]}>{TYPE_CONF[type].icon}</span>
-                        {TYPE_CONF[type].label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="account-type">Type</Label>
+              <select
+                id="account-type"
+                value={form.type}
+                onChange={(event) => setForm((current) => ({ ...current, type: event.target.value as AccountType }))}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {TYPE_ORDER.map((type) => <option key={type} value={type}>{TYPE_CONF[type].label}</option>)}
+              </select>
             </div>
             <div className="space-y-1.5">
-              <Label>Description <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Textarea
+              <Label htmlFor="account-description">Description</Label>
+              <Input
+                id="account-description"
                 value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="Brief description of this account"
-                rows={2}
-                className="resize-none"
+                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Optional"
               />
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving}>{saving ? "Creating…" : "Create Account"}</Button>
+              <Button type="submit" disabled={saving || !form.name.trim()}>{saving ? "Creating…" : "Create"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteAccountId !== null} onOpenChange={(open) => !open && setDeleteAccountId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Accounts with transactions cannot be removed. Empty accounts will be deactivated.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void doDeleteAccount()} className="bg-rose-600 text-white hover:bg-rose-700">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
