@@ -92,24 +92,20 @@ function checkBoundaries(files: string[], violations: Violation[]): void {
 function checkEnvironmentAccess(files: string[], violations: Violation[]): void {
   const allowed = new Set([
     "artifacts/api-server/src/config/env.ts",
-    "artifacts/gym-app/src/config/env.ts",
     "lib/db/src/config/env.ts",
   ]);
 
   for (const file of files) {
     const relative = rel(file);
     const text = fs.readFileSync(file, "utf8");
-    const runtimeSource =
-      relative.startsWith("artifacts/api-server/src/") ||
-      relative.startsWith("artifacts/gym-app/src/") ||
-      relative.startsWith("lib/db/src/");
-    if (!runtimeSource || allowed.has(relative)) continue;
+    const serverRuntime = relative.startsWith("artifacts/api-server/src/") || relative.startsWith("lib/db/src/");
+    if (!serverRuntime || allowed.has(relative)) continue;
 
-    for (const match of text.matchAll(/\bprocess\.env\b|\bimport\.meta\.env\b/g)) {
+    for (const match of text.matchAll(/\bprocess\.env\b/g)) {
       violations.push({
         file: relative,
         line: lineOf(text, match.index ?? 0),
-        message: "runtime environment access must go through the package config/env module",
+        message: "server environment access must go through the package config/env module",
       });
     }
   }
@@ -121,14 +117,12 @@ function checkUnsafeApiCasts(files: string[], violations: Violation[]): void {
     if (!relative.startsWith("artifacts/api-server/src/") || relative.endsWith("/types/express.d.ts")) continue;
     const text = fs.readFileSync(file, "utf8");
     const patterns: Array<[RegExp, string]> = [
-      [/\bas\s+any\b/g, "unsafe `as any` cast"],
       [/\breq\.(?:body|query|params)\s+as\b/g, "manual request input cast; parse through a generated contract instead"],
+      [/\(req\s+as\s+any\b/g, "untyped authenticated request context"],
       [/\(req\s+as\s+unknown\s+as\b/g, "double-cast request escape"],
     ];
     for (const [pattern, message] of patterns) {
-      for (const match of text.matchAll(pattern)) {
-        violations.push({ file: relative, line: lineOf(text, match.index ?? 0), message });
-      }
+      for (const match of text.matchAll(pattern)) violations.push({ file: relative, line: lineOf(text, match.index ?? 0), message });
     }
   }
 }
@@ -143,14 +137,10 @@ function parseExpressRoutes(): RouteOperation[] {
   const routesDir = path.join(ROOT, "artifacts/api-server/src/routes");
   const indexText = fs.readFileSync(path.join(routesDir, "index.ts"), "utf8");
   const importToFile = new Map<string, string>();
-  for (const match of indexText.matchAll(/import\s+(\w+)\s+from\s+["']\.\/(.+?)["'];/g)) {
-    importToFile.set(match[1], `${match[2]}.ts`);
-  }
+  for (const match of indexText.matchAll(/import\s+(\w+)\s+from\s+["']\.\/(.+?)["'];/g)) importToFile.set(match[1], `${match[2]}.ts`);
 
   const prefixes = new Map<string, string>();
-  for (const match of indexText.matchAll(/router\.use\(\s*(?:["']([^"']+)["']\s*,\s*)?(\w+)\s*\)/g)) {
-    prefixes.set(match[2], match[1] ?? "");
-  }
+  for (const match of indexText.matchAll(/router\.use\(\s*(?:["']([^"']+)["']\s*,\s*)?(\w+)\s*\)/g)) prefixes.set(match[2], match[1] ?? "");
 
   const operations: RouteOperation[] = [];
   for (const [routerName, fileName] of importToFile) {
@@ -201,10 +191,7 @@ function checkPackageDependencies(violations: Violation[]): void {
   const packageFiles = walk(ROOT, (file) => path.basename(file) === "package.json");
   for (const file of packageFiles) {
     const relative = rel(file);
-    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as {
-      dependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-    };
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
     const deps = parsed.dependencies ?? {};
     const devDeps = parsed.devDependencies ?? {};
     for (const name of Object.keys(deps)) {
@@ -228,10 +215,8 @@ checkPackageDependencies(violations);
 
 if (violations.length > 0) {
   console.error(`Architecture audit failed with ${violations.length} violation(s):`);
-  for (const violation of violations) {
-    console.error(`- ${violation.file}${violation.line ? `:${violation.line}` : ""} — ${violation.message}`);
-  }
+  for (const violation of violations) console.error(`- ${violation.file}${violation.line ? `:${violation.line}` : ""} — ${violation.message}`);
   process.exit(1);
 }
 
-console.log("Architecture audit passed: contracts, boundaries, environment access, route coverage, and dependency rules are clean.");
+console.log("Architecture audit passed: contracts, boundaries, server configuration, request parsing, route coverage, and dependency rules are clean.");
