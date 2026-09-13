@@ -14,6 +14,7 @@ on:
       - artifacts/api-server/src/http/contracts.ts
       - artifacts/api-server/src/app.ts
       - artifacts/api-server/src/lib/sql-rows.ts
+      - artifacts/mockup-sandbox/vite.config.ts
       - lib/api-zod/tsconfig.json
       - lib/api-spec/openapi.yaml
       - package.json
