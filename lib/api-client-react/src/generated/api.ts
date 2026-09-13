@@ -2502,7 +2502,7 @@ export const getGetDashboardKpisUrl = () => {
 }
 
 /**
- * @summary Get all dashboard KPI data and charts
+ * @summary Get dashboard KPIs (active members, revenue, expenses, profit)
  */
 export const getDashboardKpis = async ( options?: RequestInit): Promise<DashboardKpis> => {
 
@@ -2549,7 +2549,7 @@ export type GetDashboardKpisQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Get all dashboard KPI data and charts
+ * @summary Get dashboard KPIs (active members, revenue, expenses, profit)
  */
 
 export function useGetDashboardKpis<TData = Awaited<ReturnType<typeof getDashboardKpis>>, TError = ErrorType<unknown>>(

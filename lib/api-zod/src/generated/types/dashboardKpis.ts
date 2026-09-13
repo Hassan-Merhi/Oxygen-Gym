@@ -5,26 +5,14 @@
  * Gym Management API
  * OpenAPI spec version: 0.1.0
  */
-import type { ActivityLog } from './activityLog';
-import type { ChartPoint } from './chartPoint';
 import type { DashboardKpisActiveMembers } from './dashboardKpisActiveMembers';
-import type { DashboardKpisExpiringSoon } from './dashboardKpisExpiringSoon';
-import type { DashboardKpisMonthlyRevenue } from './dashboardKpisMonthlyRevenue';
-import type { DashboardKpisTodayCheckins } from './dashboardKpisTodayCheckins';
-import type { GrowthPoint } from './growthPoint';
-import type { LowStockProduct } from './lowStockProduct';
-import type { MonthlyMetric } from './monthlyMetric';
+import type { DashboardKpisProfit } from './dashboardKpisProfit';
+import type { PeriodTotals } from './periodTotals';
 
 export interface DashboardKpis {
   activeMembers: DashboardKpisActiveMembers;
-  monthlyRevenue: DashboardKpisMonthlyRevenue;
-  monthlyExpenses: MonthlyMetric;
-  todayCheckins: DashboardKpisTodayCheckins;
-  expiringSoon: DashboardKpisExpiringSoon;
-  lowStock: LowStockProduct[];
-  profit: MonthlyMetric;
-  revenueChart: ChartPoint[];
-  expenseChart: ChartPoint[];
-  membershipGrowth: GrowthPoint[];
-  recentActivity: ActivityLog[];
+  revenue: PeriodTotals;
+  expenses: PeriodTotals;
+  profit: DashboardKpisProfit;
+  currency: string;
 }

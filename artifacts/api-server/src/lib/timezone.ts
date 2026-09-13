@@ -18,10 +18,13 @@ export function lubumbashiBusinessDayBounds(now: Date = new Date()): { start: Da
   let businessDateStr = localDateStr;
   if (localHour < BUSINESS_DAY_START_HOUR) {
     // Still before today's 21:00 cutoff, so we're within the business day
-    // that started yesterday at 21:00.
-    const d = new Date(`${localDateStr}T00:00:00+02:00`);
-    d.setUTCDate(d.getUTCDate() - 1);
-    businessDateStr = d.toISOString().slice(0, 10);
+    // that started yesterday at 21:00. Step back one day on the *local*
+    // calendar date — the UTC date of a local midnight instant is already one
+    // day behind, so stepping back on the UTC date would go back twice.
+    const yesterday = new Date(
+      Date.UTC(localDateObj.getUTCFullYear(), localDateObj.getUTCMonth(), localDateObj.getUTCDate() - 1),
+    );
+    businessDateStr = yesterday.toISOString().slice(0, 10);
   }
 
   const start = new Date(`${businessDateStr}T${BUSINESS_DAY_START_HOUR}:00:00+02:00`);
@@ -37,4 +40,42 @@ export function lubumbashiTodayStart(now: Date = new Date()): Date {
 /** End of the current business day (20:59:59.999 local next day), as a UTC instant. */
 export function lubumbashiTodayEnd(now: Date = new Date()): Date {
   return lubumbashiBusinessDayBounds(now).end;
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** Start of a Lubumbashi calendar date, as a UTC instant. */
+function localDateStart(dateStr: string): Date {
+  return new Date(`${dateStr}T00:00:00+02:00`);
+}
+
+/**
+ * Start (00:00 local on the 1st) and end (23:59:59.999 local on the last day)
+ * of the current Lubumbashi calendar month, as UTC instants.
+ */
+export function lubumbashiMonthBounds(now: Date = new Date()): { start: Date; end: Date } {
+  const local = new Date(now.getTime() + LUB_OFFSET_MS);
+  const year = local.getUTCFullYear();
+  const month = local.getUTCMonth(); // 0-based
+
+  const start = localDateStart(`${year}-${pad2(month + 1)}-01`);
+  const nextMonthDate = new Date(Date.UTC(year, month + 1, 1));
+  const end = new Date(localDateStart(nextMonthDate.toISOString().slice(0, 10)).getTime() - 1);
+
+  return { start, end };
+}
+
+/**
+ * Start (00:00 local on Jan 1st) and end (23:59:59.999 local on Dec 31st) of the
+ * current Lubumbashi calendar year, as UTC instants.
+ */
+export function lubumbashiYearBounds(now: Date = new Date()): { start: Date; end: Date } {
+  const year = new Date(now.getTime() + LUB_OFFSET_MS).getUTCFullYear();
+
+  const start = localDateStart(`${year}-01-01`);
+  const end = new Date(localDateStart(`${year + 1}-01-01`).getTime() - 1);
+
+  return { start, end };
 }

@@ -5,8 +5,8 @@
  * Gym Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { PeriodTotals } from './periodTotals';
 
-export interface ChartPoint {
-  month: string;
-  amount: number;
-}
+export type DashboardKpisProfit = PeriodTotals & {
+  total: number;
+};
