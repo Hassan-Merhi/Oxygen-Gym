@@ -1,3 +1,5 @@
+import { contractQueryAs } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
@@ -79,7 +81,7 @@ router.get("/summary", async (_req: Request, res: Response) => {
 
 // ── Daily chart (last N days) ─────────────────────────────────────────────────
 router.get("/daily", async (req: Request, res: Response) => {
-  const days = Math.min(90, Math.max(7, parseInt((req.query as any).days ?? "30")));
+  const days = Math.min(90, Math.max(7, parseInt((contractQueryAs<Record<string, string>>(req, ApiContracts.GetAttendanceDailyQueryParams)).days ?? "30")));
   const from = daysAgo(days);
 
   const rows = await db.execute(sql`
@@ -105,7 +107,7 @@ router.get("/daily", async (req: Request, res: Response) => {
 
 // ── Monthly chart (last N months) ─────────────────────────────────────────────
 router.get("/monthly", async (req: Request, res: Response) => {
-  const months = Math.min(24, Math.max(3, parseInt((req.query as any).months ?? "12")));
+  const months = Math.min(24, Math.max(3, parseInt((contractQueryAs<Record<string, string>>(req, ApiContracts.GetAttendanceMonthlyQueryParams)).months ?? "12")));
   const from = new Date();
   from.setMonth(from.getMonth() - months);
   from.setDate(1);
@@ -150,7 +152,7 @@ router.get("/hourly", async (_req: Request, res: Response) => {
 
 // ── Top attending members ─────────────────────────────────────────────────────
 router.get("/top-members", async (req: Request, res: Response) => {
-  const limit = Math.min(50, Math.max(5, parseInt((req.query as any).limit ?? "10")));
+  const limit = Math.min(50, Math.max(5, parseInt((contractQueryAs<Record<string, string>>(req, ApiContracts.GetAttendanceTopMembersQueryParams)).limit ?? "10")));
 
   const rows = await db.execute(sql`
     SELECT member_id AS "memberId", member_name AS "memberName", COUNT(*) AS count
@@ -191,7 +193,7 @@ router.get("/week", async (_req: Request, res: Response) => {
 
 // ── Filtered attendance list ──────────────────────────────────────────────────
 router.get("/list", async (req: Request, res: Response) => {
-  const q = req.query as Record<string, string>;
+  const q = contractQueryAs<Record<string, string>>(req, ApiContracts.ListAttendanceQueryParams);
   const pageNum = Math.max(1, parseInt(q.page ?? "1"));
   const limitNum = Math.min(200, Math.max(1, parseInt(q.limit ?? "50")));
   const offset = (pageNum - 1) * limitNum;

@@ -1,3 +1,5 @@
+import { contractQueryAs } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
@@ -85,7 +87,7 @@ router.get("/summary", async (_req: Request, res: Response) => {
 router.get("/", async (req: Request, res: Response) => {
   const {
     page = "1", limit = "20", search, category, status, lowStock,
-  } = req.query as Record<string, string>;
+  } = contractQueryAs<Record<string, string>>(req, ApiContracts.ListProductsQueryParams);
 
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));

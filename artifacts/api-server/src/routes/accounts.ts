@@ -1,3 +1,5 @@
+import { contractBodyAs, contractQueryAs } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
@@ -127,7 +129,7 @@ router.get("/sales", async (req: Request, res: Response) => {
   const {
     page = "1", limit = "50",
     search, dateFrom, dateTo, currency,
-  } = req.query as Record<string, string>;
+  } = contractQueryAs<Record<string, string>>(req, ApiContracts.ListSalesEntriesQueryParams);
 
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(200, Math.max(1, parseInt(limit)));
@@ -167,7 +169,7 @@ router.get("/expenses", async (req: Request, res: Response) => {
   const {
     page = "1", limit = "50",
     search, dateFrom, dateTo, currency,
-  } = req.query as Record<string, string>;
+  } = contractQueryAs<Record<string, string>>(req, ApiContracts.ListExpenseEntriesQueryParams);
 
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(200, Math.max(1, parseInt(limit)));
@@ -261,7 +263,7 @@ router.get("/expenses", async (req: Request, res: Response) => {
 
 // ── GET /accounts/profit-loss ────────────────────────────────────────────────
 router.get("/profit-loss", async (req: Request, res: Response) => {
-  const { period = "month", dateFrom, dateTo } = req.query as Record<string, string>;
+  const { period = "month", dateFrom, dateTo } = contractQueryAs<Record<string, string>>(req, ApiContracts.GetProfitLossQueryParams);
 
   let from: Date;
   let to: Date;
@@ -323,11 +325,11 @@ router.get("/chart", async (_req: Request, res: Response) => {
 
 // POST /accounts/chart
 router.post("/chart", async (req: Request, res: Response) => {
-  const { name, type, description } = req.body as {
+  const { name, type, description } = contractBodyAs<{
     name: string;
     type: string;
     description?: string;
-  };
+  }>(req, ApiContracts.CreateChartAccountBody);
   if (!name || !type) {
     res.status(400).json({ error: "name and type are required" });
     return;
@@ -347,12 +349,12 @@ router.post("/chart", async (req: Request, res: Response) => {
 // PUT /accounts/chart/:id
 router.put("/chart/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const { name, type, description, isActive } = req.body as {
+  const { name, type, description, isActive } = contractBodyAs<{
     name?: string;
     type?: string;
     description?: string;
     isActive?: boolean;
-  };
+  }>(req, ApiContracts.UpdateChartAccountBody);
   const [row] = await db
     .update(chartOfAccountsTable)
     .set({
@@ -398,7 +400,7 @@ router.delete("/chart/:id", async (req: Request, res: Response) => {
 // GET /accounts/chart/:id/statement?dateFrom=&dateTo=
 router.get("/chart/:id/statement", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const { dateFrom, dateTo } = req.query as Record<string, string>;
+  const { dateFrom, dateTo } = contractQueryAs<Record<string, string>>(req, ApiContracts.GetChartAccountStatementQueryParams);
 
   const account = await db.query.chartOfAccountsTable.findFirst({
     where: eq(chartOfAccountsTable.id, id),

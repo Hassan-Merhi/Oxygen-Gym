@@ -1,3 +1,5 @@
+import { contractBodyAs, contractQueryAs } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
@@ -96,7 +98,7 @@ router.get("/", async (req: Request, res: Response) => {
   const {
     page = "1", limit = "20", search, direction, category, currency, dateFrom, dateTo,
     sortBy = "paymentDate", sortOrder = "desc",
-  } = req.query as Record<string, string>;
+  } = contractQueryAs<Record<string, string>>(req, ApiContracts.ListPaymentsQueryParams);
 
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
@@ -164,7 +166,7 @@ router.get("/", async (req: Request, res: Response) => {
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 router.post("/", async (req: Request, res: Response) => {
-  const body = req.body as {
+  const body = contractBodyAs<{
     direction: string;
     category: string;
     linkedEntity?: string;
@@ -181,7 +183,7 @@ router.post("/", async (req: Request, res: Response) => {
     account?: string;
     notes?: string;
     paymentDate?: string;
-  };
+  }>(req, ApiContracts.CreatePaymentBody);
 
   if (!body.direction || !body.category || body.amount === undefined || !body.currency) {
     res.status(400).json({ error: "direction, category, amount, currency required" });
@@ -302,7 +304,7 @@ router.post("/", async (req: Request, res: Response) => {
 // ─── Update ───────────────────────────────────────────────────────────────────
 router.patch("/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const body = req.body as Record<string, unknown>;
+  const body = contractBodyAs<Record<string, unknown>>(req, ApiContracts.UpdatePaymentBody);
 
   const [existing] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }

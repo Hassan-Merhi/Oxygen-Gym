@@ -1,3 +1,5 @@
+import { contractBodyAs } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { whatsappChatsTable, settingsTable, membersTable, plansTable } from "@workspace/db/schema";
@@ -33,7 +35,7 @@ router.get("/chats", async (req: Request, res: Response) => {
 // POST /api/whatsapp/chats
 router.post("/chats", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
-  const { label, chatId } = req.body as Record<string, unknown>;
+  const { label, chatId } = contractBodyAs<Record<string, unknown>>(req, ApiContracts.CreateWhatsappChatBody);
   if (typeof label !== "string" || !label.trim()) {
     res.status(400).json({ error: "label is required" });
     return;
@@ -57,7 +59,7 @@ router.patch("/chats/:id", async (req: Request, res: Response) => {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const { label, chatId, enabled } = req.body as Record<string, unknown>;
+  const { label, chatId, enabled } = contractBodyAs<Record<string, unknown>>(req, ApiContracts.UpdateWhatsappChatBody);
   const updates: Partial<{ label: string; chatId: string; enabled: boolean }> = {};
   if (typeof label === "string" && label.trim()) updates.label = label.trim();
   if (typeof chatId === "string" && chatId.trim()) updates.chatId = chatId.trim();
@@ -247,7 +249,7 @@ router.post("/send-member/:id", async (req: Request, res: Response) => {
 // POST /api/whatsapp/broadcast — send a custom message to all enabled chats
 router.post("/broadcast", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
-  const { message } = req.body as { message?: string };
+  const { message } = contractBodyAs<{ message?: string }>(req, ApiContracts.BroadcastWhatsappMessageBody);
   if (!message?.trim()) { res.status(400).json({ error: "message required" }); return; }
   try {
     const settings = await db.query.settingsTable.findFirst();

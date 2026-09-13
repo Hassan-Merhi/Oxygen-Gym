@@ -1,3 +1,5 @@
+import { contractBodyAs } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
@@ -67,7 +69,7 @@ router.get("/", async (_req: Request, res: Response) => {
 
 // ── Create credit ─────────────────────────────────────────────────────────────
 router.post("/", async (req: Request, res: Response) => {
-  const body = req.body as {
+  const body = contractBodyAs<{
     supplier: string;
     description?: string;
     productId?: number;
@@ -76,7 +78,7 @@ router.post("/", async (req: Request, res: Response) => {
     currency?: string;
     purchaseDate?: string;
     notes?: string;
-  };
+  }>(req, ApiContracts.CreateSupplierCreditBody);
 
   if (!body.supplier) { res.status(400).json({ error: "supplier is required" }); return; }
   if (!body.totalAmount || body.totalAmount <= 0) { res.status(400).json({ error: "totalAmount must be positive" }); return; }
@@ -104,7 +106,7 @@ router.post("/", async (req: Request, res: Response) => {
 // ── Update credit ─────────────────────────────────────────────────────────────
 router.patch("/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const body = req.body as Record<string, unknown>;
+  const body = contractBodyAs<Record<string, unknown>>(req, ApiContracts.UpdateSupplierCreditBody);
   const allowed = ["supplier", "description", "productId", "productName", "totalAmount", "currency", "purchaseDate", "notes", "status"];
   const update: Record<string, unknown> = {};
   for (const k of allowed) {
@@ -144,7 +146,7 @@ router.get("/:id/payments", async (req: Request, res: Response) => {
 // ── Record an installment payment ─────────────────────────────────────────────
 router.post("/:id/payments", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const body = req.body as { amount: number; currency?: string; paymentDate?: string; notes?: string };
+  const body = contractBodyAs<{ amount: number; currency?: string; paymentDate?: string; notes?: string }>(req, ApiContracts.CreateSupplierPaymentBody);
 
   if (!body.amount || body.amount <= 0) { res.status(400).json({ error: "amount must be positive" }); return; }
 

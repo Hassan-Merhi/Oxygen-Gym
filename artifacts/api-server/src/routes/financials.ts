@@ -1,3 +1,5 @@
+import { contractQueryAs } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
@@ -140,7 +142,7 @@ function addTransaction(
 }
 
 router.get("/", async (req: Request, res: Response) => {
-  const { period = "month", dateFrom, dateTo } = req.query as Record<string, string>;
+  const { period = "month", dateFrom, dateTo } = contractQueryAs<Record<string, string>>(req, ApiContracts.GetFinancialsQueryParams);
   const selectedPeriod: Period = ["today", "month", "last_month", "year", "custom"].includes(period)
     ? (period as Period)
     : "month";

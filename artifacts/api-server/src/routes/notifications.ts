@@ -1,3 +1,5 @@
+import { contractQueryAs } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
@@ -154,8 +156,8 @@ async function computeNotifications(userId: number, permissions: any): Promise<N
 // ── List notifications ────────────────────────────────────────────────────────
 router.get("/", async (req: Request, res: Response) => {
   const user = req.__gymproUser;
-  const typeFilter = (req.query as any).type as string | undefined;
-  const readFilter = (req.query as any).read as string | undefined;
+  const typeFilter = (contractQueryAs<Record<string, string>>(req, ApiContracts.ListNotificationsQueryParams)).type as string | undefined;
+  const readFilter = (contractQueryAs<Record<string, string>>(req, ApiContracts.ListNotificationsQueryParams)).read as string | undefined;
   const permissions = (user?.permissions ?? {}) as Record<string, boolean>;
   const isAdmin = user?.role === "admin";
 

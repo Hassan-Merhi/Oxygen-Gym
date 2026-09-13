@@ -1,3 +1,5 @@
+import { contractBodyAs, contractQueryAs } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { PatchSaleBody as PatchSaleBodySchema } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
@@ -29,7 +31,7 @@ async function getSettings() {
 
 // ── Lookup product by barcode ──────────────────────────────────────────────────
 router.get("/lookup-barcode", async (req: Request, res: Response) => {
-  const { barcode } = req.query as Record<string, string>;
+  const { barcode } = contractQueryAs<Record<string, string>>(req, ApiContracts.LookupBarcodeQueryParams);
   if (!barcode) {
     res.status(400).json({ error: "barcode query param required" });
     return;
@@ -52,7 +54,7 @@ router.get("/lookup-barcode", async (req: Request, res: Response) => {
 // ── List sales ─────────────────────────────────────────────────────────────────
 router.get("/", async (req: Request, res: Response) => {
   const { page = "1", limit = "20", search, status, currency, dateFrom, dateTo } =
-    req.query as Record<string, string>;
+    contractQueryAs<Record<string, string>>(req, ApiContracts.ListSalesQueryParams);
 
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
@@ -95,12 +97,12 @@ router.get("/:id", async (req: Request, res: Response) => {
 
 // ── Complete sale (POS checkout) ───────────────────────────────────────────────
 router.post("/", async (req: Request, res: Response) => {
-  const { items, currency, paymentAmount, notes } = req.body as {
+  const { items, currency, paymentAmount, notes } = contractBodyAs<{
     items: Array<{ productId: number; quantity: number; unitPrice: number; discount: number }>;
     currency: string;
     paymentAmount: number;
     notes?: string;
-  };
+  }>(req, ApiContracts.CompleteSaleBody);
 
   if (!items || items.length === 0) {
     res.status(400).json({ error: "Cart is empty" });
@@ -367,7 +369,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 // ── Void sale ──────────────────────────────────────────────────────────────────
 router.patch("/:id/void", async (req: Request, res: Response) => {
   const id = parseInt(req.params.id as string);
-  const { reason } = req.body as { reason: string };
+  const { reason } = contractBodyAs<{ reason: string }>(req, ApiContracts.VoidSaleBody);
 
   const [sale] = await db.select().from(salesTable).where(eq(salesTable.id, id));
   if (!sale) {

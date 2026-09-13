@@ -1,3 +1,5 @@
+import { contractBodyAs, contractQueryAs } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
@@ -29,7 +31,7 @@ async function getExchangeRate(): Promise<number> {
 // ── List ──────────────────────────────────────────────────────────────────────
 router.get("/", async (req: Request, res: Response) => {
   const { page = "1", limit = "20", search, status, staffEmployeeId, dateFrom, dateTo } =
-    req.query as Record<string, string>;
+    contractQueryAs<Record<string, string>>(req, ApiContracts.ListPayrollQueryParams);
 
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
@@ -68,7 +70,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 
 // ── Create draft payroll ───────────────────────────────────────────────────────
 router.post("/", async (req: Request, res: Response) => {
-  const { staffEmployeeId, periodStart, periodEnd, baseSalary, bonus, deduction, currency, exchangeRate, notes } = req.body as {
+  const { staffEmployeeId, periodStart, periodEnd, baseSalary, bonus, deduction, currency, exchangeRate, notes } = contractBodyAs<{
     staffEmployeeId: number;
     periodStart: string;
     periodEnd: string;
@@ -78,7 +80,7 @@ router.post("/", async (req: Request, res: Response) => {
     currency?: string;
     exchangeRate?: number;
     notes?: string;
-  };
+  }>(req, ApiContracts.CreatePayrollBody);
 
   if (!staffEmployeeId) { res.status(400).json({ error: "Staff employee is required" }); return; }
 
@@ -238,7 +240,7 @@ router.patch("/:id/pay", async (req: Request, res: Response) => {
 
 // ── Cancel payroll ────────────────────────────────────────────────────────────
 router.patch("/:id/cancel", async (req: Request, res: Response) => {
-  const { reason } = req.body as { reason: string };
+  const { reason } = contractBodyAs<{ reason: string }>(req, ApiContracts.CancelPayrollBody);
   const id = parseInt(req.params.id as string);
 
   const [record] = await db.select().from(payrollTable).where(eq(payrollTable.id, id));

@@ -1,3 +1,5 @@
+import { contractBodyAs, contractQueryAs } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import {
@@ -61,7 +63,7 @@ router.get("/", async (req: Request, res: Response) => {
     sortBy = "name",
     sortOrder = "asc",
     showDeleted = "false",
-  } = req.query as Record<string, string>;
+  } = contractQueryAs<Record<string, string>>(req, ApiContracts.ListMembersQueryParams);
 
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
@@ -128,7 +130,7 @@ router.get("/", async (req: Request, res: Response) => {
 
 // ─── Create ──────────────────────────────────────────────────────────────────
 router.post("/", async (req: Request, res: Response) => {
-  const body = req.body as {
+  const body = contractBodyAs<{
     name: string;
     phone?: string;
     planId?: number;
@@ -145,7 +147,7 @@ router.post("/", async (req: Request, res: Response) => {
     notes?: string;
     coachId?: number;
     commissionAmount?: number;
-  };
+  }>(req, ApiContracts.CreateMemberBody);
 
   if (!body.name) { res.status(400).json({ error: "name is required" }); return; }
 
@@ -290,7 +292,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 // ─── Update ──────────────────────────────────────────────────────────────────
 router.patch("/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const body = req.body as Record<string, unknown>;
+  const body = contractBodyAs<Record<string, unknown>>(req, ApiContracts.UpdateMemberBody);
 
   // cashAccountId is not a member column — extract it separately
   const cashAccountId = body.cashAccountId ? Number(body.cashAccountId) : undefined;
@@ -507,7 +509,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
 // ─── Check-in ────────────────────────────────────────────────────────────────
 router.post("/:id/checkin", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const force = !!(req.body as { force?: boolean }).force;
+  const force = !!(contractBodyAs<{ force?: boolean }>(req, ApiContracts.CheckInMemberBody)).force;
 
   const [member] = await db.select().from(membersTable)
     .where(and(eq(membersTable.id, id), isNull(membersTable.deletedAt)));
@@ -542,7 +544,7 @@ router.post("/:id/checkin", async (req: Request, res: Response) => {
 // ─── Renew ───────────────────────────────────────────────────────────────────
 router.post("/:id/renew", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const body = req.body as { planId: number; startDate: string; expiryDate: string; amountPaid: number; discount: number; currency: string; cashAccountId?: number; notes?: string };
+  const body = contractBodyAs<{ planId: number; startDate: string; expiryDate: string; amountPaid: number; discount: number; currency: string; cashAccountId?: number; notes?: string }>(req, ApiContracts.RenewMemberBody);
 
   const [existing] = await db.select().from(membersTable).where(eq(membersTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
@@ -667,7 +669,7 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
 // ─── Freeze ──────────────────────────────────────────────────────────────────
 router.post("/:id/freeze", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const body = req.body as { frozenAt: string; frozenUntil: string; reason?: string };
+  const body = contractBodyAs<{ frozenAt: string; frozenUntil: string; reason?: string }>(req, ApiContracts.FreezeMemberBody);
   const frozenAt = new Date(body.frozenAt);
   const frozenUntil = new Date(body.frozenUntil);
   const frozenDays = Math.round((frozenUntil.getTime() - frozenAt.getTime()) / (1000 * 60 * 60 * 24));
@@ -706,7 +708,7 @@ router.post("/:id/reactivate", async (req: Request, res: Response) => {
 // ─── Set status ──────────────────────────────────────────────────────────────
 router.patch("/:id/status", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const { status } = req.body as { status: string };
+  const { status } = contractBodyAs<{ status: string }>(req, ApiContracts.SetMemberStatusBody);
   if (!["active","inactive","archived"].includes(status)) {
     res.status(400).json({ error: "Invalid status" }); return;
   }
