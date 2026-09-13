@@ -1,24 +1,36 @@
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
-import { db, usersTable, pagePermissionsSchema, defaultStaffPermissions, defaultAdminPermissions, defaultManagerPermissions, activityLogsTable } from "@workspace/db";
+import { db, usersTable, defaultStaffPermissions, defaultAdminPermissions, defaultManagerPermissions } from "@workspace/db";
 import { eq, isNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import { UpdateUserPermissionsBody } from "@workspace/api-zod";
+import {
+  CreateUserBody,
+  DeleteUserParams,
+  GetUserParams,
+  GetUserResponse,
+  UpdateUserBody,
+  UpdateUserParams,
+  UpdateUserPermissionsBody,
+  UpdateUserPermissionsParams,
+  UpdateUserPermissionsResponse,
+  UpdateUserResponse,
+} from "@workspace/api-zod";
 import { logActivity } from "../lib/activity";
+import { parseBody, parseParams, sendContract } from "../http/contracts";
 
 const router = Router();
 router.use(requireAuth());
 
+const ResetPasswordBody = CreateUserBody.pick({ password: true }).required({ password: true });
+
 function requireAdmin(req: Request, res: Response): boolean {
-  const caller = (req as any).__gymproUser;
-  if (caller?.role !== "admin") {
+  if (req.__gymproUser?.role !== "admin") {
     res.status(403).json({ error: "Admin only" });
     return false;
   }
   return true;
 }
 
-// ── GET /api/users ─────────────────────────────────────────────────────────────
 router.get("/", async (req, res) => {
   try {
     const users = await db.select({
@@ -41,34 +53,26 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ── POST /api/users ────────────────────────────────────────────────────────────
 router.post("/", async (req, res) => {
   if (!requireAdmin(req, res)) return;
-  const { username, name, email, phone, role, status, permissions, password } = req.body as {
-    username: string;
-    name: string;
-    email?: string;
-    phone?: string;
-    role?: string;
-    status?: string;
-    permissions?: Record<string, boolean>;
-    password?: string;
-  };
+  const body = parseBody(req, res, CreateUserBody);
+  if (!body) return;
 
+  const username = body.username.trim();
+  const name = body.name.trim();
   if (!username || !name) {
     res.status(400).json({ error: "username and name are required" });
     return;
   }
 
-  const resolvedRole = role ?? "staff";
-  const resolvedPermissions = (permissions as any) ?? (
+  const resolvedRole = body.role ?? "staff";
+  const resolvedPermissions = body.permissions ?? (
     resolvedRole === "admin" ? defaultAdminPermissions :
     resolvedRole === "manager" ? defaultManagerPermissions :
     defaultStaffPermissions
   );
 
   try {
-    // Check username uniqueness
     const existing = await db.query.usersTable.findFirst({ where: eq(usersTable.username, username) });
     if (existing) {
       res.status(400).json({ error: "Username already taken" });
@@ -76,21 +80,21 @@ router.post("/", async (req, res) => {
     }
 
     let passwordHash: string | undefined;
-    if (password) {
-      if (password.length < 6) {
+    if (body.password) {
+      if (body.password.length < 6) {
         res.status(400).json({ error: "Password must be at least 6 characters" });
         return;
       }
-      passwordHash = await bcrypt.hash(password, 12);
+      passwordHash = await bcrypt.hash(body.password, 12);
     }
 
     const [user] = await db.insert(usersTable).values({
       username,
       name,
-      email: email ?? null,
-      phone: phone ?? null,
+      email: body.email ?? null,
+      phone: body.phone ?? null,
       role: resolvedRole,
-      status: status ?? "active",
+      status: body.status ?? "active",
       permissions: resolvedPermissions,
       ...(passwordHash ? { passwordHash } : {}),
     }).returning({
@@ -108,13 +112,12 @@ router.post("/", async (req, res) => {
   }
 });
 
-// ── GET /api/users/:id ─────────────────────────────────────────────────────────
 router.get("/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  const params = parseParams(req, res, GetUserParams);
+  if (!params) return;
   try {
     const user = await db.query.usersTable.findFirst({
-      where: (u, { and, eq, isNull }) => and(eq(u.id, id), isNull(u.deletedAt)),
+      where: (u, { and, eq, isNull }) => and(eq(u.id, params.id), isNull(u.deletedAt)),
       columns: {
         id: true, username: true, name: true, email: true, phone: true,
         role: true, status: true, permissions: true, lastLoginAt: true,
@@ -122,46 +125,33 @@ router.get("/:id", async (req, res) => {
       },
     });
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
-    res.json(user);
+    sendContract(req, res, GetUserResponse, user);
   } catch (err) {
     req.log.error({ err }, "Failed to get user");
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// ── PATCH /api/users/:id ───────────────────────────────────────────────────────
 router.patch("/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  const params = parseParams(req, res, UpdateUserParams);
+  const body = parseBody(req, res, UpdateUserBody);
+  if (!params || !body) return;
 
-  const caller = (req as any).__gymproUser;
+  const caller = req.__gymproUser;
   const isAdmin = caller?.role === "admin";
-
-  const { username, name, email, phone, role, status } = req.body as {
-    username?: string;
-    name?: string;
-    email?: string;
-    phone?: string;
-    role?: string;
-    status?: string;
-  };
-
-  // Only admin can update other users or change role/status
-  if (!isAdmin && caller?.id !== id) {
+  if (!isAdmin && caller?.id !== params.id) {
     res.status(403).json({ error: "Cannot edit other users" });
     return;
   }
-  if (!isAdmin && (role !== undefined || status !== undefined)) {
+  if (!isAdmin && (body.role !== undefined || body.status !== undefined)) {
     res.status(403).json({ error: "Only admin can change role or status" });
     return;
   }
 
   try {
-    if (username) {
-      const taken = await db.query.usersTable.findFirst({
-        where: (u, { and, eq }) => and(eq(u.username, username)),
-      });
-      if (taken && taken.id !== id) {
+    if (body.username) {
+      const taken = await db.query.usersTable.findFirst({ where: eq(usersTable.username, body.username) });
+      if (taken && taken.id !== params.id) {
         res.status(400).json({ error: "Username already taken" });
         return;
       }
@@ -169,14 +159,14 @@ router.patch("/:id", async (req, res) => {
 
     const [updated] = await db.update(usersTable)
       .set({
-        ...(username !== undefined && { username }),
-        ...(name !== undefined && { name }),
-        ...(email !== undefined && { email }),
-        ...(phone !== undefined && { phone }),
-        ...(role !== undefined && { role }),
-        ...(status !== undefined && { status }),
+        ...(body.username !== undefined && { username: body.username }),
+        ...(body.name !== undefined && { name: body.name }),
+        ...(body.email !== undefined && { email: body.email }),
+        ...(body.phone !== undefined && { phone: body.phone }),
+        ...(body.role !== undefined && { role: body.role }),
+        ...(body.status !== undefined && { status: body.status }),
       })
-      .where(eq(usersTable.id, id))
+      .where(eq(usersTable.id, params.id))
       .returning({
         id: usersTable.id, username: usersTable.username, name: usersTable.name,
         email: usersTable.email, phone: usersTable.phone, role: usersTable.role,
@@ -185,30 +175,27 @@ router.patch("/:id", async (req, res) => {
       });
 
     if (!updated) { res.status(404).json({ error: "User not found" }); return; }
-    await logActivity(req, "update_user", "user", id, req.body);
-    res.json(updated);
+    await logActivity(req, "update_user", "user", params.id, body);
+    sendContract(req, res, UpdateUserResponse, updated);
   } catch (err) {
     req.log.error({ err }, "Failed to update user");
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// ── DELETE /api/users/:id ──────────────────────────────────────────────────────
 router.delete("/:id", async (req, res) => {
   if (!requireAdmin(req, res)) return;
+  const params = parseParams(req, res, DeleteUserParams);
+  if (!params) return;
 
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
-
-  const caller = (req as any).__gymproUser;
-  if (caller?.id === id) {
+  if (req.__gymproUser?.id === params.id) {
     res.status(400).json({ error: "Cannot delete your own account" });
     return;
   }
 
   try {
-    await db.update(usersTable).set({ deletedAt: new Date() }).where(eq(usersTable.id, id));
-    await logActivity(req, "delete_user", "user", id);
+    await db.update(usersTable).set({ deletedAt: new Date() }).where(eq(usersTable.id, params.id));
+    await logActivity(req, "delete_user", "user", params.id);
     res.status(204).send();
   } catch (err) {
     req.log.error({ err }, "Failed to soft-delete user");
@@ -216,47 +203,33 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// ── PATCH /api/users/:id/permissions ──────────────────────────────────────────
 router.patch("/:id/permissions", async (req, res) => {
   if (!requireAdmin(req, res)) return;
-
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
-
-  const parsed = UpdateUserPermissionsBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid input", details: parsed.error.issues });
-    return;
-  }
-  const permParsed = pagePermissionsSchema.safeParse(parsed.data.permissions);
-  if (!permParsed.success) { res.status(400).json({ error: "Invalid permissions" }); return; }
+  const params = parseParams(req, res, UpdateUserPermissionsParams);
+  const body = parseBody(req, res, UpdateUserPermissionsBody);
+  if (!params || !body) return;
 
   try {
     const [updated] = await db.update(usersTable)
-      .set({ permissions: permParsed.data })
-      .where(eq(usersTable.id, id))
+      .set({ permissions: body.permissions })
+      .where(eq(usersTable.id, params.id))
       .returning();
     if (!updated) { res.status(404).json({ error: "User not found" }); return; }
-    await logActivity(req, "update_permissions", "user", id);
-    res.json(updated);
+    await logActivity(req, "update_permissions", "user", params.id);
+    sendContract(req, res, UpdateUserPermissionsResponse, updated);
   } catch (err) {
     req.log.error({ err }, "Failed to update permissions");
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// ── POST /api/users/:id/reset-password — admin sets a user's password ─────────
 router.post("/:id/reset-password", async (req, res) => {
-  const caller = (req as any).__gymproUser;
-  if (caller?.role !== "admin") {
-    res.status(403).json({ error: "Admin only" });
-    return;
-  }
+  if (!requireAdmin(req, res)) return;
+  const params = parseParams(req, res, GetUserParams);
+  const body = parseBody(req, res, ResetPasswordBody);
+  if (!params || !body) return;
 
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
-
-  const { password } = req.body as { password: string };
+  const password = body.password;
   if (!password || password.length < 6) {
     res.status(400).json({ error: "Password must be at least 6 characters" });
     return;
@@ -264,8 +237,8 @@ router.post("/:id/reset-password", async (req, res) => {
 
   try {
     const passwordHash = await bcrypt.hash(password, 12);
-    await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, id));
-    await logActivity(req, "reset_password", "user", id);
+    await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, params.id));
+    await logActivity(req, "reset_password", "user", params.id);
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to reset password");
