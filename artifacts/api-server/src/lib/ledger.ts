@@ -1,9 +1,6 @@
-import { db } from "@workspace/db";
+import { db, withTransaction, type DbExecutor } from "@workspace/db";
 import { cashLedgerTable } from "@workspace/db/schema";
 import { desc, sql } from "drizzle-orm";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Executor = any;
 
 export interface LedgerEntryInput {
   entryDate?: Date;
@@ -18,10 +15,19 @@ export interface LedgerEntryInput {
   createdBy?: string;
 }
 
-export async function appendLedgerEntry(
+async function appendLedgerEntryWithExecutor(
   input: LedgerEntryInput,
-  executor: Executor = db,
+  executor: DbExecutor,
 ): Promise<void> {
+  if (!Number.isFinite(input.exchangeRate) || input.exchangeRate <= 0) {
+    throw new Error("Ledger exchangeRate must be greater than zero");
+  }
+
+  // Serialize running-balance writes inside the surrounding transaction. This
+  // prevents two concurrent cash movements from reading the same previous row
+  // and persisting conflicting running balances.
+  await executor.execute(sql`SELECT pg_advisory_xact_lock(hashtext('oxygen_gym_cash_ledger'))`);
+
   const amountUsd =
     input.currency === "USD" ? input.amount : input.amount / input.exchangeRate;
   const amountCdf =
@@ -56,6 +62,27 @@ export async function appendLedgerEntry(
     balanceCdf,
     description:  input.description,
     createdBy:    input.createdBy,
+  });
+}
+
+/**
+ * Append a cash-ledger row.
+ *
+ * When a transaction executor is supplied, this joins that transaction. When
+ * called standalone it opens a transaction automatically, so the advisory lock,
+ * previous-balance read, and insert always share one atomic unit of work.
+ */
+export async function appendLedgerEntry(
+  input: LedgerEntryInput,
+  executor?: DbExecutor,
+): Promise<void> {
+  if (executor) {
+    await appendLedgerEntryWithExecutor(input, executor);
+    return;
+  }
+
+  await withTransaction(async (tx) => {
+    await appendLedgerEntryWithExecutor(input, tx);
   });
 }
 
