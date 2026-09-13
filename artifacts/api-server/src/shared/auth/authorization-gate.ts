@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { requireAuth } from "../../middlewares/auth";
-import { evaluateEndpointAccess, matchingEndpointPolicies } from "./authorization-policy";
+import { evaluateEndpointAccess, matchingEndpointPolicies } from "./authorization-evaluator";
 import { getCurrentUser, normalizePermissions } from "./permissions";
 
 const authenticate = requireAuth();
