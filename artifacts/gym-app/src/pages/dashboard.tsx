@@ -71,7 +71,7 @@ function HeroCard({
       onKeyDown={interactive ? (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onClick();
+          onClick?.();
         }
       } : undefined}
       className={cn(
@@ -141,7 +141,7 @@ function PeriodCard({
       onKeyDown={cardInteractive ? (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onClick();
+          onClick?.();
         }
       } : undefined}
       className={cn(
