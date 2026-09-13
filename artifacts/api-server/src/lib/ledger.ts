@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
-import { cashLedgerTable } from "@workspace/db/schema";
-import { desc, sql } from "drizzle-orm";
+import { accountingEntriesTable, cashLedgerTable } from "@workspace/db/schema";
+import { desc, eq, sql } from "drizzle-orm";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Executor = any;
@@ -59,12 +59,26 @@ export async function appendLedgerEntry(
   });
 }
 
+/**
+ * Canonical cash balance.
+ *
+ * The append-only `cash_ledger` is kept as an operational/audit trail, but it
+ * can contain historical corrections and legacy adjustments that do not have a
+ * matching accounting posting. Displayed financial balances must come from the
+ * canonical double-entry accounting layer instead. For the Cash asset account,
+ * the normal balance is debit minus credit.
+ */
 export async function getCurrentBalance(): Promise<{ balanceUsd: number; balanceCdf: number }> {
   const [row] = await db
     .select({
-      balanceUsd: sql<number>`COALESCE(SUM(CASE WHEN direction = 'in' THEN amount_usd ELSE -amount_usd END), 0)`,
-      balanceCdf: sql<number>`COALESCE(SUM(CASE WHEN direction = 'in' THEN amount_cdf ELSE -amount_cdf END), 0)`,
+      balanceUsd: sql<number>`COALESCE(SUM(${accountingEntriesTable.debitUsd} - ${accountingEntriesTable.creditUsd}), 0)`,
+      balanceCdf: sql<number>`COALESCE(SUM(${accountingEntriesTable.debitCdf} - ${accountingEntriesTable.creditCdf}), 0)`,
     })
-    .from(cashLedgerTable);
-  return { balanceUsd: Number(row?.balanceUsd ?? 0), balanceCdf: Number(row?.balanceCdf ?? 0) };
+    .from(accountingEntriesTable)
+    .where(eq(accountingEntriesTable.accountNameSnapshot, "Cash"));
+
+  return {
+    balanceUsd: Number(row?.balanceUsd ?? 0),
+    balanceCdf: Number(row?.balanceCdf ?? 0),
+  };
 }
