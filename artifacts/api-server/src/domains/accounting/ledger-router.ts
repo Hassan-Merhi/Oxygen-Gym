@@ -12,6 +12,7 @@ import {
   parsePage,
 } from "../../shared/http/validation";
 import { getLedgerBalance, listLedger, setOpeningBalance } from "./ledger-service";
+import { resetOperationalPeriod } from "./period-reset-service";
 
 const router = Router();
 router.use(requireAuth());
@@ -22,11 +23,27 @@ router.get("/balance", async (_req, res) => {
 
 router.post("/opening-balance", async (req, res) => {
   const body = asRecord(contractBody(req, ApiContracts.SetOpeningBalanceBody));
+  const targetAmountUsd = nonNegativeNumber(body.targetAmountUsd, "targetAmountUsd");
+  const date = optionalDate(body.date, "date");
+  const notes = optionalString(body.notes);
+  const actor = getCurrentUser(req).name;
+  const resetConfirmation = String(req.headers["x-reset-confirmation"] ?? "");
+
+  if (resetConfirmation) {
+    res.json(await resetOperationalPeriod({
+      openingCashUsd: targetAmountUsd,
+      resetDate: date,
+      notes,
+      confirmation: resetConfirmation,
+    }, actor));
+    return;
+  }
+
   res.json(await setOpeningBalance({
-    targetAmountUsd: nonNegativeNumber(body.targetAmountUsd, "targetAmountUsd"),
-    date: optionalDate(body.date, "date"),
-    notes: optionalString(body.notes),
-  }, getCurrentUser(req).name));
+    targetAmountUsd,
+    date,
+    notes,
+  }, actor));
 });
 
 router.get("/", async (req, res) => {

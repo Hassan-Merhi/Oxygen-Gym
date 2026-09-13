@@ -12,6 +12,7 @@ import {
   Settings,
   BookOpen,
   BarChart3,
+  RefreshCcw,
   PanelLeftClose,
   PanelLeftOpen,
   X,
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { id: "supplements",      href: "/supplements",      icon: FlaskConical,    labelKey: "nav.supplements",permKey: "stock"          },
   { id: "sales",            href: "/sales",            icon: TrendingUp,      labelKey: "nav.sales",      permKey: "sales"          },
   { id: "settings",         href: "/settings",         icon: Settings,        labelKey: "nav.settings",   permKey: "settings"       },
+  { id: "period-reset",     href: "/period-reset",     icon: RefreshCcw,      labelOverride: "New Period / Reset", permKey: "settings", adminOnly: true },
 ] as const;
 
 export function Sidebar() {
@@ -40,12 +42,13 @@ export function Sidebar() {
   const me = useGetMe();
   const { collapsed, toggle, mobileOpen, closeMobile } = useSidebarStore();
 
-  const isAdmin = me?.role === "admin" || me?.role === "manager";
+  const isAdminOrManager = me?.role === "admin" || me?.role === "manager";
   const perms = me?.permissions as Record<string, boolean> | undefined;
 
   const visibleItems = NAV_ITEMS.filter((item) => {
     if (!me) return false;
-    if (isAdmin) return true;
+    if ("adminOnly" in item && item.adminOnly) return me.role === "admin";
+    if (isAdminOrManager) return true;
     return !!perms?.[item.permKey];
   });
 

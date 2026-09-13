@@ -92,11 +92,18 @@ export interface CashMovement {
  * - only collapse a legacy member cash-receipt voucher when there is a matching
  *   completed Cash payment for the same member, amount, currency, and day;
  * - a linked payment suppresses a stock/supplier Cash row only when that payment
- *   itself was completed against Cash.
+ *   itself was completed against Cash;
+ * - after an operating-period reset, preserved stock/supplier history before the
+ *   reset marker remains auditable but no longer affects the new period's cash.
  */
 export async function getCashMovements(executor: DbExecutor = db): Promise<CashMovement[]> {
   const result = await executor.execute(sql`
-    WITH payment_values AS (
+    WITH reset_cutoff AS (
+      SELECT MAX(entry_date) AS cutoff
+      FROM cash_ledger
+      WHERE source_type = 'period_reset'
+    ),
+    payment_values AS (
       SELECT
         p.*,
         CASE
@@ -129,6 +136,7 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
       FROM payment_values p
       WHERE p.status = 'completed'
         AND p.is_cash
+        AND ((SELECT cutoff FROM reset_cutoff) IS NULL OR p.payment_date >= (SELECT cutoff FROM reset_cutoff))
     ),
     voucher_values AS (
       SELECT
@@ -164,6 +172,7 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
       WHERE v.status = 'recorded'
         AND v.deleted_at IS NULL
         AND v.is_cash
+        AND ((SELECT cutoff FROM reset_cutoff) IS NULL OR v.voucher_date >= (SELECT cutoff FROM reset_cutoff))
         AND NOT (
           v.linked_entity = 'member'
           AND v.voucher_type = 'cash_receipt'
@@ -204,6 +213,7 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
         COALESCE(NULLIF(TRIM(sp.supplier), ''), '') AS party
       FROM stock_purchases sp
       WHERE sp.paid_from_cash = 1
+        AND ((SELECT cutoff FROM reset_cutoff) IS NULL OR sp.purchase_date >= (SELECT cutoff FROM reset_cutoff))
         AND (
           sp.payment_id IS NULL
           OR NOT EXISTS (
@@ -239,13 +249,14 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
         COALESCE(NULLIF(TRIM(sc.supplier), ''), '') AS party
       FROM supplier_payments sp
       LEFT JOIN supplier_credits sc ON sc.id = sp.credit_id
-      WHERE sp.payment_id IS NULL OR NOT EXISTS (
-        SELECT 1
-        FROM payment_values p4
-        WHERE p4.id = sp.payment_id
-          AND p4.status = 'completed'
-          AND p4.is_cash
-      )
+      WHERE ((SELECT cutoff FROM reset_cutoff) IS NULL OR sp.payment_date >= (SELECT cutoff FROM reset_cutoff))
+        AND (sp.payment_id IS NULL OR NOT EXISTS (
+          SELECT 1
+          FROM payment_values p4
+          WHERE p4.id = sp.payment_id
+            AND p4.status = 'completed'
+            AND p4.is_cash
+        ))
     ),
     opening_cash AS (
       SELECT
@@ -271,6 +282,7 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
         'Opening balance'::text AS party
       FROM cash_ledger cl
       WHERE cl.source_type = 'opening_balance'
+        AND ((SELECT cutoff FROM reset_cutoff) IS NULL OR cl.entry_date >= (SELECT cutoff FROM reset_cutoff))
     )
     SELECT * FROM payment_cash
     UNION ALL SELECT * FROM voucher_cash
