@@ -187,42 +187,44 @@ export async function updateProduct(id: number, input: UpdateProductInput) {
   validateNonNegative(input.costPrice, "costPrice");
   validateNonNegative(input.sellingPrice, "sellingPrice");
 
-  const [existing] = await db.select().from(productsTable).where(eq(productsTable.id, id));
-  if (!existing) throw notFound("Product not found");
+  return withTransaction(async (tx) => {
+    const [existing] = await tx.select().from(productsTable).where(eq(productsTable.id, id));
+    if (!existing) throw notFound("Product not found");
 
-  if (input.barcode && input.barcode !== existing.barcode) {
-    const duplicate = await db.select({ id: productsTable.id }).from(productsTable).where(and(
-      eq(productsTable.barcode, input.barcode),
-      not(eq(productsTable.id, id)),
-    ));
-    if (duplicate.length > 0) throw conflict("Barcode already exists");
-  }
+    if (input.barcode && input.barcode !== existing.barcode) {
+      const duplicate = await tx.select({ id: productsTable.id }).from(productsTable).where(and(
+        eq(productsTable.barcode, input.barcode),
+        not(eq(productsTable.id, id)),
+      ));
+      if (duplicate.length > 0) throw conflict("Barcode already exists");
+    }
 
-  const patch: Partial<typeof productsTable.$inferInsert> = {};
-  if (input.name !== undefined) patch.name = input.name;
-  if (input.barcode !== undefined) patch.barcode = input.barcode || null;
-  if (input.description !== undefined) patch.description = input.description || null;
-  if (input.category !== undefined) patch.category = input.category || null;
-  if (input.supplier !== undefined) patch.supplier = input.supplier || null;
-  if (input.notes !== undefined) patch.notes = input.notes || null;
-  if (input.quantity !== undefined) patch.quantity = input.quantity;
-  if (input.alertQuantity !== undefined) patch.alertQuantity = input.alertQuantity;
-  if (input.costPrice !== undefined) patch.costPrice = input.costPrice;
-  if (input.sellingPrice !== undefined) patch.sellingPrice = input.sellingPrice;
-  if (input.currency !== undefined) patch.currency = input.currency;
-  if (input.status !== undefined) {
-    patch.status = input.status;
-    patch.deletedAt = input.status === "deleted" ? new Date() : null;
-  }
+    const patch: Partial<typeof productsTable.$inferInsert> = {};
+    if (input.name !== undefined) patch.name = input.name;
+    if (input.barcode !== undefined) patch.barcode = input.barcode || null;
+    if (input.description !== undefined) patch.description = input.description || null;
+    if (input.category !== undefined) patch.category = input.category || null;
+    if (input.supplier !== undefined) patch.supplier = input.supplier || null;
+    if (input.notes !== undefined) patch.notes = input.notes || null;
+    if (input.quantity !== undefined) patch.quantity = input.quantity;
+    if (input.alertQuantity !== undefined) patch.alertQuantity = input.alertQuantity;
+    if (input.costPrice !== undefined) patch.costPrice = input.costPrice;
+    if (input.sellingPrice !== undefined) patch.sellingPrice = input.sellingPrice;
+    if (input.currency !== undefined) patch.currency = input.currency;
+    if (input.status !== undefined) {
+      patch.status = input.status;
+      patch.deletedAt = input.status === "deleted" ? new Date() : null;
+    }
 
-  const [updated] = await db.update(productsTable).set(patch).where(eq(productsTable.id, id)).returning();
-  const action = input.status === "deleted" ? "product_deleted"
-    : input.status === "archived" ? "product_archived"
-      : input.status === "active" && existing.status !== "active" ? "product_restored"
-        : input.barcode !== undefined && input.barcode !== existing.barcode ? "product_barcode_changed"
-          : "product_edited";
-  const rate = await getExchangeRate();
-  return { product: enrichProduct(updated, rate), action };
+    const [updated] = await tx.update(productsTable).set(patch).where(eq(productsTable.id, id)).returning();
+    const action = input.status === "deleted" ? "product_deleted"
+      : input.status === "archived" ? "product_archived"
+        : input.status === "active" && existing.status !== "active" ? "product_restored"
+          : input.barcode !== undefined && input.barcode !== existing.barcode ? "product_barcode_changed"
+            : "product_edited";
+    const rate = await getExchangeRate();
+    return { product: enrichProduct(updated, rate), action };
+  });
 }
 
 export async function listStockPurchases(productId: number) {
