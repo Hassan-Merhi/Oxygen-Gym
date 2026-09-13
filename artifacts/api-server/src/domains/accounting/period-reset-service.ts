@@ -32,15 +32,16 @@ type CountRow = {
  * Preserved intentionally:
  * - products, quantities, costs, and stock purchase history
  * - members (active members stay live; inactive/expired members remain available for retention history)
- * - expenses
+ * - expense/outgoing transactions and the legacy expenses table
  * - plans, staff/users, settings, suppliers/credits, numbering, and activity logs
  *
  * Cleared intentionally:
- * - payments/cashbook activity, vouchers, sales, payroll runs, commissions,
- *   attendance check-ins, accounting entries, and the cash-ledger event stream
+ * - revenue/member receipts, sales, payroll runs, commissions, attendance check-ins,
+ *   their accounting entries, and the current cash-ledger event stream
  *
  * The period-reset marker is used by the canonical cash movement reader so
- * pre-reset stock/supplier cash history cannot reduce the new opening balance.
+ * preserved pre-reset expense/stock/supplier history remains auditable but no
+ * longer changes the new period's opening cash balance.
  */
 export async function resetOperationalPeriod(input: ResetOperationalPeriodInput, actor: string) {
   if (input.confirmation !== PERIOD_RESET_CONFIRMATION) {
@@ -65,31 +66,49 @@ export async function resetOperationalPeriod(input: ResetOperationalPeriodInput,
 
     const before = await tx.execute(sql`
       SELECT
-        (SELECT COUNT(*) FROM payments) AS payments,
-        (SELECT COUNT(*) FROM vouchers) AS vouchers,
+        (SELECT COUNT(*) FROM payments
+          WHERE NOT (direction = 'out' AND category <> 'payroll' AND status <> 'cancelled')) AS payments,
+        (SELECT COUNT(*) FROM vouchers
+          WHERE NOT (direction = 'out' AND status = 'recorded' AND deleted_at IS NULL)) AS vouchers,
         (SELECT COUNT(*) FROM sales) AS sales,
         (SELECT COUNT(*) FROM payroll) AS payroll,
         (SELECT COUNT(*) FROM commissions) AS commissions,
         (SELECT COUNT(*) FROM check_ins) AS check_ins,
-        (SELECT COUNT(*) FROM accounting_entries) AS accounting_entries,
+        (SELECT COUNT(*) FROM accounting_entries ae
+          WHERE NOT (
+            (ae.source_type LIKE 'payment%' AND EXISTS (SELECT 1 FROM payments p WHERE p.id = ae.source_id AND p.direction = 'out' AND p.category <> 'payroll' AND p.status <> 'cancelled'))
+            OR (ae.source_type LIKE 'voucher%' AND EXISTS (SELECT 1 FROM vouchers v WHERE v.id = ae.source_id AND v.direction = 'out' AND v.status = 'recorded' AND v.deleted_at IS NULL))
+            OR ae.source_type IN ('stock_purchase', 'supplier_credit', 'supplier_payment', 'expense')
+          )) AS accounting_entries,
         (SELECT COUNT(*) FROM cash_ledger) AS cash_ledger
     `);
     const counts = (before.rows[0] ?? {}) as CountRow;
 
-    // Current-period transactional activity is cleared. Master/reference data and
-    // the explicitly preserved datasets above are deliberately not touched.
+    // Remove new-period activity while retaining expenses and inventory history.
     await tx.execute(sql`DELETE FROM commissions`);
     await tx.execute(sql`DELETE FROM payroll`);
     await tx.execute(sql`DELETE FROM sales`);
-    await tx.execute(sql`DELETE FROM vouchers`);
-    await tx.execute(sql`DELETE FROM payments`);
+    await tx.execute(sql`
+      DELETE FROM vouchers
+      WHERE NOT (direction = 'out' AND status = 'recorded' AND deleted_at IS NULL)
+    `);
+    await tx.execute(sql`
+      DELETE FROM payments
+      WHERE NOT (direction = 'out' AND category <> 'payroll' AND status <> 'cancelled')
+    `);
     await tx.execute(sql`DELETE FROM check_ins`);
-    await tx.execute(sql`DELETE FROM accounting_entries`);
+    await tx.execute(sql`
+      DELETE FROM accounting_entries ae
+      WHERE NOT (
+        (ae.source_type LIKE 'payment%' AND EXISTS (SELECT 1 FROM payments p WHERE p.id = ae.source_id))
+        OR (ae.source_type LIKE 'voucher%' AND EXISTS (SELECT 1 FROM vouchers v WHERE v.id = ae.source_id))
+        OR ae.source_type IN ('stock_purchase', 'supplier_credit', 'supplier_payment', 'expense')
+      )
+    `);
     await tx.execute(sql`DELETE FROM cash_ledger`);
-    await tx.execute(sql`DELETE FROM financial_idempotency`);
 
     // A zero-value marker is kept even when opening cash is $0. The cash reader
-    // uses this timestamp as the cutover for preserved stock/supplier history.
+    // uses this timestamp as the cutover for preserved expense/stock/supplier history.
     await tx.execute(sql`
       INSERT INTO cash_ledger (
         entry_date, source_type, source_number, direction, amount, currency,
