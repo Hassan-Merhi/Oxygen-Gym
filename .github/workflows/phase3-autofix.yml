@@ -11,6 +11,7 @@ on:
       - scripts/src/architecture-audit.ts
       - scripts/src/request-boundary-audit.ts
       - scripts/package.json
+      - artifacts/api-server/src/config/env.ts
       - artifacts/api-server/src/http/contracts.ts
       - artifacts/api-server/src/app.ts
       - artifacts/api-server/src/lib/sql-rows.ts
