@@ -5,6 +5,7 @@ import { PatchSaleBody as PatchSaleBodySchema } from "@workspace/api-zod";
 import { requireAuth } from "../../middlewares/auth";
 import { logActivity } from "../../lib/activity";
 import { getCurrentUser, requireAdmin } from "../../shared/auth/permissions";
+import { redactFinancialFieldsForRequest } from "../../shared/auth/response-redaction";
 import { badRequest, notFound } from "../../shared/http/errors";
 import {
   asRecord,
@@ -36,14 +37,14 @@ router.get("/lookup-barcode", async (req, res) => {
     await logActivity(req, "barcode_not_found", "product", undefined, { barcode });
     throw notFound("Product not found for barcode");
   }
-  res.json(product);
+  res.json(redactFinancialFieldsForRequest(req, product));
 });
 
 router.get("/", async (req, res) => {
   const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListSalesQueryParams);
   const dateTo = optionalDate(query.dateTo, "dateTo");
   if (dateTo) dateTo.setHours(23, 59, 59, 999);
-  res.json(await listSales({
+  const result = await listSales({
     page: parsePage(query.page),
     limit: parseLimit(query.limit),
     search: optionalString(query.search),
@@ -51,11 +52,13 @@ router.get("/", async (req, res) => {
     currency: optionalString(query.currency),
     dateFrom: optionalDate(query.dateFrom, "dateFrom"),
     dateTo,
-  }));
+  });
+  res.json(redactFinancialFieldsForRequest(req, result));
 });
 
 router.get("/:id", async (req, res) => {
-  res.json(await getSale(parseId(contractParams(req, ApiContracts.GetSaleParams).id, "sale id")));
+  const sale = await getSale(parseId(contractParams(req, ApiContracts.GetSaleParams).id, "sale id"));
+  res.json(redactFinancialFieldsForRequest(req, sale));
 });
 
 router.post("/", async (req, res) => {
@@ -85,7 +88,7 @@ router.post("/", async (req, res) => {
     currency: sale.currency,
     itemCount: items.length,
   });
-  res.status(201).json(sale);
+  res.status(201).json(redactFinancialFieldsForRequest(req, sale));
 });
 
 router.patch("/:id", requireAdmin(), async (req, res) => {
@@ -108,7 +111,7 @@ router.patch("/:id", requireAdmin(), async (req, res) => {
   }, actor);
 
   await logActivity(req, "sale_updated", "sale", id, { updatedBy: actor });
-  res.json(sale);
+  res.json(redactFinancialFieldsForRequest(req, sale));
 });
 
 router.patch("/:id/void", async (req, res) => {
@@ -121,7 +124,7 @@ router.patch("/:id/void", async (req, res) => {
     reason,
     voidedBy: actor,
   });
-  res.json(sale);
+  res.json(redactFinancialFieldsForRequest(req, sale));
 });
 
 export default router;
