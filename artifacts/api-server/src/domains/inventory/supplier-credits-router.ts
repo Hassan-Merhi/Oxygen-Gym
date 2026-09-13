@@ -3,6 +3,7 @@ import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { logActivity } from "../../lib/activity";
+import { getCurrentUser } from "../../shared/auth/permissions";
 import {
   asRecord,
   nonNegativeNumber,
@@ -62,7 +63,7 @@ router.post("/", async (req, res) => {
     currency: optionalString(body.currency),
     purchaseDate: optionalDate(body.purchaseDate, "purchaseDate"),
     notes: optionalString(body.notes),
-  });
+  }, getCurrentUser(req).name);
   await logActivity(req, "create_supplier_credit", "supplier_credit", credit.id, {
     supplier: credit.supplier,
     creditNumber: credit.creditNumber,
@@ -83,11 +84,14 @@ router.patch("/:id", async (req, res) => {
     purchaseDate: optionalDate(body.purchaseDate, "purchaseDate"),
     notes: nullableString(body.notes),
     status: optionalString(body.status),
-  }));
+  }, getCurrentUser(req).name));
 });
 
 router.delete("/:id", async (req, res) => {
-  res.json(await deleteSupplierCredit(parseId(contractParams(req, ApiContracts.DeleteSupplierCreditParams).id, "supplier credit id")));
+  res.json(await deleteSupplierCredit(
+    parseId(contractParams(req, ApiContracts.DeleteSupplierCreditParams).id, "supplier credit id"),
+    getCurrentUser(req).name,
+  ));
 });
 
 router.get("/:id/payments", async (req, res) => {
@@ -102,7 +106,7 @@ router.post("/:id/payments", async (req, res) => {
     currency: optionalString(body.currency),
     paymentDate: optionalDate(body.paymentDate, "paymentDate"),
     notes: optionalString(body.notes),
-  });
+  }, getCurrentUser(req).name);
   await logActivity(req, "supplier_payment", "supplier_credit", id, {
     amount: result.payment.amount,
     supplier: result.credit.supplier,
@@ -114,6 +118,7 @@ router.delete("/:id/payments/:paymentId", async (req, res) => {
   res.json(await deleteSupplierPayment(
     parseId(contractParams(req, ApiContracts.DeleteSupplierPaymentParams).id, "supplier credit id"),
     parseId(contractParams(req, ApiContracts.DeleteSupplierPaymentParams).paymentId, "supplier payment id"),
+    getCurrentUser(req).name,
   ));
 });
 
