@@ -1,10 +1,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { createHash } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { badRequest } from "./errors";
 
 export interface MutationRequestContext {
   scope: string;
   idempotencyKey?: string;
+  requestHash: string;
   financial: boolean;
 }
 
@@ -34,15 +36,21 @@ export function mutationRequestContext(req: Request, _res: Response, next: NextF
     return;
   }
 
+  const method = req.method.toUpperCase();
   const path = req.originalUrl.split("?", 1)[0] || req.path;
   const rawKey = req.get("Idempotency-Key")?.trim();
   if (rawKey && (rawKey.length < 8 || rawKey.length > 200)) {
     throw badRequest("Idempotency-Key must be between 8 and 200 characters");
   }
 
+  const requestHash = createHash("sha256")
+    .update(`${method}\n${path}\n${JSON.stringify(req.body ?? null)}`)
+    .digest("hex");
+
   storage.run({
-    scope: `${req.method.toUpperCase()}:${path}`,
+    scope: `${method}:${path}`,
     idempotencyKey: rawKey || undefined,
+    requestHash,
     financial: FINANCIAL_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`)),
   }, next);
 }
