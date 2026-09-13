@@ -6,9 +6,19 @@ export interface FinancialVisibility {
   viewProfit: boolean;
 }
 
+const COST_DERIVED_KEYS = new Set([
+  "stockvalueusd",
+  "stockvaluecdf",
+  "totalvalueusd",
+  "totalvaluecdf",
+  "inventoryvalue",
+  "inventoryvalueusd",
+  "inventoryvaluecdf",
+]);
+
 function shouldRemoveKey(key: string, visibility: FinancialVisibility): boolean {
   const normalized = key.toLowerCase();
-  if (!visibility.viewCost && normalized.includes("cost")) return true;
+  if (!visibility.viewCost && (normalized.includes("cost") || COST_DERIVED_KEYS.has(normalized))) return true;
   if (!visibility.viewProfit && (normalized.includes("profit") || normalized.includes("margin"))) return true;
   return false;
 }
