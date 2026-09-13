@@ -21,6 +21,13 @@ export interface UpdateSettingsInput {
   dailySummaryHour?: number;
 }
 
+const ADMIN_ONLY_SETTINGS = [
+  "backupEnabled",
+  "backupTime",
+  "greenApiInstanceId",
+  "greenApiToken",
+] as const satisfies readonly (keyof UpdateSettingsInput)[];
+
 async function ensureSettings() {
   const existing = await db.query.settingsTable.findFirst();
   if (existing) return existing;
@@ -34,19 +41,27 @@ async function ensureSettings() {
   return created;
 }
 
-function redactCredentials<T extends { greenApiToken?: string | null }>(settings: T, isAdmin: boolean): T {
-  if (isAdmin || !settings.greenApiToken) return settings;
-  return { ...settings, greenApiToken: "••••••••" };
+function redactAdminSettings<T extends Record<string, unknown>>(settings: T, isAdmin: boolean) {
+  if (isAdmin) return settings;
+  const safe = { ...settings } as Record<string, unknown>;
+  for (const key of ADMIN_ONLY_SETTINGS) delete safe[key];
+  return safe;
+}
+
+function assertAdminSettingsAccess(data: UpdateSettingsInput, isAdmin: boolean): void {
+  if (isAdmin) return;
+  if (ADMIN_ONLY_SETTINGS.some((key) => data[key] !== undefined)) {
+    throw forbidden("Administrator permission is required for backup and integration settings");
+  }
 }
 
 export async function getSettings(isAdmin: boolean) {
   const settings = await ensureSettings();
-  return redactCredentials(settings, isAdmin);
+  return redactAdminSettings(settings as unknown as Record<string, unknown>, isAdmin);
 }
 
 export async function updateSettings(data: UpdateSettingsInput, isAdmin: boolean) {
-  const changingCredentials = data.greenApiInstanceId !== undefined || data.greenApiToken !== undefined;
-  if (!isAdmin && changingCredentials) throw forbidden("Admin only");
+  assertAdminSettingsAccess(data, isAdmin);
 
   const existing = await db.query.settingsTable.findFirst();
   if (!existing) {
@@ -62,14 +77,14 @@ export async function updateSettings(data: UpdateSettingsInput, isAdmin: boolean
       logoUrl: data.logoUrl,
       receiptLogoUrl: data.receiptLogoUrl,
       membershipCardFooter: data.membershipCardFooter,
-      backupEnabled: data.backupEnabled ?? "false",
-      backupTime: data.backupTime ?? "02:00",
+      ...(isAdmin && data.backupEnabled !== undefined && { backupEnabled: data.backupEnabled }),
+      ...(isAdmin && data.backupTime !== undefined && { backupTime: data.backupTime }),
       ...(isAdmin && data.greenApiInstanceId !== undefined && { greenApiInstanceId: data.greenApiInstanceId }),
       ...(isAdmin && data.greenApiToken !== undefined && { greenApiToken: data.greenApiToken }),
       ...(data.dailySummaryEnabled !== undefined && { dailySummaryEnabled: data.dailySummaryEnabled }),
       ...(data.dailySummaryHour !== undefined && { dailySummaryHour: data.dailySummaryHour }),
     }).returning();
-    return redactCredentials(created, isAdmin);
+    return redactAdminSettings(created as unknown as Record<string, unknown>, isAdmin);
   }
 
   const [updated] = await db.update(settingsTable)
@@ -85,8 +100,8 @@ export async function updateSettings(data: UpdateSettingsInput, isAdmin: boolean
       ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
       ...(data.receiptLogoUrl !== undefined && { receiptLogoUrl: data.receiptLogoUrl }),
       ...(data.membershipCardFooter !== undefined && { membershipCardFooter: data.membershipCardFooter }),
-      ...(data.backupEnabled !== undefined && { backupEnabled: data.backupEnabled }),
-      ...(data.backupTime !== undefined && { backupTime: data.backupTime }),
+      ...(isAdmin && data.backupEnabled !== undefined && { backupEnabled: data.backupEnabled }),
+      ...(isAdmin && data.backupTime !== undefined && { backupTime: data.backupTime }),
       ...(isAdmin && data.greenApiInstanceId !== undefined && { greenApiInstanceId: data.greenApiInstanceId }),
       ...(isAdmin && data.greenApiToken !== undefined && { greenApiToken: data.greenApiToken }),
       ...(data.dailySummaryEnabled !== undefined && { dailySummaryEnabled: data.dailySummaryEnabled }),
@@ -94,5 +109,5 @@ export async function updateSettings(data: UpdateSettingsInput, isAdmin: boolean
     })
     .returning();
 
-  return redactCredentials(updated, isAdmin);
+  return redactAdminSettings(updated as unknown as Record<string, unknown>, isAdmin);
 }
