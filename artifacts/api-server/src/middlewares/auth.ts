@@ -1,29 +1,40 @@
 import { type Request, type Response, type NextFunction } from "express";
-import jwt from "jsonwebtoken";
-import { db, usersTable } from "@workspace/db";
-import { eq, isNull } from "drizzle-orm";
+import jwt, { type JwtPayload as JsonWebTokenPayload } from "jsonwebtoken";
+import { db } from "@workspace/db";
+import { env } from "../config/env";
 
-const JWT_SECRET = process.env.SESSION_SECRET || "gympro-dev-secret-change-in-prod";
-if (!process.env.SESSION_SECRET) {
-  console.warn("[SECURITY] SESSION_SECRET env var is not set — using insecure hardcoded default. Set it in production.");
-}
-
-export interface JwtPayload {
+export interface GymJwtPayload {
   userId: number;
   role: string;
   username: string;
 }
 
-export function signToken(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "24h" });
+function isGymJwtPayload(value: string | JsonWebTokenPayload): value is JsonWebTokenPayload & GymJwtPayload {
+  return (
+    typeof value !== "string" &&
+    typeof value.userId === "number" &&
+    typeof value.role === "string" &&
+    typeof value.username === "string"
+  );
 }
 
-export function verifyToken(token: string): JwtPayload | null {
+export function signToken(payload: GymJwtPayload): string {
+  return jwt.sign(payload, env.sessionSecret, { expiresIn: "24h" });
+}
+
+export function verifyToken(token: string): GymJwtPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as JwtPayload;
+    const decoded = jwt.verify(token, env.sessionSecret);
+    return isGymJwtPayload(decoded) ? decoded : null;
   } catch {
     return null;
   }
+}
+
+function attachUser(req: Request, user: NonNullable<Request["__gymproUser"]>): void {
+  req.__gymproUser = user;
+  req.__gymproUserId = user.id;
+  req.__gymproUserName = user.name;
 }
 
 export function requireAuth() {
@@ -52,18 +63,17 @@ export function requireAuth() {
         return;
       }
 
-      (req as any).__gymproUser = user;
-      (req as any).__gymproUserId = user.id;
-      (req as any).__gymproUserName = user.name;
+      attachUser(req, user);
       next();
     } catch (err) {
+      req.log.error({ err }, "Authentication lookup failed");
       res.status(500).json({ error: "Auth check failed" });
     }
   };
 }
 
 export function optionalAuth() {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     const header = req.headers.authorization;
     const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
 
@@ -74,12 +84,10 @@ export function optionalAuth() {
           const user = await db.query.usersTable.findFirst({
             where: (u, { and, eq, isNull }) => and(eq(u.id, payload.userId), isNull(u.deletedAt)),
           });
-          if (user && user.status === "active") {
-            (req as any).__gymproUser = user;
-            (req as any).__gymproUserId = user.id;
-            (req as any).__gymproUserName = user.name;
-          }
-        } catch { /* ignore */ }
+          if (user && user.status === "active") attachUser(req, user);
+        } catch {
+          // Optional authentication must never block an otherwise public request.
+        }
       }
     }
     next();
