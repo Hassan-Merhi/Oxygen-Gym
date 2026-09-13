@@ -13,6 +13,9 @@ function writeIfChanged(file, transform) {
 }
 
 const changed = [];
+function markChanged(name) {
+  if (!changed.includes(name)) changed.push(name);
+}
 
 const auditPath = path.join(routes, "audit.ts");
 if (writeIfChanged(auditPath, (source) => {
@@ -39,7 +42,7 @@ if (writeIfChanged(auditPath, (source) => {
   text = text.replace(/([A-Za-z_$][\w$.]*)\.rows as any\[\]/g, "sqlRows<AuditSqlRow>($1)");
   text = text.replace("new Date(r.expiryDate)", "new Date(String(r.expiryDate ?? \"\"))");
   return text;
-})) changed.push("audit.ts");
+})) markChanged("audit.ts");
 
 const attendancePath = path.join(routes, "attendance.ts");
 if (writeIfChanged(attendancePath, (source) => {
@@ -71,7 +74,7 @@ if (writeIfChanged(attendancePath, (source) => {
     "monthlyHistory.filter((r) => Number(r.count ?? 0) > 0).length",
   );
   return text;
-})) changed.push("attendance.ts");
+})) markChanged("attendance.ts");
 
 const notificationsPath = path.join(routes, "notifications.ts");
 if (writeIfChanged(notificationsPath, (source) => {
@@ -93,13 +96,28 @@ if (writeIfChanged(notificationsPath, (source) => {
   text = text.replace(/\(\(outOfStockProducts\.rows \?\? outOfStockProducts\) as any\[\]\)/g, "sqlRows<NotificationSqlRow>(outOfStockProducts)");
   text = text.replace("draftPayrolls as any[]", "draftPayrolls");
   return text;
-})) changed.push("notifications.ts");
+})) markChanged("notifications.ts");
 
 const paymentsPath = path.join(routes, "payments.ts");
 if (writeIfChanged(paymentsPath, (source) => source.replace("          )) as any,\n", "          )),\n"))) {
-  changed.push("payments.ts");
+  markChanged("payments.ts");
+}
+
+// Generated path contracts coerce integer parameters to numbers. Legacy route
+// code still wrapped several of those values in parseInt(... as string), which
+// is both redundant and rejected by TS 5.9. Normalize only this generated-
+// contract pattern; unrelated string assertions are left untouched.
+for (const entry of fs.readdirSync(routes, { withFileTypes: true })) {
+  if (!entry.isFile() || !entry.name.endsWith(".ts") || entry.name === "index.ts") continue;
+  const file = path.join(routes, entry.name);
+  if (writeIfChanged(file, (source) => source.replace(
+    /parseInt\((contractParams\(req,\s*ApiContracts\.[A-Za-z0-9_]+Params\)\.[A-Za-z0-9_]+)\s+as\s+string\)/g,
+    "Number($1)",
+  ))) {
+    markChanged(entry.name);
+  }
 }
 
 console.log(changed.length > 0
-  ? `Phase 3 explicit-any cleanup updated: ${changed.join(", ")}`
-  : "Phase 3 explicit-any cleanup: no changes needed.");
+  ? `Phase 3 typed-route cleanup updated: ${changed.join(", ")}`
+  : "Phase 3 typed-route cleanup: no changes needed.");
