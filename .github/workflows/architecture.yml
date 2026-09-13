@@ -2,18 +2,24 @@ name: Architecture
 
 on:
   pull_request:
-    branches: [main]
+    branches:
+      - main
   push:
-    branches: [main]
+    branches:
+      - main
+      - phase-3/contracts-boundaries-architecture
+
+permissions:
+  contents: read
 
 concurrency:
-  group: architecture-${{ github.ref }}
+  group: architecture-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  architecture:
+  validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,10 +32,9 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Contract drift
-        run: pnpm run contracts:check
-      - name: Architecture boundaries
-        run: pnpm run architecture:audit
-      - name: Type safety
-        run: pnpm run typecheck
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate contracts, boundaries, and types
+        run: pnpm run architecture:check
+      - name: Validate production build
+        run: pnpm run build
