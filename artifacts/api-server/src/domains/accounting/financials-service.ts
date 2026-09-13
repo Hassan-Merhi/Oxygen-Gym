@@ -58,12 +58,17 @@ function rangeFor(period: FinancialPeriod, dateFrom?: string, dateTo?: string): 
     return { from, to };
   }
   if (period === "today") return { from: lubumbashiTodayStart(now), to: lubumbashiTodayEnd(now) };
-  if (period === "year") return lubumbashiYearBounds(now);
+  if (period === "year") {
+    const { start, end } = lubumbashiYearBounds(now);
+    return { from: start, to: end };
+  }
   if (period === "last_month") {
     const current = lubumbashiMonthBounds(now);
-    return lubumbashiMonthBounds(new Date(current.start.getTime() - 1));
+    const previous = lubumbashiMonthBounds(new Date(current.start.getTime() - 1));
+    return { from: previous.start, to: previous.end };
   }
-  return lubumbashiMonthBounds(now);
+  const current = lubumbashiMonthBounds(now);
+  return { from: current.start, to: current.end };
 }
 
 function monthLabel(monthKey: string): string {
