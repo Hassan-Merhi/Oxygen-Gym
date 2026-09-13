@@ -71,7 +71,7 @@ export default function PeriodReset() {
     setResult(null);
     try {
       const token = localStorage.getItem("gym_token");
-      const response = await fetch(`${BASE}api/ledger/opening-balance?reset=true`, {
+      const response = await fetch(`${BASE}api/ledger/opening-balance`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
