@@ -1,5 +1,3 @@
-import "dotenv/config";
-
 type NodeEnv = "development" | "test" | "production";
 
 function optional(name: string): string | undefined {
