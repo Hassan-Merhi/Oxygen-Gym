@@ -7,14 +7,17 @@ import {
   useListProducts,
   useCreateProduct,
   useUpdateProduct,
+  useAddStockPurchase,
   useListProductPurchases,
   useGetProductHistory,
 } from "@workspace/api-client-react";
 import type { ProductRecord, StockPurchaseRecord } from "@workspace/api-client-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { ProductStatusBadge } from "@/lib/status-badge";
+import { EmptyTableState } from "@/components/ui/empty-table-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -58,15 +61,13 @@ import {
   ChevronRight,
   AlertCircle,
   SlidersHorizontal,
-  Barcode,
-  Boxes,
-  BadgeDollarSign,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFmtDate } from "@/lib/useFmtDate";
 
 type ProductStatus = "active" | "archived" | "deleted" | "all";
 
+// ── Currency formatter ────────────────────────────────────────────────────────
 function fmtMoney(n: number, cur: string = "USD"): string {
   if (cur === "CDF") return `${Math.round(n).toLocaleString()} FC`;
   return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -74,6 +75,7 @@ function fmtMoney(n: number, cur: string = "USD"): string {
 
 export default function Stock() {
   const { t } = useI18n();
+  const { fmtDate, fmtDateTime } = useFmtDate();
   const me = useGetMe();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -81,7 +83,9 @@ export default function Stock() {
   const canView = me?.role === "admin" || me?.permissions?.stock;
   const canManage = me?.role === "admin" || me?.permissions?.manageInventory;
   const canViewCost = Boolean(me?.role === "admin" || me?.permissions?.viewCost);
+  const canViewProfit = Boolean(me?.role === "admin" || me?.permissions?.viewProfit);
 
+  // ── Filters ────────────────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState<ProductStatus>("active");
@@ -90,12 +94,14 @@ export default function Stock() {
   const [showFilters, setShowFilters] = useState(false);
   const limit = 20;
 
+  // ── Modals ─────────────────────────────────────────────────────────────────
   const [showProductModal, setShowProductModal] = useState(false);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductRecord | null>(null);
   const [activeProduct, setActiveProduct] = useState<ProductRecord | null>(null);
 
+  // ── Data ───────────────────────────────────────────────────────────────────
   const summaryQ = useGetStockSummary({ query: { enabled: canView, queryKey: ["getStockSummary"] } });
   const productsQ = useListProducts({
     page,
@@ -110,14 +116,13 @@ export default function Stock() {
   const total = productsQ.data?.total ?? 0;
   const totalPages = Math.ceil(total / limit);
 
+  // Debounce search
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search);
-      setPage(1);
-    }, 400);
+    const timer = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 400);
     return () => clearTimeout(timer);
   }, [search]);
 
+  // ── Mutations ──────────────────────────────────────────────────────────────
   const createMutation = useCreateProduct();
   const updateMutation = useUpdateProduct();
 
@@ -126,38 +131,24 @@ export default function Stock() {
     qc.invalidateQueries({ queryKey: ["/api/stock/summary"] });
   }
 
-  function openAdd() {
-    setEditingProduct(null);
-    setShowProductModal(true);
-  }
+  function openAdd() { setEditingProduct(null); setShowProductModal(true); }
+  function openEdit(p: ProductRecord) { setEditingProduct(p); setShowProductModal(true); }
 
-  function openEdit(product: ProductRecord) {
-    setEditingProduct(product);
-    setShowProductModal(true);
-  }
+  function openPurchase(p: ProductRecord) { setActiveProduct(p); setShowPurchaseModal(true); }
+  function openHistory(p: ProductRecord) { setActiveProduct(p); setShowHistoryModal(true); }
 
-  function openPurchase(product: ProductRecord) {
-    setActiveProduct(product);
-    setShowPurchaseModal(true);
-  }
-
-  function openHistory(product: ProductRecord) {
-    setActiveProduct(product);
-    setShowHistoryModal(true);
-  }
-
-  async function changeStatus(product: ProductRecord, newStatus: "archived" | "active" | "deleted") {
+  async function changeStatus(p: ProductRecord, newStatus: "archived" | "active" | "deleted") {
     const confirmMsg = newStatus === "deleted" ? t("stock.confirm.delete") : t("stock.confirm.archive");
     if (!window.confirm(confirmMsg)) return;
-    await updateMutation.mutateAsync({ id: product.id, data: { status: newStatus } });
+    await updateMutation.mutateAsync({ id: p.id, data: { status: newStatus } });
     toast({ title: t("stock.toast.updated") });
     invalidate();
   }
 
   if (!canView) {
     return (
-      <div className="flex h-[60vh] flex-col items-center justify-center gap-3">
-        <AlertCircle className="h-10 w-10 text-muted-foreground" />
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-3">
+        <AlertCircle className="w-10 h-10 text-muted-foreground" />
         <p className="text-muted-foreground">{t("stock.restricted")}</p>
       </div>
     );
@@ -172,55 +163,43 @@ export default function Stock() {
         subtitle={`${total} ${t("stock.card.total").toLowerCase()}`}
         actions={canManage ? (
           <Button onClick={openAdd} className="gap-2">
-            <Plus className="h-4 w-4" />
-            {t("stock.addProduct")}
+            <Plus className="w-4 h-4" />{t("stock.addProduct")}
           </Button>
         ) : undefined}
       />
 
-      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-5">
-        <SummaryCard icon={<Package className="h-4 w-4" />} label={t("stock.card.total")} value={summary?.totalProducts ?? 0} color="indigo" />
-        <SummaryCard icon={<PackageCheck className="h-4 w-4" />} label={t("stock.card.active")} value={summary?.activeProducts ?? 0} color="emerald" />
-        <SummaryCard icon={<AlertTriangle className="h-4 w-4" />} label={t("stock.card.lowStock")} value={summary?.lowStockCount ?? 0} color="amber" danger={Boolean(summary?.lowStockCount && summary.lowStockCount > 0)} />
-        <SummaryCard icon={<Layers className="h-4 w-4" />} label={t("stock.card.qty")} value={summary?.totalQuantity ?? 0} color="blue" />
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
+        <SummaryCard icon={<Package className="w-4 h-4" />} label={t("stock.card.total")} value={summary?.totalProducts ?? 0} color="indigo" />
+        <SummaryCard icon={<PackageCheck className="w-4 h-4" />} label={t("stock.card.active")} value={summary?.activeProducts ?? 0} color="emerald" />
+        <SummaryCard icon={<AlertTriangle className="w-4 h-4" />} label={t("stock.card.lowStock")} value={summary?.lowStockCount ?? 0} color="amber" danger={Boolean(summary?.lowStockCount && summary.lowStockCount > 0)} />
+        <SummaryCard icon={<Layers className="w-4 h-4" />} label={t("stock.card.qty")} value={summary?.totalQuantity ?? 0} color="blue" />
         {canViewCost ? (
-          <SummaryCard icon={<DollarSign className="h-4 w-4" />} label={t("stock.card.value")} value={`$${(summary?.totalValueUsd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} color="purple" />
+          <SummaryCard icon={<DollarSign className="w-4 h-4" />} label={t("stock.card.value")} value={`$${(summary?.totalValueUsd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} color="purple" />
         ) : (
-          <div className="flex items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 p-3 text-center text-xs text-muted-foreground">
-            {t("acc.restricted")}
-          </div>
+          <div className="rounded-xl border border-dashed border-border bg-muted/20 p-3 flex items-center justify-center text-xs text-muted-foreground text-center">{t("acc.restricted")}</div>
         )}
       </div>
 
+      {/* Filters */}
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="h-9 bg-background pl-9"
-              placeholder={t("stock.search")}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input className="pl-9 h-9 bg-background" placeholder={t("stock.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <button
-            type="button"
-            className={`flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-3 text-sm transition-colors md:hidden ${
-              showFilters
-                ? "border-primary bg-primary/5 text-primary"
-                : "border-input bg-background text-muted-foreground"
-            }`}
-            onClick={() => setShowFilters((value) => !value)}
+            className={`md:hidden flex items-center gap-1.5 h-9 px-3 rounded-md border text-sm shrink-0 transition-colors ${showFilters ? "border-primary text-primary bg-primary/5" : "border-input bg-background text-muted-foreground"}`}
+            onClick={() => setShowFilters(v => !v)}
           >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
+            <SlidersHorizontal className="w-3.5 h-3.5" />
             {t("common.filters") || "Filters"}
-            {(status !== "active" || lowStock) && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+            {(status !== "active" || lowStock) && <span className="w-1.5 h-1.5 rounded-full bg-primary" />}
           </button>
         </div>
-
         <div className={`flex flex-wrap gap-2 ${showFilters ? "flex" : "hidden md:flex"}`}>
-          <Select value={status} onValueChange={(value) => { setStatus(value as ProductStatus); setPage(1); }}>
-            <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
+          <Select value={status} onValueChange={(v) => { setStatus(v as ProductStatus); setPage(1); }}>
+            <SelectTrigger className="w-32 h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("stock.filter.status")}</SelectItem>
               <SelectItem value="active">{t("stock.status.active")}</SelectItem>
@@ -228,138 +207,188 @@ export default function Stock() {
               <SelectItem value="deleted">{t("stock.status.deleted")}</SelectItem>
             </SelectContent>
           </Select>
-          <label className="flex h-9 cursor-pointer select-none items-center gap-2 rounded-md border border-input bg-background px-3 text-sm transition-colors hover:bg-muted/40">
-            <Checkbox checked={lowStock} onCheckedChange={(value) => { setLowStock(Boolean(value)); setPage(1); }} />
+          <label className="flex items-center gap-2 cursor-pointer select-none text-sm h-9 px-3 rounded-md border border-input bg-background hover:bg-muted/40 transition-colors">
+            <Checkbox checked={lowStock} onCheckedChange={(v) => { setLowStock(Boolean(v)); setPage(1); }} />
             {t("stock.filter.lowStock")}
           </label>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm divide-y divide-border/50 md:hidden">
+      {/* Mobile product cards */}
+      <div className="md:hidden rounded-xl border border-border overflow-hidden bg-card shadow-sm divide-y divide-border/50">
         {productsQ.isLoading ? (
           <div className="divide-y divide-border/50">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} className="flex items-center gap-3 px-3 py-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-3">
                 <div className="flex-1 space-y-1.5">
-                  <div className="h-3.5 w-2/3 animate-pulse rounded bg-muted" />
-                  <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+                  <div className="h-3.5 bg-muted rounded animate-pulse w-2/3" />
+                  <div className="h-3 bg-muted rounded animate-pulse w-1/2" />
                 </div>
-                <div className="h-5 w-14 shrink-0 animate-pulse rounded-full bg-muted" />
+                <div className="h-5 w-14 bg-muted rounded-full animate-pulse shrink-0" />
               </div>
             ))}
           </div>
         ) : products.length === 0 ? (
           <div className="p-10 text-center">
-            <Package className="mx-auto mb-2 h-9 w-9 text-muted-foreground/40" />
+            <Package className="w-9 h-9 text-muted-foreground/40 mx-auto mb-2" />
             <p className="text-sm text-muted-foreground">{t("stock.empty")}</p>
           </div>
-        ) : products.map((product) => (
-          <div key={product.id} className={`flex items-center gap-3 px-3 py-3 ${product.isLowStock && product.status === "active" ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-sm font-semibold">{product.name}</span>
-                {product.isLowStock && product.status === "active" && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-200/60 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
-                    <AlertTriangle className="h-3 w-3" /> Low
+        ) : products.map((p) => (
+          <div key={p.id} className={`flex items-center gap-3 px-3 py-3 ${p.isLowStock && p.status === "active" ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-semibold text-sm">{p.name}</span>
+                {p.isLowStock && p.status === "active" && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full border border-amber-200/60">
+                    <AlertTriangle className="w-3 h-3" />Low
                   </span>
                 )}
               </div>
-              <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="text-sm font-bold tabular-nums text-foreground">{product.quantity}</span>
+              <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                <span className="font-bold tabular-nums text-foreground text-sm">{p.quantity}</span>
                 <span>·</span>
-                <span>{fmtMoney(product.sellingPrice, product.currency)}</span>
+                <span>{fmtMoney(p.sellingPrice, p.currency)}</span>
+                {(p as any).category && (
+                  <>
+                    <span>·</span>
+                    <span className="capitalize">{(p as any).category}</span>
+                  </>
+                )}
               </div>
             </div>
-            <StatusBadge status={product.status} t={t} />
-            <ProductActions
-              product={product}
-              canManage={canManage}
-              t={t}
-              onEdit={openEdit}
-              onPurchase={openPurchase}
-              onHistory={openHistory}
-              onStatus={changeStatus}
-            />
+            <StatusBadge status={p.status} t={t} />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {canManage && <DropdownMenuItem onClick={() => openEdit(p)}><Pencil className="w-4 h-4 mr-2" />{t("stock.actions.edit")}</DropdownMenuItem>}
+                {canManage && <DropdownMenuItem onClick={() => openPurchase(p)}><ShoppingCart className="w-4 h-4 mr-2" />{t("stock.actions.purchase")}</DropdownMenuItem>}
+                <DropdownMenuItem onClick={() => openHistory(p)}><History className="w-4 h-4 mr-2" />{t("stock.actions.history")}</DropdownMenuItem>
+                {canManage && (
+                  <>
+                    <DropdownMenuSeparator />
+                    {p.status === "active" && <DropdownMenuItem onClick={() => changeStatus(p, "archived")} className="text-amber-700"><Archive className="w-4 h-4 mr-2" />{t("stock.actions.archive")}</DropdownMenuItem>}
+                    {p.status === "archived" && <DropdownMenuItem onClick={() => changeStatus(p, "active")}><RotateCcw className="w-4 h-4 mr-2" />{t("stock.actions.restore")}</DropdownMenuItem>}
+                    {p.status !== "deleted" && <DropdownMenuItem onClick={() => changeStatus(p, "deleted")} className="text-rose-700"><Trash2 className="w-4 h-4 mr-2" />{t("stock.actions.delete")}</DropdownMenuItem>}
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         ))}
       </div>
 
-      <div className="hidden overflow-hidden rounded-xl border border-border bg-card shadow-sm md:block">
-        <div className="min-w-0 overflow-x-auto">
+      {/* Desktop product table */}
+      <div className="hidden md:block rounded-xl border border-border overflow-hidden bg-card shadow-sm">
+        <div className="overflow-x-auto min-w-0">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("stock.col.name")}</th>
-                <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("stock.col.quantity")}</th>
-                <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("stock.col.sellingPrice")}</th>
-                {canViewCost && <th className="hidden px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground lg:table-cell">{t("stock.col.costPrice")}</th>}
-                {canViewCost && <th className="hidden px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground xl:table-cell">{t("stock.col.stockValue")}</th>}
-                <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("stock.col.status")}</th>
-                <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("stock.col.actions")}</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("stock.col.name")}</th>
+                <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("stock.col.quantity")}</th>
+                <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("stock.col.sellingPrice")}</th>
+                {canViewCost && <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground hidden lg:table-cell">{t("stock.col.costPrice")}</th>}
+                {canViewCost && <th className="text-right px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground hidden xl:table-cell">{t("stock.col.stockValue")}</th>}
+                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground">{t("stock.col.status")}</th>
+                <th className="px-5 py-3.5 font-semibold text-xs uppercase tracking-wide text-muted-foreground text-right">{t("stock.col.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
               {productsQ.isLoading ? (
-                <tr>
-                  <td colSpan={canViewCost ? 7 : 5} className="py-14 text-center text-muted-foreground">Loading...</td>
-                </tr>
+                <tr><td colSpan={canViewCost ? 7 : 5} className="text-center py-14 text-muted-foreground">Loading...</td></tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={canViewCost ? 7 : 5} className="py-20 text-center">
-                    <Package className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
-                    <p className="font-medium text-muted-foreground">{t("stock.empty")}</p>
-                    <p className="mt-1 text-xs text-muted-foreground/50">{t("stock.emptyHint")}</p>
+                  <td colSpan={canViewCost ? 7 : 5} className="text-center py-20">
+                    <Package className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
+                    <p className="text-muted-foreground font-medium">{t("stock.empty")}</p>
+                    <p className="text-muted-foreground/50 text-xs mt-1">{t("stock.emptyHint")}</p>
                     {canManage && (
                       <Button onClick={openAdd} className="mt-4 gap-2" size="sm">
-                        <Plus className="h-4 w-4" /> {t("stock.addProduct")}
+                        <Plus className="w-4 h-4" />{t("stock.addProduct")}
                       </Button>
                     )}
                   </td>
                 </tr>
-              ) : products.map((product) => (
-                <tr key={product.id} className={`group transition-colors hover:bg-muted/30 ${product.isLowStock && product.status === "active" ? "bg-amber-50/30 dark:bg-amber-950/10" : ""}`}>
+              ) : products.map((p) => (
+                <tr key={p.id} className={`hover:bg-muted/30 transition-colors group ${p.isLowStock && p.status === "active" ? "bg-amber-50/30 dark:bg-amber-950/10" : ""}`}>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">{product.name}</span>
-                      {product.isLowStock && product.status === "active" && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200/60 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-600">
-                          <AlertTriangle className="h-3 w-3" /> Low
+                      <span className="font-medium">{p.name}</span>
+                      {p.isLowStock && p.status === "active" && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full border border-amber-200/60">
+                          <AlertTriangle className="w-3 h-3" />Low
                         </span>
                       )}
                     </div>
-                    {product.productNumber && <p className="mt-0.5 text-xs text-muted-foreground/60">{product.productNumber}</p>}
+                    {p.productNumber && <p className="text-xs text-muted-foreground/60 mt-0.5">{p.productNumber}</p>}
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    <span className={`text-base font-bold tabular-nums ${product.isLowStock && product.status === "active" ? "text-amber-600" : "text-foreground"}`}>
-                      {product.quantity}
+                    <span className={`font-bold tabular-nums text-base ${p.isLowStock && p.status === "active" ? "text-amber-600" : "text-foreground"}`}>
+                      {p.quantity}
                     </span>
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    <span className="font-semibold tabular-nums">{fmtMoney(product.sellingPrice, product.currency)}</span>
+                    <span className="font-semibold tabular-nums">{fmtMoney(p.sellingPrice, p.currency)}</span>
                   </td>
                   {canViewCost && (
-                    <td className="hidden px-5 py-3.5 text-right lg:table-cell">
-                      <span className="tabular-nums text-muted-foreground">{fmtMoney(product.costPrice, product.currency)}</span>
+                    <td className="px-5 py-3.5 text-right hidden lg:table-cell">
+                      <span className="text-muted-foreground tabular-nums">{fmtMoney(p.costPrice, p.currency)}</span>
                     </td>
                   )}
                   {canViewCost && (
-                    <td className="hidden px-5 py-3.5 text-right xl:table-cell">
-                      <span className="tabular-nums text-muted-foreground">${product.stockValueUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    <td className="px-5 py-3.5 text-right hidden xl:table-cell">
+                      <span className="tabular-nums text-muted-foreground">${p.stockValueUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </td>
                   )}
                   <td className="px-5 py-3.5">
-                    <StatusBadge status={product.status} t={t} />
+                    <StatusBadge status={p.status} t={t} />
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    <ProductActions
-                      product={product}
-                      canManage={canManage}
-                      t={t}
-                      onEdit={openEdit}
-                      onPurchase={openPurchase}
-                      onHistory={openHistory}
-                      onStatus={changeStatus}
-                    />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {canManage && (
+                          <DropdownMenuItem onClick={() => openEdit(p)}>
+                            <Pencil className="w-4 h-4 mr-2" />{t("stock.actions.edit")}
+                          </DropdownMenuItem>
+                        )}
+                        {canManage && (
+                          <DropdownMenuItem onClick={() => openPurchase(p)}>
+                            <ShoppingCart className="w-4 h-4 mr-2" />{t("stock.actions.purchase")}
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={() => openHistory(p)}>
+                          <History className="w-4 h-4 mr-2" />{t("stock.actions.history")}
+                        </DropdownMenuItem>
+                        {canManage && (
+                          <>
+                            <DropdownMenuSeparator />
+                            {p.status === "active" && (
+                              <DropdownMenuItem onClick={() => changeStatus(p, "archived")} className="text-amber-700">
+                                <Archive className="w-4 h-4 mr-2" />{t("stock.actions.archive")}
+                              </DropdownMenuItem>
+                            )}
+                            {p.status === "archived" && (
+                              <DropdownMenuItem onClick={() => changeStatus(p, "active")}>
+                                <RotateCcw className="w-4 h-4 mr-2" />{t("stock.actions.restore")}
+                              </DropdownMenuItem>
+                            )}
+                            {p.status !== "deleted" && (
+                              <DropdownMenuItem onClick={() => changeStatus(p, "deleted")} className="text-rose-700">
+                                <Trash2 className="w-4 h-4 mr-2" />{t("stock.actions.delete")}
+                              </DropdownMenuItem>
+                            )}
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </td>
                 </tr>
               ))}
@@ -368,21 +397,19 @@ export default function Stock() {
         </div>
       </div>
 
+      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">{total} {t("members.total")}</span>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage((value) => value - 1)} disabled={page === 1}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page === 1}><ChevronLeft className="w-4 h-4" /></Button>
             <span className="text-sm">{t("common.page")} {page} {t("common.of")} {totalPages}</span>
-            <Button variant="outline" size="sm" onClick={() => setPage((value) => value + 1)} disabled={page === totalPages}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page === totalPages}><ChevronRight className="w-4 h-4" /></Button>
           </div>
         </div>
       )}
 
+      {/* Add/Edit Product Modal */}
       <ProductModal
         open={showProductModal}
         onClose={() => setShowProductModal(false)}
@@ -403,6 +430,7 @@ export default function Stock() {
         }}
       />
 
+      {/* Stock Purchase Modal */}
       {activeProduct && (
         <PurchaseModal
           open={showPurchaseModal}
@@ -420,6 +448,7 @@ export default function Stock() {
         />
       )}
 
+      {/* History Modal */}
       {activeProduct && (
         <HistoryModal
           open={showHistoryModal}
@@ -433,77 +462,10 @@ export default function Stock() {
   );
 }
 
-function ProductActions({
-  product,
-  canManage,
-  t,
-  onEdit,
-  onPurchase,
-  onHistory,
-  onStatus,
-}: {
-  product: ProductRecord;
-  canManage: boolean;
-  t: (k: string) => string;
-  onEdit: (product: ProductRecord) => void;
-  onPurchase: (product: ProductRecord) => void;
-  onHistory: (product: ProductRecord) => void;
-  onStatus: (product: ProductRecord, status: "archived" | "active" | "deleted") => Promise<void>;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {canManage && (
-          <DropdownMenuItem onClick={() => onEdit(product)}>
-            <Pencil className="mr-2 h-4 w-4" /> {t("stock.actions.edit")}
-          </DropdownMenuItem>
-        )}
-        {canManage && (
-          <DropdownMenuItem onClick={() => onPurchase(product)}>
-            <ShoppingCart className="mr-2 h-4 w-4" /> {t("stock.actions.purchase")}
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuItem onClick={() => onHistory(product)}>
-          <History className="mr-2 h-4 w-4" /> {t("stock.actions.history")}
-        </DropdownMenuItem>
-        {canManage && (
-          <>
-            <DropdownMenuSeparator />
-            {product.status === "active" && (
-              <DropdownMenuItem onClick={() => void onStatus(product, "archived")} className="text-amber-700">
-                <Archive className="mr-2 h-4 w-4" /> {t("stock.actions.archive")}
-              </DropdownMenuItem>
-            )}
-            {product.status === "archived" && (
-              <DropdownMenuItem onClick={() => void onStatus(product, "active")}>
-                <RotateCcw className="mr-2 h-4 w-4" /> {t("stock.actions.restore")}
-              </DropdownMenuItem>
-            )}
-            {product.status !== "deleted" && (
-              <DropdownMenuItem onClick={() => void onStatus(product, "deleted")} className="text-rose-700">
-                <Trash2 className="mr-2 h-4 w-4" /> {t("stock.actions.delete")}
-              </DropdownMenuItem>
-            )}
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
+// ── Product Modal ──────────────────────────────────────────────────────────────
 
 function ProductModal({
-  open,
-  onClose,
-  editing,
-  canViewCost,
-  t,
-  onCreate,
-  onUpdate,
+  open, onClose, editing, canViewCost, t, onCreate, onUpdate,
 }: {
   open: boolean;
   onClose: () => void;
@@ -514,65 +476,43 @@ function ProductModal({
   onUpdate: (id: number, data: Record<string, unknown>) => Promise<void>;
 }) {
   const [form, setForm] = useState({
-    name: "",
-    barcode: "",
-    quantity: "0",
-    alertQuantity: "5",
-    costPrice: "0",
-    sellingPrice: "0",
-    currency: "USD",
-    status: "active",
+    name: "", barcode: "", quantity: "0", alertQuantity: "5",
+    costPrice: "0", sellingPrice: "0", currency: "USD", status: "active",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!open) return;
-
-    if (editing) {
-      setForm({
-        name: editing.name,
-        barcode: editing.barcode ?? "",
-        quantity: String(editing.quantity),
-        alertQuantity: String(editing.alertQuantity),
-        costPrice: String(editing.costPrice),
-        sellingPrice: String(editing.sellingPrice),
-        currency: editing.currency,
-        status: editing.status,
-      });
-    } else {
-      setForm({
-        name: "",
-        barcode: "",
-        quantity: "0",
-        alertQuantity: "5",
-        costPrice: "0",
-        sellingPrice: "0",
-        currency: "USD",
-        status: "active",
-      });
+    if (open) {
+      if (editing) {
+        setForm({
+          name: editing.name,
+          barcode: editing.barcode ?? "",
+          quantity: String(editing.quantity),
+          alertQuantity: String(editing.alertQuantity),
+          costPrice: String(editing.costPrice),
+          sellingPrice: String(editing.sellingPrice),
+          currency: editing.currency,
+          status: editing.status,
+        });
+      } else {
+        setForm({ name: "", barcode: "", quantity: "0", alertQuantity: "5", costPrice: "0", sellingPrice: "0", currency: "USD", status: "active" });
+      }
+      setError("");
     }
-    setError("");
   }, [open, editing]);
 
-  function set(key: keyof typeof form, value: string) {
-    setForm((current) => ({ ...current, [key]: value }));
-  }
+  function set(k: keyof typeof form, v: string) { setForm((f) => ({ ...f, [k]: v })); }
 
   async function save() {
-    if (!form.name.trim()) {
-      setError(`${t("stock.field.name")} is required`);
-      return;
-    }
-
-    const quantity = Number.parseInt(form.quantity, 10);
-    const alertQuantity = Number.parseInt(form.alertQuantity, 10);
-    const costPrice = Number.parseFloat(form.costPrice);
-    const sellingPrice = Number.parseFloat(form.sellingPrice);
-
+    if (!form.name.trim()) { setError(t("stock.field.name") + " is required"); return; }
     setSaving(true);
     setError("");
     try {
+      const quantity = Number.parseInt(form.quantity, 10);
+      const alertQuantity = Number.parseInt(form.alertQuantity, 10);
+      const costPrice = Number.parseFloat(form.costPrice);
+      const sellingPrice = Number.parseFloat(form.sellingPrice);
       const data = {
         name: form.name.trim(),
         barcode: form.barcode.trim() || null,
@@ -582,23 +522,19 @@ function ProductModal({
         sellingPrice: Number.isFinite(sellingPrice) ? Math.max(0, sellingPrice) : 0,
         currency: form.currency,
         status: form.status,
+        // These fields are no longer editable here. Preserve existing values on edits.
+        description: editing?.description ?? null,
         category: editing?.category ?? null,
         supplier: editing?.supplier ?? null,
-        description: editing?.description ?? null,
         notes: editing?.notes ?? null,
       };
-
       if (editing) await onUpdate(editing.id, data);
       else await onCreate(data);
-    } catch (caught: unknown) {
-      const apiError = caught as {
-        data?: { error?: string };
-        response?: { data?: { error?: string } };
-        message?: string;
-      };
-      const message = apiError?.data?.error ?? apiError?.response?.data?.error ?? apiError?.message ?? "An error occurred";
-      if (message.toLowerCase().includes("barcode")) setError(t("stock.barcodeExists"));
-      else setError(message);
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string }; response?: { data?: { error?: string } }; message?: string };
+      const msg = err?.data?.error ?? err?.response?.data?.error ?? err?.message ?? "An error occurred";
+      if (msg.toLowerCase().includes("barcode")) setError(t("stock.barcodeExists"));
+      else setError(msg);
     } finally {
       setSaving(false);
     }
@@ -607,7 +543,7 @@ function ProductModal({
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
       <DialogContent className="w-[95vw] max-w-lg overflow-hidden p-0">
-        <DialogHeader className="border-b border-border bg-muted/15 px-6 py-5 text-left">
+        <DialogHeader className="border-b border-border bg-muted/20 px-6 py-5 text-left">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-500">
               {editing ? <Pencil className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
@@ -615,13 +551,9 @@ function ProductModal({
             <div className="min-w-0">
               <DialogTitle className="text-xl">{editing ? t("stock.editProduct") : t("stock.addProduct")}</DialogTitle>
               <p className="mt-1 text-sm text-muted-foreground">
-                {editing
-                  ? "Update the product, pricing and stock details."
-                  : "Add the essential product and inventory details."}
+                {editing ? "Update the essential product, pricing and stock details." : "Add the essential product and inventory details."}
               </p>
-              {editing?.productNumber && (
-                <p className="mt-1 text-xs font-medium text-muted-foreground/70">{editing.productNumber}</p>
-              )}
+              {editing?.productNumber && <p className="mt-1 text-xs text-muted-foreground/70">{editing.productNumber}</p>}
             </div>
           </div>
         </DialogHeader>
@@ -639,26 +571,12 @@ function ProductModal({
               <Package className="h-3.5 w-3.5" /> Product
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="product-name">{t("stock.field.name")} *</Label>
-              <Input
-                id="product-name"
-                autoFocus
-                value={form.name}
-                onChange={(event) => set("name", event.target.value)}
-                placeholder="Product name"
-              />
+              <Label>{t("stock.field.name")} *</Label>
+              <Input autoFocus value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Product name" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="product-barcode" className="flex items-center gap-1.5">
-                <Barcode className="h-3.5 w-3.5 text-muted-foreground" />
-                {t("stock.field.barcode")}
-              </Label>
-              <Input
-                id="product-barcode"
-                value={form.barcode}
-                onChange={(event) => set("barcode", event.target.value)}
-                placeholder="Scan or enter barcode"
-              />
+              <Label>{t("stock.field.barcode")}</Label>
+              <Input value={form.barcode} onChange={(e) => set("barcode", e.target.value)} placeholder="Scan or enter barcode" />
             </div>
           </section>
 
@@ -666,12 +584,12 @@ function ProductModal({
 
           <section className="space-y-3">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <BadgeDollarSign className="h-3.5 w-3.5" /> Pricing
+              <DollarSign className="h-3.5 w-3.5" /> Pricing
             </div>
             <div className={`grid grid-cols-1 gap-3 ${canViewCost ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
               <div className="space-y-1.5">
                 <Label>{t("stock.field.currency")}</Label>
-                <Select value={form.currency} onValueChange={(value) => set("currency", value)}>
+                <Select value={form.currency} onValueChange={(v) => set("currency", v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="USD">USD</SelectItem>
@@ -680,29 +598,13 @@ function ProductModal({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="product-selling-price">{t("stock.field.sellingPrice")}</Label>
-                <Input
-                  id="product-selling-price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={form.sellingPrice}
-                  onChange={(event) => set("sellingPrice", event.target.value)}
-                />
+                <Label>{t("stock.field.sellingPrice")}</Label>
+                <Input type="number" min="0" step="0.01" value={form.sellingPrice} onChange={(e) => set("sellingPrice", e.target.value)} />
               </div>
               {canViewCost && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="product-cost-price">{t("stock.field.costPrice")}</Label>
-                  <Input
-                    id="product-cost-price"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    inputMode="decimal"
-                    value={form.costPrice}
-                    onChange={(event) => set("costPrice", event.target.value)}
-                  />
+                  <Label>{t("stock.field.costPrice")}</Label>
+                  <Input type="number" min="0" step="0.01" value={form.costPrice} onChange={(e) => set("costPrice", e.target.value)} />
                 </div>
               )}
             </div>
@@ -712,36 +614,20 @@ function ProductModal({
 
           <section className="space-y-3">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <Boxes className="h-3.5 w-3.5" /> Inventory
+              <Layers className="h-3.5 w-3.5" /> Inventory
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
-                <Label htmlFor="product-quantity">{t("stock.field.quantity")}</Label>
-                <Input
-                  id="product-quantity"
-                  type="number"
-                  min="0"
-                  step="1"
-                  inputMode="numeric"
-                  value={form.quantity}
-                  onChange={(event) => set("quantity", event.target.value)}
-                />
+                <Label>{t("stock.field.quantity")}</Label>
+                <Input type="number" min="0" step="1" value={form.quantity} onChange={(e) => set("quantity", e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="product-alert-quantity">{t("stock.field.alertQty")}</Label>
-                <Input
-                  id="product-alert-quantity"
-                  type="number"
-                  min="0"
-                  step="1"
-                  inputMode="numeric"
-                  value={form.alertQuantity}
-                  onChange={(event) => set("alertQuantity", event.target.value)}
-                />
+                <Label>{t("stock.field.alertQty")}</Label>
+                <Input type="number" min="0" step="1" value={form.alertQuantity} onChange={(e) => set("alertQuantity", e.target.value)} />
               </div>
               <div className="space-y-1.5">
                 <Label>{t("stock.field.status")}</Label>
-                <Select value={form.status} onValueChange={(value) => set("status", value)}>
+                <Select value={form.status} onValueChange={(v) => set("status", v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="active">{t("stock.status.active")}</SelectItem>
@@ -753,31 +639,21 @@ function ProductModal({
           </section>
         </div>
 
-        <DialogFooter className="border-t border-border bg-muted/15 px-6 py-4 sm:justify-between">
-          <p className="hidden text-xs text-muted-foreground sm:block">
-            Fields not shown here are no longer part of the product editor.
-          </p>
-          <div className="flex w-full gap-2 sm:w-auto">
-            <Button variant="outline" onClick={onClose} disabled={saving} className="flex-1 sm:flex-none">
-              {t("common.cancel")}
-            </Button>
-            <Button onClick={save} disabled={saving} className="flex-1 sm:min-w-24 sm:flex-none">
-              {saving ? t("common.saving") : t("common.save")}
-            </Button>
-          </div>
+        <DialogFooter className="border-t border-border bg-muted/20 px-6 py-4">
+          <Button variant="outline" onClick={onClose} disabled={saving}>{t("common.cancel")}</Button>
+          <Button onClick={save} disabled={saving} className="min-w-24">
+            {saving ? t("common.saving") : t("common.save")}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
+// ── Purchase Modal ─────────────────────────────────────────────────────────────
+
 function PurchaseModal({
-  open,
-  onClose,
-  product,
-  canViewCost,
-  t,
-  onAdd,
+  open, onClose, product, canViewCost, t, onAdd,
 }: {
   open: boolean;
   onClose: () => void;
@@ -801,34 +677,32 @@ function PurchaseModal({
 
   useEffect(() => {
     if (open) {
-      const quantity = Number.parseFloat(form.quantityAdded) || 1;
-      const costPerUnit = Number.parseFloat(form.costPerUnit) || 0;
-      setForm((current) => ({ ...current, totalCost: String((quantity * costPerUnit).toFixed(2)) }));
+      const qty = parseFloat(form.quantityAdded) || 1;
+      const cpu = parseFloat(form.costPerUnit) || 0;
+      setForm((f) => ({ ...f, totalCost: String((qty * cpu).toFixed(2)) }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  function set(key: string, value: string | boolean) {
-    setForm((current) => {
-      const next = { ...current, [key]: value };
-      if (key === "quantityAdded" || key === "costPerUnit") {
-        const quantity = Number.parseFloat(key === "quantityAdded" ? String(value) : next.quantityAdded) || 0;
-        const costPerUnit = Number.parseFloat(key === "costPerUnit" ? String(value) : next.costPerUnit) || 0;
-        next.totalCost = String((quantity * costPerUnit).toFixed(2));
-      }
-      return next;
-    });
-  }
+  function set(k: string, v: string | boolean) { setForm((f) => {
+    const next = { ...f, [k]: v };
+    if (k === "quantityAdded" || k === "costPerUnit") {
+      const qty = parseFloat(k === "quantityAdded" ? String(v) : next.quantityAdded) || 0;
+      const cpu = parseFloat(k === "costPerUnit" ? String(v) : next.costPerUnit) || 0;
+      next.totalCost = String((qty * cpu).toFixed(2));
+    }
+    return next;
+  }); }
 
   async function save() {
     setSaving(true);
     try {
       await onAdd({
-        quantityAdded: Number.parseInt(form.quantityAdded, 10) || 1,
-        costPerUnit: Number.parseFloat(form.costPerUnit) || 0,
-        totalCost: Number.parseFloat(form.totalCost) || 0,
+        quantityAdded: parseInt(form.quantityAdded) || 1,
+        costPerUnit: parseFloat(form.costPerUnit) || 0,
+        totalCost: parseFloat(form.totalCost) || 0,
         currency: form.currency,
-        exchangeRate: Number.parseFloat(form.exchangeRate) || 1,
+        exchangeRate: parseFloat(form.exchangeRate) || 1,
         supplier: form.supplier || null,
         notes: form.notes || null,
         paidFromCash: form.paidFromCash,
@@ -841,32 +715,32 @@ function PurchaseModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-h-[90vh] w-[95vw] max-w-md overflow-y-auto">
+      <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("stock.addPurchase")}: {product.name}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>{t("stock.purchase.qty")} *</Label>
-              <Input type="number" min="1" value={form.quantityAdded} onChange={(event) => set("quantityAdded", event.target.value)} className="mt-1" />
+              <Input type="number" min="1" value={form.quantityAdded} onChange={(e) => set("quantityAdded", e.target.value)} className="mt-1" />
             </div>
             {canViewCost && (
               <div>
                 <Label>{t("stock.purchase.costPerUnit")}</Label>
-                <Input type="number" min="0" step="0.01" value={form.costPerUnit} onChange={(event) => set("costPerUnit", event.target.value)} className="mt-1" />
+                <Input type="number" min="0" step="0.01" value={form.costPerUnit} onChange={(e) => set("costPerUnit", e.target.value)} className="mt-1" />
               </div>
             )}
             {canViewCost && (
               <div>
                 <Label>{t("stock.purchase.totalCost")}</Label>
-                <Input type="number" min="0" step="0.01" value={form.totalCost} onChange={(event) => set("totalCost", event.target.value)} className="mt-1" />
+                <Input type="number" min="0" step="0.01" value={form.totalCost} onChange={(e) => set("totalCost", e.target.value)} className="mt-1" />
               </div>
             )}
             <div>
               <Label>{t("stock.purchase.currency")}</Label>
-              <Select value={form.currency} onValueChange={(value) => set("currency", value)}>
+              <Select value={form.currency} onValueChange={(v) => set("currency", v)}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="USD">USD</SelectItem>
@@ -876,42 +750,42 @@ function PurchaseModal({
             </div>
             <div>
               <Label>{t("stock.purchase.exchangeRate")}</Label>
-              <Input type="number" min="1" step="0.01" value={form.exchangeRate} onChange={(event) => set("exchangeRate", event.target.value)} className="mt-1" />
+              <Input type="number" min="1" step="0.01" value={form.exchangeRate} onChange={(e) => set("exchangeRate", e.target.value)} className="mt-1" />
             </div>
             <div>
               <Label>{t("stock.purchase.supplier")}</Label>
-              <Input value={form.supplier} onChange={(event) => set("supplier", event.target.value)} className="mt-1" />
+              <Input value={form.supplier} onChange={(e) => set("supplier", e.target.value)} className="mt-1" />
             </div>
             <div>
               <Label>{t("stock.purchase.date")}</Label>
-              <Input type="date" value={form.purchaseDate} onChange={(event) => set("purchaseDate", event.target.value)} className="mt-1" />
+              <Input type="date" value={form.purchaseDate} onChange={(e) => set("purchaseDate", e.target.value)} className="mt-1" />
             </div>
           </div>
           <div>
             <Label>{t("stock.purchase.notes")}</Label>
-            <Textarea value={form.notes} onChange={(event) => set("notes", event.target.value)} className="mt-1" rows={2} />
+            <Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} className="mt-1" rows={2} />
           </div>
-          <label className="flex cursor-pointer select-none items-center gap-2 text-sm">
-            <Checkbox checked={form.paidFromCash} onCheckedChange={(value) => set("paidFromCash", Boolean(value))} />
+          <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
+            <Checkbox checked={form.paidFromCash} onCheckedChange={(v) => set("paidFromCash", Boolean(v))} />
             {t("stock.purchase.paidFromCash")}
           </label>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
-          <Button onClick={save} disabled={saving}>{saving ? t("common.saving") : t("common.save")}</Button>
+          <Button onClick={save} disabled={saving}>
+            {saving ? t("common.saving") : t("common.save")}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
+// ── History Modal ──────────────────────────────────────────────────────────────
+
 function HistoryModal({
-  open,
-  onClose,
-  product,
-  canViewCost,
-  t,
+  open, onClose, product, canViewCost, t,
 }: {
   open: boolean;
   onClose: () => void;
@@ -928,37 +802,38 @@ function HistoryModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-h-[80vh] w-[95vw] max-w-2xl overflow-y-auto">
+      <DialogContent className="w-[95vw] max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("stock.history.title")}: {product.name}</DialogTitle>
         </DialogHeader>
 
+        {/* Purchases section */}
         <div>
-          <h3 className="mb-2 text-sm font-semibold text-muted-foreground">{t("stock.purchaseList")}</h3>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-2">{t("stock.purchaseList")}</h3>
           {purchases.length === 0 ? (
-            <p className="py-4 text-center text-xs text-muted-foreground">{t("stock.noPurchases")}</p>
+            <p className="text-xs text-muted-foreground text-center py-4">{t("stock.noPurchases")}</p>
           ) : (
-            <div className="overflow-hidden rounded-lg border border-border">
+            <div className="rounded-lg border border-border overflow-hidden">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Date</th>
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Ref#</th>
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Qty</th>
-                    {canViewCost && <th className="px-3 py-2 text-left font-medium text-muted-foreground">Total Cost</th>}
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Supplier</th>
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">By</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Date</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Ref#</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Qty</th>
+                    {canViewCost && <th className="text-left px-3 py-2 font-medium text-muted-foreground">Total Cost</th>}
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Supplier</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">By</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {purchases.map((purchase) => (
-                    <tr key={purchase.id} className="border-b border-border/50">
-                      <td className="px-3 py-2">{fmtDate(purchase.purchaseDate)}</td>
-                      <td className="px-3 py-2 font-mono text-muted-foreground">{purchase.purchaseNumber ?? "—"}</td>
-                      <td className="px-3 py-2 font-bold">+{purchase.quantityAdded}</td>
-                      {canViewCost && <td className="px-3 py-2">{purchase.totalCost.toLocaleString()} {purchase.currency}</td>}
-                      <td className="px-3 py-2 text-muted-foreground">{purchase.supplier ?? "—"}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{purchase.createdBy ?? "—"}</td>
+                  {purchases.map((p) => (
+                    <tr key={p.id} className="border-b border-border/50">
+                      <td className="px-3 py-2">{fmtDate(p.purchaseDate)}</td>
+                      <td className="px-3 py-2 font-mono text-muted-foreground">{p.purchaseNumber ?? "—"}</td>
+                      <td className="px-3 py-2 font-bold">+{p.quantityAdded}</td>
+                      {canViewCost && <td className="px-3 py-2">{p.totalCost.toLocaleString()} {p.currency}</td>}
+                      <td className="px-3 py-2 text-muted-foreground">{p.supplier ?? "—"}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{p.createdBy ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -967,19 +842,20 @@ function HistoryModal({
           )}
         </div>
 
+        {/* Activity history */}
         <div className="mt-4">
-          <h3 className="mb-2 text-sm font-semibold text-muted-foreground">{t("stock.history.title")}</h3>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-2">{t("stock.history.title")}</h3>
           {history.length === 0 ? (
-            <p className="py-4 text-center text-xs text-muted-foreground">{t("stock.noHistory")}</p>
+            <p className="text-xs text-muted-foreground text-center py-4">{t("stock.noHistory")}</p>
           ) : (
             <div className="space-y-2">
-              {history.map((entry) => (
-                <div key={entry.id} className="flex items-start gap-3 rounded-lg border border-border/50 bg-muted/20 p-3 text-xs">
+              {history.map((h) => (
+                <div key={h.id} className="flex items-start gap-3 p-3 rounded-lg border border-border/50 bg-muted/20 text-xs">
                   <div className="flex-1">
-                    <span className="font-medium capitalize text-foreground">{entry.action.replace(/_/g, " ")}</span>
-                    {entry.userName && <span className="ml-2 text-muted-foreground">by {entry.userName}</span>}
+                    <span className="font-medium capitalize text-foreground">{h.action.replace(/_/g, " ")}</span>
+                    {h.userName && <span className="text-muted-foreground ml-2">by {h.userName}</span>}
                   </div>
-                  <span className="whitespace-nowrap text-muted-foreground">{fmtDateTime(entry.createdAt)}</span>
+                  <span className="text-muted-foreground whitespace-nowrap">{fmtDateTime(h.createdAt)}</span>
                 </div>
               ))}
             </div>
@@ -990,6 +866,8 @@ function HistoryModal({
   );
 }
 
+// ── Shared components ──────────────────────────────────────────────────────────
+
 function SummaryCard({ icon, label, value, color, danger }: {
   icon: React.ReactNode;
   label: string;
@@ -998,20 +876,20 @@ function SummaryCard({ icon, label, value, color, danger }: {
   danger?: boolean;
 }) {
   const palette = {
-    indigo: { bar: "bg-indigo-500", icon: "bg-indigo-500/10 text-indigo-500", val: "text-indigo-600 dark:text-indigo-400" },
+    indigo:  { bar: "bg-indigo-500",  icon: "bg-indigo-500/10 text-indigo-500",  val: "text-indigo-600 dark:text-indigo-400" },
     emerald: { bar: "bg-emerald-500", icon: "bg-emerald-500/10 text-emerald-500", val: "text-emerald-600 dark:text-emerald-400" },
-    amber: { bar: danger ? "bg-amber-500" : "bg-amber-400", icon: danger ? "bg-amber-500/15 text-amber-600" : "bg-amber-400/10 text-amber-500", val: danger ? "text-amber-600 dark:text-amber-400" : "text-amber-500 dark:text-amber-400" },
-    blue: { bar: "bg-blue-500", icon: "bg-blue-500/10 text-blue-500", val: "text-blue-600 dark:text-blue-400" },
-    purple: { bar: "bg-violet-500", icon: "bg-violet-500/10 text-violet-500", val: "text-violet-600 dark:text-violet-400" },
+    amber:   { bar: danger ? "bg-amber-500" : "bg-amber-400", icon: danger ? "bg-amber-500/15 text-amber-600" : "bg-amber-400/10 text-amber-500", val: danger ? "text-amber-600 dark:text-amber-400" : "text-amber-500 dark:text-amber-400" },
+    blue:    { bar: "bg-blue-500",    icon: "bg-blue-500/10 text-blue-500",    val: "text-blue-600 dark:text-blue-400" },
+    purple:  { bar: "bg-violet-500",  icon: "bg-violet-500/10 text-violet-500",  val: "text-violet-600 dark:text-violet-400" },
   }[color];
 
   return (
-    <div className={`relative flex items-center gap-3 overflow-hidden rounded-xl border bg-card px-3 py-2.5 shadow-sm ${danger ? "border-amber-300 bg-amber-50/40 dark:border-amber-700 dark:bg-amber-900/10" : ""}`}>
-      <div className={`absolute bottom-0 left-0 top-0 w-1 ${palette.bar}`} />
-      <div className={`shrink-0 rounded-lg p-1.5 ${palette.icon}`}>{icon}</div>
+    <div className={`relative rounded-xl border overflow-hidden flex items-center gap-3 px-3 py-2.5 bg-card shadow-sm ${danger ? "border-amber-300 dark:border-amber-700 bg-amber-50/40 dark:bg-amber-900/10" : ""}`}>
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${palette.bar}`} />
+      <div className={`shrink-0 p-1.5 rounded-lg ${palette.icon}`}>{icon}</div>
       <div className="min-w-0 flex-1">
-        <p className={`text-lg font-bold leading-tight tabular-nums ${palette.val}`}>{value}</p>
-        <p className="truncate text-[11px] font-medium text-muted-foreground">{label}</p>
+        <p className={`text-lg font-bold tabular-nums leading-tight ${palette.val}`}>{value}</p>
+        <p className="text-[11px] text-muted-foreground font-medium truncate">{label}</p>
       </div>
     </div>
   );
@@ -1021,11 +899,13 @@ function StatusBadge({ status, t }: { status: string; t: (k: string) => string }
   return <ProductStatusBadge status={status} label={t(`stock.status.${status}`)} />;
 }
 
+// ── Hook helper (avoids rules-of-hooks violation in callback) ──────────────────
 async function useAddStockPurchaseMut(
   productId: number,
   data: Record<string, unknown>,
   qc: ReturnType<typeof useQueryClient>,
 ): Promise<void> {
+  // Call the raw API function directly instead of the hook
   const { addStockPurchase } = await import("@workspace/api-client-react");
   await addStockPurchase(productId, data as unknown as Parameters<typeof addStockPurchase>[1]);
   qc.invalidateQueries({ queryKey: ["listProductPurchases"] });
