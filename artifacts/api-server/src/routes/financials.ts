@@ -57,7 +57,9 @@ function amountUsd(
   currency: string | null | undefined,
   exchangeRate: number | null | undefined,
 ): number {
-  if (Number.isFinite(Number(storedUsd))) return Number(storedUsd ?? 0);
+  if (storedUsd !== null && storedUsd !== undefined && Number.isFinite(Number(storedUsd))) {
+    return Number(storedUsd);
+  }
   const raw = Number(amount ?? 0);
   if ((currency ?? "USD").toUpperCase() === "USD") return raw;
   const rate = Number(exchangeRate ?? 0);
