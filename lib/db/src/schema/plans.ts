@@ -1,6 +1,8 @@
-import { pgTable, text, serial, timestamp, doublePrecision, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, numeric, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+
+const money = (name: string) => numeric(name, { precision: 20, scale: 6, mode: "number" });
 
 export const plansTable = pgTable("plans", {
   id: serial("id").primaryKey(),
@@ -8,12 +10,11 @@ export const plansTable = pgTable("plans", {
   name: text("name").notNull(),
   description: text("description"),
   durationDays: integer("duration_days").notNull().default(30),
-  price: doublePrecision("price").notNull().default(0),
-  currency: text("currency").notNull().default("USD"), // 'USD' | 'CDF'
-  status: text("status").notNull().default("active"), // 'active' | 'archived' | 'deleted'
-  // Coach commission
+  price: money("price").notNull().default(0),
+  currency: text("currency").notNull().default("USD"),
+  status: text("status").notNull().default("active"),
   coachId: integer("coach_id"),
-  coachFee: doublePrecision("coach_fee").default(0),
+  coachFee: money("coach_fee").default(0),
   coachName: text("coach_name"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
