@@ -1,0 +1,35 @@
+name: Phase 3 Main Sync Diagnostics
+
+on:
+  push:
+    branches:
+      - phase-3/contracts-boundaries-architecture
+    paths:
+      - .github/workflows/phase3-sync.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase-3/contracts-boundaries-architecture
+          fetch-depth: 0
+      - name: Diagnose merge from main
+        shell: bash
+        run: |
+          git fetch origin main
+          set +e
+          git merge --no-commit --no-ff origin/main
+          code=$?
+          echo "merge_exit=$code"
+          echo "--- CONFLICTS ---"
+          git diff --name-only --diff-filter=U || true
+          echo "--- STATUS ---"
+          git status --short
+          if [ "$code" -ne 0 ]; then
+            exit 1
+          fi
