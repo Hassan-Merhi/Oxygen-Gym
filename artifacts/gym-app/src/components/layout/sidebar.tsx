@@ -101,7 +101,9 @@ export function Sidebar() {
         <div className="flex-1 overflow-y-auto py-3">
           <nav className="space-y-0.5 px-2">
             {visibleItems.map((item) => {
-              const isActive = location.startsWith(item.href);
+              const isActive = item.href === "/members"
+                ? location === "/members" || location.startsWith("/members/")
+                : location.startsWith(item.href);
               const label = getLabel(item);
               return (
                 <Link
