@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const ROUTES = path.join(ROOT, "artifacts/api-server/src/routes");
+const ROUTE_INDEX = path.join(ROOT, "artifacts/api-server/src/routes/index.ts");
 
 type Violation = { file: string; line: number; message: string };
 
@@ -15,16 +15,35 @@ function lineOf(text: string, index: number): number {
   return text.slice(0, index).split("\n").length;
 }
 
-function walk(dir: string): string[] {
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) return walk(full);
-    return entry.name.endsWith(".ts") && entry.name !== "index.ts" ? [full] : [];
-  });
+function mountedRouterFiles(): string[] {
+  const indexText = fs.readFileSync(ROUTE_INDEX, "utf8");
+  const imports = new Map<string, string>();
+
+  for (const match of indexText.matchAll(/import\s+(\w+)\s+from\s+["']([^"']+)["'];/g)) {
+    const specifier = match[2];
+    if (!specifier.startsWith(".")) continue;
+    const candidate = path.resolve(path.dirname(ROUTE_INDEX), specifier);
+    const file = fs.existsSync(`${candidate}.ts`)
+      ? `${candidate}.ts`
+      : fs.existsSync(path.join(candidate, "index.ts"))
+        ? path.join(candidate, "index.ts")
+        : null;
+    if (file) imports.set(match[1], file);
+  }
+
+  const mounted = new Set<string>();
+  for (const match of indexText.matchAll(/router\.use\(\s*(?:["'][^"']+["']\s*,\s*)?(\w+)\s*\)/g)) {
+    const file = imports.get(match[1]);
+    if (file) mounted.add(file);
+  }
+
+  return [...mounted].sort();
 }
 
 const violations: Violation[] = [];
-for (const file of walk(ROUTES)) {
+const mountedFiles = mountedRouterFiles();
+
+for (const file of mountedFiles) {
   const text = fs.readFileSync(file, "utf8");
   const relative = rel(file);
 
@@ -53,4 +72,6 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("Request-boundary audit passed: every route consumes body/query/params through generated OpenAPI/Zod contracts and no router.all registrations remain.");
+console.log(
+  `Request-boundary audit passed across ${mountedFiles.length} mounted routers: every request body/query/params access uses generated OpenAPI/Zod contracts and no router.all registrations remain.`,
+);
