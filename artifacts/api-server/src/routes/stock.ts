@@ -7,10 +7,7 @@ import {
   settingsTable,
   activityLogsTable,
 } from "@workspace/db/schema";
-import {
-  eq, and, ilike, or, desc, count, sum, lte, not,
-  asc,
-} from "drizzle-orm";
+import { eq, and, ilike, or, desc, not, asc } from "drizzle-orm";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 import { appendLedgerEntry } from "../lib/ledger";
@@ -29,20 +26,36 @@ async function getExchangeRate(): Promise<number> {
 }
 
 function enrichProduct(p: typeof productsTable.$inferSelect, rate: number) {
-  const sellingUsd = p.currency === "USD" ? p.sellingPrice : p.sellingPrice / rate;
-  const costUsd = p.currency === "USD" ? p.costPrice : p.costPrice / rate;
-  const stockValueUsd = sellingUsd * p.quantity;
-  const costValueUsd = costUsd * p.quantity;
-  const stockValueCdf = stockValueUsd * rate;
-  const costValueCdf = costValueUsd * rate;
+  const safeRate = rate > 0 ? rate : 2800;
+  const sellingUsd = p.currency === "USD" ? p.sellingPrice : p.sellingPrice / safeRate;
+  const costUsd = p.currency === "USD" ? p.costPrice : p.costPrice / safeRate;
+
+  // Inventory is an asset and must be valued at COST, not at expected selling price.
+  // Keep stockValue* as the canonical inventory-value fields used by the UI/API.
+  const stockValueUsd = costUsd * p.quantity;
+  const stockValueCdf = stockValueUsd * safeRate;
+
+  // Retail value is useful operationally, but it is not the accounting value of stock.
+  const retailValueUsd = sellingUsd * p.quantity;
+  const retailValueCdf = retailValueUsd * safeRate;
   const profitPerUnit = sellingUsd - costUsd;
   const isLowStock = p.quantity <= p.alertQuantity;
-  return { ...p, stockValueUsd, stockValueCdf, costValueUsd, costValueCdf, profitPerUnit, isLowStock };
+
+  return {
+    ...p,
+    stockValueUsd,
+    stockValueCdf,
+    retailValueUsd,
+    retailValueCdf,
+    profitPerUnit,
+    isLowStock,
+  };
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────
-router.get("/summary", async (req: Request, res: Response) => {
+router.get("/summary", async (_req: Request, res: Response) => {
   const rate = await getExchangeRate();
+  const safeRate = rate > 0 ? rate : 2800;
   const all = await db
     .select()
     .from(productsTable)
@@ -52,11 +65,11 @@ router.get("/summary", async (req: Request, res: Response) => {
   const lowStockCount = active.filter((p) => p.quantity <= p.alertQuantity).length;
   const totalQuantity = active.reduce((s, p) => s + p.quantity, 0);
 
-  let totalValueUsd = 0;
-  for (const p of active) {
-    const sellingUsd = p.currency === "USD" ? p.sellingPrice : p.sellingPrice / rate;
-    totalValueUsd += sellingUsd * p.quantity;
-  }
+  // Accounting value of inventory = quantity × weighted-average unit COST.
+  const totalValueUsd = active.reduce((sumValue, p) => {
+    const costUsd = p.currency === "USD" ? p.costPrice : p.costPrice / safeRate;
+    return sumValue + costUsd * p.quantity;
+  }, 0);
 
   res.json({
     totalProducts: all.length,
@@ -64,7 +77,7 @@ router.get("/summary", async (req: Request, res: Response) => {
     lowStockCount,
     totalQuantity,
     totalValueUsd,
-    totalValueCdf: totalValueUsd * rate,
+    totalValueCdf: totalValueUsd * safeRate,
   });
 });
 
@@ -77,7 +90,6 @@ router.get("/", async (req: Request, res: Response) => {
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
   const offset = (pageNum - 1) * limitNum;
-
   const rate = await getExchangeRate();
 
   const conditions: ReturnType<typeof eq>[] = [];
@@ -96,7 +108,7 @@ router.get("/", async (req: Request, res: Response) => {
         ilike(productsTable.barcode, `%${search}%`),
         ilike(productsTable.category, `%${search}%`),
         ilike(productsTable.supplier, `%${search}%`),
-      ) as ReturnType<typeof eq>
+      ) as ReturnType<typeof eq>,
     );
   }
 
@@ -105,7 +117,6 @@ router.get("/", async (req: Request, res: Response) => {
   }
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
-
   const rows = await db
     .select()
     .from(productsTable)
@@ -113,14 +124,12 @@ router.get("/", async (req: Request, res: Response) => {
     .orderBy(asc(productsTable.name));
 
   const enriched = rows.map((p) => enrichProduct(p, rate));
-
   const filtered = lowStock === "true"
     ? enriched.filter((p) => p.isLowStock)
     : enriched;
 
   const total = filtered.length;
   const items = filtered.slice(offset, offset + limitNum);
-
   res.json({ items, total, page: pageNum, limit: limitNum });
 });
 
@@ -149,7 +158,6 @@ router.post("/", async (req: Request, res: Response) => {
   }
 
   const productNumber = await getNextNumber("product");
-
   const [created] = await db
     .insert(productsTable)
     .values({
@@ -180,16 +188,21 @@ router.get("/:id", async (req: Request, res: Response) => {
   const id = parseInt(req.params.id as string);
   const rate = await getExchangeRate();
   const [p] = await db.select().from(productsTable).where(eq(productsTable.id, id));
-  if (!p) { res.status(404).json({ error: "Not found" }); return; }
+  if (!p) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
   res.json(enrichProduct(p, rate));
 });
 
 // ── Update ────────────────────────────────────────────────────────────────────
 router.patch("/:id", async (req: Request, res: Response) => {
   const id = parseInt(req.params.id as string);
-
   const [existing] = await db.select().from(productsTable).where(eq(productsTable.id, id));
-  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!existing) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
 
   const {
     name, barcode, description, category, supplier, notes,
@@ -259,79 +272,109 @@ router.get("/:id/purchases", async (req: Request, res: Response) => {
 router.post("/:id/purchases", async (req: Request, res: Response) => {
   const productId = parseInt(req.params.id as string);
   const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
-  if (!product) { res.status(404).json({ error: "Product not found" }); return; }
-
-  const {
-    quantityAdded, costPerUnit, totalCost, currency, exchangeRate,
-    supplier, notes, paidFromCash = false, purchaseDate,
-  } = req.body;
-
-  if (!quantityAdded || quantityAdded < 1) {
-    res.status(400).json({ error: "quantityAdded must be >= 1" });
+  if (!product) {
+    res.status(404).json({ error: "Product not found" });
     return;
   }
 
-  const rate = Number(exchangeRate) || (await getExchangeRate());
-  const totalCostNum = Number(totalCost) || Number(costPerUnit) * Number(quantityAdded);
+  const {
+    quantityAdded, costPerUnit, totalCost, currency = product.currency, exchangeRate,
+    supplier, notes, paidFromCash = false, purchaseDate,
+  } = req.body;
+
+  const qty = Number(quantityAdded);
+  const unitCost = Number(costPerUnit ?? 0);
+  const suppliedTotal = Number(totalCost);
+  if (!Number.isFinite(qty) || qty < 1 || !Number.isInteger(qty)) {
+    res.status(400).json({ error: "quantityAdded must be a whole number >= 1" });
+    return;
+  }
+  if (!Number.isFinite(unitCost) || unitCost < 0) {
+    res.status(400).json({ error: "costPerUnit must be >= 0" });
+    return;
+  }
+  if (currency !== "USD" && currency !== "CDF") {
+    res.status(400).json({ error: "currency must be USD or CDF" });
+    return;
+  }
+
+  const fallbackRate = await getExchangeRate();
+  const requestedRate = Number(exchangeRate);
+  const rate = Number.isFinite(requestedRate) && requestedRate > 0 ? requestedRate : fallbackRate;
+  if (!Number.isFinite(rate) || rate <= 0) {
+    res.status(400).json({ error: "A valid exchange rate is required" });
+    return;
+  }
+
+  const computedTotal = unitCost * qty;
+  const totalCostNum = Number.isFinite(suppliedTotal) && suppliedTotal >= 0 ? suppliedTotal : computedTotal;
   const totalCostUsd = currency === "USD" ? totalCostNum : totalCostNum / rate;
   const totalCostCdf = currency === "CDF" ? totalCostNum : totalCostNum * rate;
 
   const purchaseNumber = await getNextNumber("purchase");
   const creator = callerName(req);
+  const entryDate = purchaseDate ? new Date(purchaseDate) : new Date();
+  if (Number.isNaN(entryDate.getTime())) {
+    res.status(400).json({ error: "Invalid purchase date" });
+    return;
+  }
 
-  const [purchase] = await db
-    .insert(stockPurchasesTable)
-    .values({
-      purchaseNumber,
-      productId,
-      productName: product.name,
-      quantityAdded: Number(quantityAdded),
-      costPerUnit: Number(costPerUnit),
-      totalCost: totalCostNum,
-      currency,
-      exchangeRate: rate,
-      totalCostUsd,
-      totalCostCdf,
-      supplier: supplier || null,
-      notes: notes || null,
-      paidFromCash: paidFromCash ? 1 : 0,
-      purchaseDate: purchaseDate ? new Date(purchaseDate) : new Date(),
-      createdBy: creator,
-    })
-    .returning();
+  // Keep stock, cash ledger, and double-entry accounting atomic for cash purchases.
+  // If any accounting write fails, the stock purchase is rolled back instead of
+  // leaving inventory quantities and the books out of sync.
+  const purchase = await db.transaction(async (tx) => {
+    const [createdPurchase] = await tx
+      .insert(stockPurchasesTable)
+      .values({
+        purchaseNumber,
+        productId,
+        productName: product.name,
+        quantityAdded: qty,
+        costPerUnit: unitCost,
+        totalCost: totalCostNum,
+        currency,
+        exchangeRate: rate,
+        totalCostUsd,
+        totalCostCdf,
+        supplier: supplier || null,
+        notes: notes || null,
+        paidFromCash: paidFromCash ? 1 : 0,
+        purchaseDate: entryDate,
+        createdBy: creator,
+      })
+      .returning();
 
-  // Update product quantity and average cost
-  const newQty = product.quantity + Number(quantityAdded);
-  const oldTotalCostUsd = (product.currency === "USD" ? product.costPrice : product.costPrice / rate) * product.quantity;
-  const newAvgCostUsd = newQty > 0 ? (oldTotalCostUsd + totalCostUsd) / newQty : totalCostUsd / Number(quantityAdded);
-  const newCostPrice = product.currency === "USD" ? newAvgCostUsd : newAvgCostUsd * rate;
+    // Weighted-average unit cost. Existing stock remains at its current native
+    // unit cost; the new purchase is converted using the rate saved on this purchase.
+    const newQty = product.quantity + qty;
+    const oldTotalCostUsd = (product.currency === "USD" ? product.costPrice : product.costPrice / rate) * product.quantity;
+    const newAvgCostUsd = newQty > 0 ? (oldTotalCostUsd + totalCostUsd) / newQty : totalCostUsd / qty;
+    const newCostPrice = product.currency === "USD" ? newAvgCostUsd : newAvgCostUsd * rate;
 
-  await db
-    .update(productsTable)
-    .set({ quantity: newQty, costPrice: newCostPrice })
-    .where(eq(productsTable.id, productId));
+    await tx
+      .update(productsTable)
+      .set({ quantity: newQty, costPrice: newCostPrice })
+      .where(eq(productsTable.id, productId));
 
-  // Cash ledger + accounting entries when paid from cash
-  if (paidFromCash) {
-    const entryDate = purchaseDate ? new Date(purchaseDate) : new Date();
-    await appendLedgerEntry({
-      entryDate,
-      sourceType: "stock_purchase",
-      sourceNumber: purchaseNumber,
-      sourceId: purchase.id,
-      direction: "out",
-      amount: totalCostNum,
-      currency,
-      exchangeRate: rate,
-      description: `Stock purchase: ${product.name} (${quantityAdded} units)`,
-      createdBy: creator,
-    });
+    if (paidFromCash) {
+      const description = `Stock purchase: ${product.name} (${qty} units)`;
+      await appendLedgerEntry({
+        entryDate,
+        sourceType: "stock_purchase",
+        sourceNumber: purchaseNumber,
+        sourceId: createdPurchase.id,
+        direction: "out",
+        amount: totalCostNum,
+        currency,
+        exchangeRate: rate,
+        description,
+        createdBy: creator,
+      }, tx);
 
-    try {
       await postDoubleEntry({
         entryDate,
         sourceType: "stock_purchase",
-        sourceId: purchase.id,
+        sourceId: createdPurchase.id,
         sourceNumber: purchaseNumber,
         debitName: "Inventory",
         debitType: "asset",
@@ -342,15 +385,17 @@ router.post("/:id/purchases", async (req: Request, res: Response) => {
         amountCdf: totalCostCdf,
         currency,
         exchangeRate: rate,
-        description: `Stock purchase: ${product.name} (${quantityAdded} units)`,
+        description,
         createdBy: creator,
-      });
-    } catch { /* non-fatal */ }
-  }
+      }, tx);
+    }
+
+    return createdPurchase;
+  });
 
   await logActivity(req, "stock_purchase_added", "product", productId, {
     purchaseNumber,
-    quantityAdded,
+    quantityAdded: qty,
     totalCost: totalCostNum,
     currency,
     supplier,
@@ -370,16 +415,11 @@ router.get("/:id/history", async (req: Request, res: Response) => {
       and(
         eq(activityLogsTable.entity, "product"),
         eq(activityLogsTable.entityId, productId),
-      )
+      ),
     )
     .orderBy(desc(activityLogsTable.createdAt))
     .limit(100);
   res.json(entries);
 });
-
-// Suppress unused import warnings
-void sum;
-void lte;
-void count;
 
 export default router;
