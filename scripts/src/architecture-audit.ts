@@ -3,11 +3,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const API_SRC = path.join(ROOT, "artifacts/api-server/src");
+const ROUTES_INDEX = path.join(API_SRC, "routes/index.ts");
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".mjs"]);
 const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".git", "generated", "attached_assets"]);
 const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete"]);
 
 type Violation = { file: string; line?: number; message: string };
+type MountedRouter = { name: string; file: string; prefix: string; mountCount: number };
 type RouteOperation = { method: string; path: string; source: string };
 type OpenApiOperation = { method: string; path: string; operationId?: string };
 
@@ -46,6 +49,17 @@ function importsOf(text: string): string[] {
     for (const match of text.matchAll(pattern)) imports.push(match[1]);
   }
   return imports;
+}
+
+function resolveTsImport(fromFile: string, specifier: string): string | null {
+  if (!specifier.startsWith(".")) return null;
+  const base = path.resolve(path.dirname(fromFile), specifier);
+  const candidates = [
+    `${base}.ts`,
+    `${base}.tsx`,
+    path.join(base, "index.ts"),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
 }
 
 function checkBoundaries(files: string[], violations: Violation[]): void {
@@ -155,33 +169,42 @@ function normalizeRoutePath(prefix: string, routePath: string): string {
   return normalized.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
 }
 
-function routeRegistry() {
-  const routesDir = path.join(ROOT, "artifacts/api-server/src/routes");
-  const indexText = fs.readFileSync(path.join(routesDir, "index.ts"), "utf8");
+function mountedRouters(): MountedRouter[] {
+  const indexText = fs.readFileSync(ROUTES_INDEX, "utf8");
   const importToFile = new Map<string, string>();
-  for (const match of indexText.matchAll(/import\s+(\w+)\s+from\s+["']\.\/(.+?)["'];/g)) {
-    importToFile.set(match[1], `${match[2]}.ts`);
+
+  for (const match of indexText.matchAll(/import\s+(\w+)\s+from\s+["']([^"']+)["'];/g)) {
+    const resolved = resolveTsImport(ROUTES_INDEX, match[2]);
+    if (resolved) importToFile.set(match[1], resolved);
   }
 
-  const prefixes = new Map<string, string>();
-  const mountCounts = new Map<string, number>();
+  const mounts = new Map<string, { prefix: string; count: number }>();
   for (const match of indexText.matchAll(/router\.use\(\s*(?:["']([^"']+)["']\s*,\s*)?(\w+)\s*\)/g)) {
-    prefixes.set(match[2], match[1] ?? "");
-    mountCounts.set(match[2], (mountCounts.get(match[2]) ?? 0) + 1);
+    const name = match[2];
+    const current = mounts.get(name);
+    mounts.set(name, { prefix: match[1] ?? "", count: (current?.count ?? 0) + 1 });
   }
-  return { routesDir, indexText, importToFile, prefixes, mountCounts };
+
+  return [...importToFile.entries()]
+    .filter(([name]) => mounts.has(name))
+    .map(([name, file]) => ({
+      name,
+      file,
+      prefix: mounts.get(name)!.prefix,
+      mountCount: mounts.get(name)!.count,
+    }));
 }
 
 function parseExpressRoutes(): RouteOperation[] {
-  const { routesDir, importToFile, prefixes } = routeRegistry();
   const operations: RouteOperation[] = [];
-  for (const [routerName, fileName] of importToFile) {
-    const full = path.join(routesDir, fileName);
-    const prefix = prefixes.get(routerName);
-    if (!fs.existsSync(full) || prefix === undefined) continue;
-    const text = fs.readFileSync(full, "utf8");
+  for (const mounted of mountedRouters()) {
+    const text = fs.readFileSync(mounted.file, "utf8");
     for (const match of text.matchAll(/router\.(get|post|put|patch|delete)\(\s*["'`]([^"'`]+)["'`]/g)) {
-      operations.push({ method: match[1].toLowerCase(), path: normalizeRoutePath(prefix, match[2]), source: rel(full) });
+      operations.push({
+        method: match[1].toLowerCase(),
+        path: normalizeRoutePath(mounted.prefix, match[2]),
+        source: rel(mounted.file),
+      });
     }
   }
   return operations;
@@ -243,9 +266,7 @@ function checkDuplicateRoutesAndContracts(violations: Violation[]): void {
     expressCounts.set(key, entries);
   }
   for (const [key, entries] of expressCounts) {
-    if (entries.length > 1) {
-      violations.push({ file: entries[0].source, message: `duplicate Express route ${key} (${entries.length} registrations)` });
-    }
+    if (entries.length > 1) violations.push({ file: entries[0].source, message: `duplicate Express route ${key} (${entries.length} registrations)` });
   }
 
   const contractCounts = new Map<string, number>();
@@ -264,24 +285,27 @@ function checkDuplicateRoutesAndContracts(violations: Violation[]): void {
   }
 }
 
-function checkRouteRegistry(violations: Violation[]): void {
-  const { routesDir, importToFile, prefixes, mountCounts } = routeRegistry();
-  const importedFiles = new Set(importToFile.values());
-  const routeFiles = walk(routesDir, (file) => path.extname(file) === ".ts")
-    .map((file) => path.relative(routesDir, file).replaceAll(path.sep, "/"))
-    .filter((file) => file !== "index.ts");
+function looksLikeRouterModule(file: string): boolean {
+  const text = fs.readFileSync(file, "utf8");
+  return /\bRouter\s*\(/.test(text) && /export\s+default\s+router\b/.test(text);
+}
 
-  for (const routeFile of routeFiles) {
-    if (!importedFiles.has(routeFile)) {
-      violations.push({ file: `artifacts/api-server/src/routes/${routeFile}`, message: "dead route module: not imported by routes/index.ts" });
+function checkRouteRegistry(violations: Violation[]): void {
+  const mounted = mountedRouters();
+  const mountedFiles = new Set(mounted.map((entry) => path.resolve(entry.file)));
+  const routerCandidates = [
+    ...walk(path.join(API_SRC, "routes"), (file) => file.endsWith(".ts") && path.basename(file) !== "index.ts"),
+    ...walk(path.join(API_SRC, "domains"), (file) => file.endsWith(".ts")),
+  ].filter(looksLikeRouterModule);
+
+  for (const file of routerCandidates) {
+    if (!mountedFiles.has(path.resolve(file))) {
+      violations.push({ file: rel(file), message: "dead router module: exported router is not mounted by routes/index.ts" });
     }
   }
-  for (const [routerName, fileName] of importToFile) {
-    if (!prefixes.has(routerName)) {
-      violations.push({ file: "artifacts/api-server/src/routes/index.ts", message: `imported router ${routerName} (${fileName}) is never mounted` });
-    }
-    if ((mountCounts.get(routerName) ?? 0) > 1) {
-      violations.push({ file: "artifacts/api-server/src/routes/index.ts", message: `router ${routerName} is mounted more than once` });
+  for (const entry of mounted) {
+    if (entry.mountCount > 1) {
+      violations.push({ file: "artifacts/api-server/src/routes/index.ts", message: `router ${entry.name} is mounted more than once` });
     }
   }
 }
@@ -290,13 +314,13 @@ function checkMigrationBoundaries(files: string[], violations: Violation[]): voi
   const ddlPattern = /\b(?:ALTER|CREATE|DROP)\s+(?:TABLE|INDEX|SCHEMA|TYPE|EXTENSION)\b/gi;
   for (const file of files) {
     const relative = rel(file);
-    if (!relative.startsWith("artifacts/api-server/src/") || relative.startsWith("artifacts/api-server/src/migrations/")) continue;
+    if (!relative.startsWith("artifacts/api-server/src/")) continue;
     const text = fs.readFileSync(file, "utf8");
     for (const match of text.matchAll(ddlPattern)) {
       violations.push({
         file: relative,
         line: lineOf(text, match.index ?? 0),
-        message: "database DDL belongs in the controlled migrations layer",
+        message: "runtime API code must not own database DDL; use lib/db migrations",
       });
     }
   }
@@ -338,4 +362,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log("Architecture audit passed: contracts, boundaries, configuration, request parsing, explicit-any policy, route/operation uniqueness, dead-route detection, migration ownership, and dependency rules are clean.");
+console.log("Architecture audit passed: mounted legacy/domain routers, OpenAPI coverage, boundaries, configuration, explicit-any policy, route uniqueness, dead routers, migration ownership, and dependency rules are clean.");
