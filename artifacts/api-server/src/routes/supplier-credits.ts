@@ -1,28 +1,23 @@
 import { Router, type Request, type Response } from "express";
-import { requireAuth } from "../middlewares/auth";
-import { db } from "@workspace/db";
+import { db, withTransaction } from "@workspace/db";
 import {
   supplierCreditsTable,
   supplierPaymentsTable,
   productsTable,
   salesTable,
-  settingsTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, sum, sql } from "drizzle-orm";
+import { requireAuth } from "../middlewares/auth";
 import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
+import { getExchangeRate } from "../repositories/settings";
 
 const router = Router();
 router.use(requireAuth());
 
-async function getRate(): Promise<number> {
-  const [s] = await db.select({ rate: settingsTable.usdToCdfRate }).from(settingsTable);
-  return s?.rate ?? 2800;
-}
-
 // ── Summary KPIs ──────────────────────────────────────────────────────────────
 router.get("/summary", async (_req: Request, res: Response) => {
-  const rate = await getRate();
+  const rate = await getExchangeRate();
 
   const [credits, salesRows, products] = await Promise.all([
     db.select().from(supplierCreditsTable).orderBy(desc(supplierCreditsTable.createdAt)),
@@ -47,7 +42,7 @@ router.get("/summary", async (_req: Request, res: Response) => {
   }
 
   const productCount = products.length;
-  const lowStock = products.filter(p => p.quantity <= p.alertQuantity).length;
+  const lowStock = products.filter((p) => p.quantity <= p.alertQuantity).length;
 
   res.json({ totalOwed, totalPaid, remaining, totalProfitUsd, productCount, lowStock });
 });
@@ -59,7 +54,7 @@ router.get("/", async (_req: Request, res: Response) => {
     .from(supplierCreditsTable)
     .orderBy(desc(supplierCreditsTable.purchaseDate));
 
-  res.json(credits.map(c => ({
+  res.json(credits.map((c) => ({
     ...c,
     remaining: c.totalAmount - c.amountPaid,
   })));
@@ -81,23 +76,29 @@ router.post("/", async (req: Request, res: Response) => {
   if (!body.supplier) { res.status(400).json({ error: "supplier is required" }); return; }
   if (!body.totalAmount || body.totalAmount <= 0) { res.status(400).json({ error: "totalAmount must be positive" }); return; }
 
-  const creditNumber = await getNextNumber("SUP");
+  const credit = await withTransaction(async (tx) => {
+    const creditNumber = await getNextNumber("SUP", tx);
+    const [created] = await tx.insert(supplierCreditsTable).values({
+      creditNumber,
+      supplier: body.supplier,
+      description: body.description,
+      productId: body.productId,
+      productName: body.productName,
+      totalAmount: body.totalAmount,
+      amountPaid: 0,
+      currency: body.currency ?? "USD",
+      purchaseDate: body.purchaseDate ? new Date(body.purchaseDate) : new Date(),
+      notes: body.notes,
+      status: "open",
+    }).returning();
+    if (!created) throw new Error("Unable to create supplier credit");
+    return created;
+  });
 
-  const [credit] = await db.insert(supplierCreditsTable).values({
-    creditNumber,
-    supplier: body.supplier,
-    description: body.description,
-    productId: body.productId,
-    productName: body.productName,
-    totalAmount: body.totalAmount,
-    amountPaid: 0,
-    currency: body.currency ?? "USD",
-    purchaseDate: body.purchaseDate ? new Date(body.purchaseDate) : new Date(),
-    notes: body.notes,
-    status: "open",
-  }).returning();
-
-  await logActivity(req, "create_supplier_credit", "supplier_credit", credit.id, { supplier: credit.supplier, creditNumber });
+  await logActivity(req, "create_supplier_credit", "supplier_credit", credit.id, {
+    supplier: credit.supplier,
+    creditNumber: credit.creditNumber,
+  });
   res.status(201).json({ ...credit, remaining: credit.totalAmount - credit.amountPaid });
 });
 
@@ -123,10 +124,21 @@ router.patch("/:id", async (req: Request, res: Response) => {
 // ── Delete credit ─────────────────────────────────────────────────────────────
 router.delete("/:id", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const [existing] = await db.select().from(supplierCreditsTable).where(eq(supplierCreditsTable.id, id));
-  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
-  await db.delete(supplierPaymentsTable).where(eq(supplierPaymentsTable.creditId, id));
-  await db.delete(supplierCreditsTable).where(eq(supplierCreditsTable.id, id));
+
+  const deleted = await withTransaction(async (tx) => {
+    const [existing] = await tx
+      .select({ id: supplierCreditsTable.id })
+      .from(supplierCreditsTable)
+      .where(eq(supplierCreditsTable.id, id))
+      .for("update");
+    if (!existing) return false;
+
+    await tx.delete(supplierPaymentsTable).where(eq(supplierPaymentsTable.creditId, id));
+    await tx.delete(supplierCreditsTable).where(eq(supplierCreditsTable.id, id));
+    return true;
+  });
+
+  if (!deleted) { res.status(404).json({ error: "Not found" }); return; }
   res.json({ ok: true });
 });
 
@@ -148,32 +160,52 @@ router.post("/:id/payments", async (req: Request, res: Response) => {
 
   if (!body.amount || body.amount <= 0) { res.status(400).json({ error: "amount must be positive" }); return; }
 
-  const [credit] = await db.select().from(supplierCreditsTable).where(eq(supplierCreditsTable.id, id));
-  if (!credit) { res.status(404).json({ error: "Not found" }); return; }
+  const result = await withTransaction(async (tx) => {
+    const [credit] = await tx
+      .select()
+      .from(supplierCreditsTable)
+      .where(eq(supplierCreditsTable.id, id))
+      .for("update");
+    if (!credit) return { kind: "not_found" as const };
 
-  const remaining = credit.totalAmount - credit.amountPaid;
-  if (body.amount > remaining + 0.001) {
-    res.status(400).json({ error: `Payment exceeds remaining balance (${remaining.toFixed(2)})` });
+    const remaining = credit.totalAmount - credit.amountPaid;
+    if (body.amount > remaining + 0.001) {
+      return { kind: "overpayment" as const, remaining };
+    }
+
+    const [payment] = await tx.insert(supplierPaymentsTable).values({
+      creditId: id,
+      amount: body.amount,
+      currency: body.currency ?? credit.currency,
+      paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
+      notes: body.notes,
+    }).returning();
+
+    const newPaid = credit.amountPaid + body.amount;
+    const newStatus = newPaid >= credit.totalAmount - 0.001 ? "paid" : "open";
+    const [updated] = await tx.update(supplierCreditsTable)
+      .set({ amountPaid: newPaid, status: newStatus })
+      .where(eq(supplierCreditsTable.id, id))
+      .returning();
+
+    if (!payment || !updated) throw new Error("Unable to record supplier payment");
+    return { kind: "ok" as const, payment, credit: updated, supplier: credit.supplier };
+  });
+
+  if (result.kind === "not_found") { res.status(404).json({ error: "Not found" }); return; }
+  if (result.kind === "overpayment") {
+    res.status(400).json({ error: `Payment exceeds remaining balance (${result.remaining.toFixed(2)})` });
     return;
   }
 
-  const [payment] = await db.insert(supplierPaymentsTable).values({
-    creditId: id,
+  await logActivity(req, "supplier_payment", "supplier_credit", id, {
     amount: body.amount,
-    currency: body.currency ?? credit.currency,
-    paymentDate: body.paymentDate ? new Date(body.paymentDate) : new Date(),
-    notes: body.notes,
-  }).returning();
-
-  const newPaid = credit.amountPaid + body.amount;
-  const newStatus = newPaid >= credit.totalAmount - 0.001 ? "paid" : "open";
-  const [updated] = await db.update(supplierCreditsTable)
-    .set({ amountPaid: newPaid, status: newStatus })
-    .where(eq(supplierCreditsTable.id, id))
-    .returning();
-
-  await logActivity(req, "supplier_payment", "supplier_credit", id, { amount: body.amount, supplier: credit.supplier });
-  res.status(201).json({ payment, credit: { ...updated, remaining: updated.totalAmount - updated.amountPaid } });
+    supplier: result.supplier,
+  });
+  res.status(201).json({
+    payment: result.payment,
+    credit: { ...result.credit, remaining: result.credit.totalAmount - result.credit.amountPaid },
+  });
 });
 
 // ── Delete a payment (undo) ───────────────────────────────────────────────────
@@ -181,27 +213,39 @@ router.delete("/:id/payments/:paymentId", async (req: Request, res: Response) =>
   const id = Number(req.params.id);
   const paymentId = Number(req.params.paymentId);
 
-  const [payment] = await db.select().from(supplierPaymentsTable)
-    .where(and(eq(supplierPaymentsTable.id, paymentId), eq(supplierPaymentsTable.creditId, id)));
-  if (!payment) { res.status(404).json({ error: "Not found" }); return; }
+  const result = await withTransaction(async (tx) => {
+    const [credit] = await tx
+      .select()
+      .from(supplierCreditsTable)
+      .where(eq(supplierCreditsTable.id, id))
+      .for("update");
+    if (!credit) return { kind: "credit_not_found" as const };
 
-  const [credit] = await db.select().from(supplierCreditsTable).where(eq(supplierCreditsTable.id, id));
-  if (!credit) { res.status(404).json({ error: "Credit not found" }); return; }
+    const [payment] = await tx.select().from(supplierPaymentsTable)
+      .where(and(eq(supplierPaymentsTable.id, paymentId), eq(supplierPaymentsTable.creditId, id)))
+      .for("update");
+    if (!payment) return { kind: "payment_not_found" as const };
 
-  await db.delete(supplierPaymentsTable).where(eq(supplierPaymentsTable.id, paymentId));
+    await tx.delete(supplierPaymentsTable).where(eq(supplierPaymentsTable.id, paymentId));
 
-  const newPaid = Math.max(0, credit.amountPaid - payment.amount);
-  const [updated] = await db.update(supplierCreditsTable)
-    .set({ amountPaid: newPaid, status: newPaid < credit.totalAmount ? "open" : "paid" })
-    .where(eq(supplierCreditsTable.id, id))
-    .returning();
+    const newPaid = Math.max(0, credit.amountPaid - payment.amount);
+    const [updated] = await tx.update(supplierCreditsTable)
+      .set({ amountPaid: newPaid, status: newPaid < credit.totalAmount ? "open" : "paid" })
+      .where(eq(supplierCreditsTable.id, id))
+      .returning();
+    if (!updated) throw new Error("Unable to update supplier credit after payment deletion");
 
-  res.json({ ok: true, credit: { ...updated, remaining: updated.totalAmount - updated.amountPaid } });
+    return { kind: "ok" as const, credit: updated };
+  });
+
+  if (result.kind === "credit_not_found") { res.status(404).json({ error: "Credit not found" }); return; }
+  if (result.kind === "payment_not_found") { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ ok: true, credit: { ...result.credit, remaining: result.credit.totalAmount - result.credit.amountPaid } });
 });
 
 // ── Product profit summary (for Supplements page product cards) ───────────────
 router.get("/products", async (_req: Request, res: Response) => {
-  const rate = await getRate();
+  const rate = await getExchangeRate();
 
   const [products, salesRows] = await Promise.all([
     db.select().from(productsTable)
@@ -233,7 +277,7 @@ router.get("/products", async (_req: Request, res: Response) => {
     });
   }
 
-  const enriched = products.map(p => {
+  const enriched = products.map((p) => {
     const toUsd = (n: number) => p.currency === "CDF" ? n / rate : n;
     const stats = salesMap.get(p.id) ?? { qtySold: 0, profit: 0, revenue: 0 };
     return {
