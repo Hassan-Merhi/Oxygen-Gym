@@ -309,39 +309,100 @@ export async function getAccountStatement(id: number, dateFrom?: Date, dateTo?: 
   const creditNormal = ["income", "liability", "equity"].includes(account.type);
   let runningBalance = 0;
 
-  return {
-    account,
-    rows: rows.map((row) => {
-      const debit = row.debitUsd ?? 0;
-      const credit = row.creditUsd ?? 0;
-      runningBalance += creditNormal ? credit - debit : debit - credit;
-      let description = row.description ?? "";
-      let party = row.sourceNumber ?? "";
-      if ((row.sourceType === "payment" || row.sourceType === "payment_correction") && row.sourceId) {
-        const payment = paymentMap.get(row.sourceId);
-        if (payment?.notes?.trim()) description = payment.notes.trim();
-        if (!party && payment) party = payment.linkedEntityName ?? payment.memberName ?? "";
-      } else if (row.sourceType === "voucher" && row.sourceId) {
-        const voucher = voucherMap.get(row.sourceId);
-        if (voucher?.description?.trim()) description = voucher.description.trim();
-        if (!party && voucher) party = voucher.paidTo ?? "";
-      }
-      return {
-        id: row.id,
-        date: row.entryDate,
-        description,
-        party,
-        sourceType: row.sourceType,
-        sourceId: row.sourceId,
-        amount: row.amount,
-        currency: row.currency,
-        debitUsd: row.debitUsd,
-        creditUsd: row.creditUsd,
-        debitCdf: row.debitCdf,
-        creditCdf: row.creditCdf,
-        exchangeRate: row.exchangeRate,
-        runningBalance,
-      };
-    }),
-  };
+  const statementRows = rows.map((row) => {
+    const debit = row.debitUsd ?? 0;
+    const credit = row.creditUsd ?? 0;
+    runningBalance += creditNormal ? credit - debit : debit - credit;
+    let description = row.description ?? "";
+    let party = row.sourceNumber ?? "";
+    if ((row.sourceType === "payment" || row.sourceType === "payment_correction") && row.sourceId) {
+      const payment = paymentMap.get(row.sourceId);
+      if (payment?.notes?.trim()) description = payment.notes.trim();
+      if (!party && payment) party = payment.linkedEntityName ?? payment.memberName ?? "";
+    } else if (row.sourceType === "voucher" && row.sourceId) {
+      const voucher = voucherMap.get(row.sourceId);
+      if (voucher?.description?.trim()) description = voucher.description.trim();
+      if (!party && voucher) party = voucher.paidTo ?? "";
+    }
+    return {
+      id: row.id,
+      date: row.entryDate,
+      description,
+      party,
+      sourceType: row.sourceType,
+      sourceId: row.sourceId,
+      amount: row.amount,
+      currency: row.currency,
+      debitUsd: row.debitUsd,
+      creditUsd: row.creditUsd,
+      debitCdf: row.debitCdf,
+      creditCdf: row.creditCdf,
+      exchangeRate: row.exchangeRate,
+      runningBalance,
+    };
+  });
+
+  // Physical cash is reconstructed from the business records in getCurrentBalance().
+  // The double-entry ledger was introduced later and can contain legacy gaps or
+  // duplicate member-receipt postings, so Cash must carry that historical delta
+  // before the first statement row. This makes Accounts and Cash Book share the
+  // exact same all-time balance without fabricating a current-period transaction.
+  if (account.name.trim().toLowerCase() === "cash" && !dateFrom && !dateTo) {
+    const canonical = await getCurrentBalance();
+    const accountingUsd = rows.reduce(
+      (total, row) => total + Number(row.debitUsd ?? 0) - Number(row.creditUsd ?? 0),
+      0,
+    );
+    const accountingCdf = rows.reduce(
+      (total, row) => total + Number(row.debitCdf ?? 0) - Number(row.creditCdf ?? 0),
+      0,
+    );
+    const deltaUsd = canonical.balanceUsd - accountingUsd;
+    const deltaCdf = canonical.balanceCdf - accountingCdf;
+    const reconciliationDate = new Date(0);
+    const epsilon = 0.000001;
+    const reconciliationRows: typeof statementRows = [];
+
+    if (Math.abs(deltaUsd) > epsilon) {
+      reconciliationRows.push({
+        id: -1000001,
+        date: reconciliationDate,
+        description: "Historical cash balance carry-forward",
+        party: "Cash Book",
+        sourceType: "cash_balance_reconciliation_usd",
+        sourceId: null,
+        amount: Math.abs(deltaUsd),
+        currency: "USD",
+        debitUsd: deltaUsd > 0 ? deltaUsd : 0,
+        creditUsd: deltaUsd < 0 ? -deltaUsd : 0,
+        debitCdf: 0,
+        creditCdf: 0,
+        exchangeRate: null,
+        runningBalance: 0,
+      });
+    }
+
+    if (Math.abs(deltaCdf) > epsilon) {
+      reconciliationRows.push({
+        id: -1000002,
+        date: reconciliationDate,
+        description: "Historical cash balance carry-forward",
+        party: "Cash Book",
+        sourceType: "cash_balance_reconciliation_cdf",
+        sourceId: null,
+        amount: Math.abs(deltaCdf),
+        currency: "CDF",
+        debitUsd: 0,
+        creditUsd: 0,
+        debitCdf: deltaCdf > 0 ? deltaCdf : 0,
+        creditCdf: deltaCdf < 0 ? -deltaCdf : 0,
+        exchangeRate: null,
+        runningBalance: 0,
+      });
+    }
+
+    return { account, rows: [...reconciliationRows, ...statementRows] };
+  }
+
+  return { account, rows: statementRows };
 }
