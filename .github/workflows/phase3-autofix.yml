@@ -6,10 +6,12 @@ on:
       - phase-3/contracts-boundaries-architecture
     paths:
       - scripts/phase3-autofix.mjs
+      - scripts/phase3-any-cleanup.mjs
       - scripts/phase3-openapi-sync.mjs
       - scripts/src/architecture-audit.ts
       - artifacts/api-server/src/http/contracts.ts
       - artifacts/api-server/src/app.ts
+      - artifacts/api-server/src/lib/sql-rows.ts
       - lib/api-zod/tsconfig.json
       - lib/api-spec/openapi.yaml
       - package.json
@@ -41,6 +43,8 @@ jobs:
         run: pnpm --filter @workspace/api-spec exec orval --config ./orval.config.ts
       - name: Apply request-contract codemod
         run: node scripts/phase3-autofix.mjs
+      - name: Remove explicit-any escapes from API modules
+        run: node scripts/phase3-any-cleanup.mjs
       - name: Commit architecture fixes
         run: |
           if git diff --quiet; then
@@ -53,7 +57,7 @@ jobs:
               lib/api-zod/src/generated \
               lib/api-client-react/src/generated \
               artifacts/api-server/src/routes
-            git commit -m "Phase 3: synchronize contracts and request boundaries"
+            git commit -m "Phase 3: synchronize contracts and remove unsafe API casts"
             git push origin HEAD:phase-3/contracts-boundaries-architecture
           fi
       - name: Validate full Phase 3 architecture gate
