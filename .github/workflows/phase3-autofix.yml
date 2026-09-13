@@ -7,6 +7,12 @@ on:
     paths:
       - scripts/phase3-autofix.mjs
       - scripts/phase3-openapi-sync.mjs
+      - scripts/src/architecture-audit.ts
+      - artifacts/api-server/src/http/contracts.ts
+      - artifacts/api-server/src/app.ts
+      - lib/api-zod/tsconfig.json
+      - lib/api-spec/openapi.yaml
+      - package.json
       - .github/workflows/phase3-autofix.yml
 
 permissions:
