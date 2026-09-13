@@ -27,13 +27,14 @@ router.post("/opening-balance", async (req, res) => {
   const date = optionalDate(body.date, "date");
   const notes = optionalString(body.notes);
   const actor = getCurrentUser(req).name;
+  const resetConfirmation = String(req.headers["x-reset-confirmation"] ?? "");
 
-  if (req.query.reset === "true") {
+  if (resetConfirmation) {
     res.json(await resetOperationalPeriod({
       openingCashUsd: targetAmountUsd,
       resetDate: date,
       notes,
-      confirmation: String(req.headers["x-reset-confirmation"] ?? ""),
+      confirmation: resetConfirmation,
     }, actor));
     return;
   }
