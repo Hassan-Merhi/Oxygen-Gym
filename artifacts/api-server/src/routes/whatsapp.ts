@@ -56,7 +56,7 @@ router.post("/chats", async (req: Request, res: Response) => {
 // PATCH /api/whatsapp/chats/:id
 router.patch("/chats/:id", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
-  const id = parseInt(contractParams(req, ApiContracts.UpdateWhatsappChatParams).id as string, 10);
+  const id = Number(contractParams(req, ApiContracts.UpdateWhatsappChatParams).id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const { label, chatId, enabled } = contractBodyAs<Record<string, unknown>>(req, ApiContracts.UpdateWhatsappChatBody);
@@ -85,7 +85,7 @@ router.patch("/chats/:id", async (req: Request, res: Response) => {
 // DELETE /api/whatsapp/chats/:id
 router.delete("/chats/:id", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
-  const id = parseInt(contractParams(req, ApiContracts.DeleteWhatsappChatParams).id as string, 10);
+  const id = Number(contractParams(req, ApiContracts.DeleteWhatsappChatParams).id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     await db.delete(whatsappChatsTable).where(eq(whatsappChatsTable.id, id));
