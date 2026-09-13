@@ -9,13 +9,10 @@
  * Cash-out events: Debit Expense acct  / Credit Cash account
  */
 
-import { db } from "@workspace/db";
+import { db, type DbExecutor } from "@workspace/db";
 import { chartOfAccountsTable, accountingEntriesTable } from "@workspace/db/schema";
 import { eq, and, ilike, or } from "drizzle-orm";
 import type { AccountingEntry } from "@workspace/db/schema";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Executor = any;
 
 export function normalizeName(raw: string): string {
   return (raw || "cash")
@@ -30,6 +27,7 @@ const DEFAULT_TYPES: Record<string, "asset" | "liability" | "income" | "expense"
   "Mobile Money":       "asset",
   "Petty Cash":         "asset",
   "Inventory":          "asset",
+  "Accounts Payable":   "liability",
   "Membership Revenue": "income",
   "Sales Revenue":      "income",
   "Other Income":       "income",
@@ -41,7 +39,7 @@ const DEFAULT_TYPES: Record<string, "asset" | "liability" | "income" | "expense"
 export async function resolveAccountId(
   rawName: string,
   fallbackType: "asset" | "liability" | "income" | "expense" | "equity" = "asset",
-  executor: Executor = db,
+  executor: DbExecutor = db,
 ): Promise<{ id: number; name: string } | null> {
   const name = normalizeName(rawName);
 
@@ -53,14 +51,15 @@ export async function resolveAccountId(
   if (rows.length > 0) return rows[0] as { id: number; name: string };
 
   const type = DEFAULT_TYPES[name] ?? fallbackType;
-  try {
-    const created = await executor
-      .insert(chartOfAccountsTable)
-      .values({ name, type })
-      .onConflictDoNothing()
-      .returning({ id: chartOfAccountsTable.id, name: chartOfAccountsTable.name });
-    if (created.length > 0) return created[0] as { id: number; name: string };
-  } catch { /* concurrent insert race — fall through */ }
+  // onConflictDoNothing handles the expected concurrent-create race. Any other
+  // database error is a real accounting failure and must abort the caller's
+  // transaction rather than being swallowed as non-fatal.
+  const created = await executor
+    .insert(chartOfAccountsTable)
+    .values({ name, type })
+    .onConflictDoNothing()
+    .returning({ id: chartOfAccountsTable.id, name: chartOfAccountsTable.name });
+  if (created.length > 0) return created[0] as { id: number; name: string };
 
   const refetched = await executor
     .select({ id: chartOfAccountsTable.id, name: chartOfAccountsTable.name })
@@ -69,8 +68,6 @@ export async function resolveAccountId(
     .limit(1);
   return (refetched[0] as { id: number; name: string }) ?? null;
 }
-
-// ── Account name lookup by category ─────────────────────────────────────────
 
 const REVENUE_ACCOUNTS: Record<string, string> = {
   membership:    "Membership Revenue",
@@ -101,15 +98,13 @@ export function categoryAccountNames(
       ? normalizeName(subCategory)
       : (REVENUE_ACCOUNTS[category] ?? "Other Income");
     return { debitName: cashName, debitType: "asset", creditName: revName, creditType: "income" };
-  } else {
-    const expName = subCategory
-      ? normalizeName(subCategory)
-      : (EXPENSE_ACCOUNTS[category] ?? "Other Expense");
-    return { debitName: expName, debitType: "expense", creditName: cashName, creditType: "asset" };
   }
-}
 
-// ── Post a balanced double-entry pair ────────────────────────────────────────
+  const expName = subCategory
+    ? normalizeName(subCategory)
+    : (EXPENSE_ACCOUNTS[category] ?? "Other Expense");
+  return { debitName: expName, debitType: "expense", creditName: cashName, creditType: "asset" };
+}
 
 export interface PostEntryInput {
   entryDate?: Date;
@@ -129,7 +124,20 @@ export interface PostEntryInput {
   createdBy?: string;
 }
 
-export async function postDoubleEntry(input: PostEntryInput, executor: Executor = db): Promise<void> {
+export async function postDoubleEntry(
+  input: PostEntryInput,
+  executor: DbExecutor = db,
+): Promise<void> {
+  if (!Number.isFinite(input.amount) || input.amount < 0) {
+    throw new Error("Accounting amount must be a non-negative finite number");
+  }
+  if (!Number.isFinite(input.amountUsd) || input.amountUsd < 0 || !Number.isFinite(input.amountCdf) || input.amountCdf < 0) {
+    throw new Error("Accounting converted amounts must be non-negative finite numbers");
+  }
+  if (!Number.isFinite(input.exchangeRate) || input.exchangeRate <= 0) {
+    throw new Error("Accounting exchange rate must be greater than zero");
+  }
+
   const [debit, credit] = await Promise.all([
     resolveAccountId(input.debitName, input.debitType ?? "asset", executor),
     resolveAccountId(input.creditName, input.creditType ?? "asset", executor),
@@ -169,21 +177,21 @@ export async function postDoubleEntry(input: PostEntryInput, executor: Executor 
   ]);
 }
 
-// ── Reverse the CURRENT effective entries for a source ───────────────────────
-//
-// Voucher/payment edits are append-only: original rows stay in the ledger and
-// correction/reversal rows are added. Reversing only the original rows on every
-// edit causes repeated edits to drift the ledger. Instead, calculate the current
-// net position per account across the whole source family, then post only the
-// opposite of that effective position. This keeps repeated amount/currency/account
-// edits correct without deleting accounting history.
-
+/**
+ * Reverse the CURRENT effective entries for a source.
+ *
+ * Voucher/payment edits are append-only: original rows stay in the ledger and
+ * correction/reversal rows are added. Reversing only the original rows on every
+ * edit causes repeated edits to drift the ledger. Instead, calculate the current
+ * net position per account across the whole source family, then post only the
+ * opposite of that effective position.
+ */
 export async function reverseEntries(
   originalSourceType: string,
   originalSourceId: number,
   reversalSourceType: string,
   createdBy: string,
-  executor: Executor = db,
+  executor: DbExecutor = db,
 ): Promise<void> {
   const sourceFamily = [
     originalSourceType,
@@ -264,25 +272,5 @@ export async function reverseEntries(
 
   if (reversals.length > 0) {
     await executor.insert(accountingEntriesTable).values(reversals);
-  }
-}
-
-// ── Seed default chart of accounts (idempotent) ──────────────────────────────
-
-export async function seedDefaultAccounts(): Promise<void> {
-  const defaults: Array<{ name: string; type: "asset" | "liability" | "income" | "expense" | "equity" }> = [
-    { name: "Cash",               type: "asset" },
-    { name: "Bank",               type: "asset" },
-    { name: "Mobile Money",       type: "asset" },
-    { name: "Inventory",          type: "asset" },
-    { name: "Membership Revenue", type: "income" },
-    { name: "Sales Revenue",      type: "income" },
-    { name: "Other Income",       type: "income" },
-    { name: "General Expense",    type: "expense" },
-    { name: "Payroll Expense",    type: "expense" },
-    { name: "Other Expense",      type: "expense" },
-  ];
-  for (const acc of defaults) {
-    await db.insert(chartOfAccountsTable).values(acc).onConflictDoNothing();
   }
 }

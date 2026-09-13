@@ -6,6 +6,8 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { env } from "./config/env";
 import { contractErrorHandler } from "./http/contracts";
+import { errorHandler } from "./shared/http/errors";
+import { mutationRequestContext } from "./shared/http/idempotency-context";
 
 const app: Express = express();
 
@@ -30,10 +32,13 @@ app.use(
 app.use(cors({ credentials: true, origin: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(mutationRequestContext);
 
 const uploadDir = path.resolve(process.cwd(), "uploads");
 app.use("/api/uploads", express.static(uploadDir));
 app.use("/api", router);
+
+// Contract violations are normalized before the general domain error mapper.
 app.use(contractErrorHandler);
 
 if (env.staticDir) {
@@ -43,5 +48,7 @@ if (env.staticDir) {
     res.sendFile(path.join(resolvedStaticDir, "index.html"));
   });
 }
+
+app.use(errorHandler);
 
 export default app;

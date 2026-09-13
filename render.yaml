@@ -3,7 +3,7 @@ services:
     name: gympro
     runtime: node
     plan: free
-    buildCommand: pnpm install --frozen-lockfile && pnpm run build:render
+    buildCommand: pnpm install --frozen-lockfile && pnpm run db:migrate && pnpm run build:render
     startCommand: node artifacts/api-server/dist/index.mjs
     healthCheckPath: /api/healthz
     envVars:
