@@ -62,6 +62,14 @@ if (writeIfChanged(attendancePath, (source) => {
   text = text.replace(/\(\(([A-Za-z_$][\w$]*)\.rows \?\? \1\) as any\[\]\)/g, "sqlRows<AttendanceSqlRow>($1)");
   text = text.replace(/\(([A-Za-z_$][\w$]*)\.rows \?\? \1\) as any\[\]/g, "sqlRows<AttendanceSqlRow>($1)");
   text = text.replace(/\(r: any\)/g, "(r)");
+  text = text.replaceAll(
+    "res.jsonsqlRows<AttendanceSqlRow>(rows);",
+    "res.json(sqlRows<AttendanceSqlRow>(rows));",
+  );
+  text = text.replace(
+    "monthlyHistory.filter(r => r.count > 0).length",
+    "monthlyHistory.filter((r) => Number(r.count ?? 0) > 0).length",
+  );
   return text;
 })) changed.push("attendance.ts");
 
