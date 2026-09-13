@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/ui/page-header";
 import { Users, TrendingUp, Wallet, Receipt, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLocation } from "wouter";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,7 @@ function fmtMoney(n: number) {
 }
 
 type Tone = "blue" | "emerald" | "indigo" | "rose";
+type DashboardPeriod = "day" | "month" | "year";
 
 const toneClass: Record<Tone, string> = {
   blue: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
@@ -47,6 +49,7 @@ function HeroCard({
   hint,
   loading,
   restricted,
+  onClick,
 }: {
   icon: React.ElementType;
   tone: Tone;
@@ -55,9 +58,27 @@ function HeroCard({
   hint: string;
   loading?: boolean;
   restricted?: boolean;
+  onClick?: () => void;
 }) {
+  const interactive = !!onClick && !restricted;
+
   return (
-    <div className="bg-card rounded-2xl border border-border/60 shadow-sm p-6">
+    <div
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-label={interactive ? `Open ${label}` : undefined}
+      onClick={interactive ? onClick : undefined}
+      onKeyDown={interactive ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      } : undefined}
+      className={cn(
+        "bg-card rounded-2xl border border-border/60 shadow-sm p-6 transition-all",
+        interactive && "cursor-pointer hover:border-primary/40 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      )}
+    >
       <div className="flex items-center gap-3">
         <div className={cn("p-2.5 rounded-xl shrink-0", toneClass[tone])}>
           <Icon className="w-5 h-5" />
@@ -90,6 +111,8 @@ function PeriodCard({
   year,
   labels,
   loading,
+  onClick,
+  onPeriodClick,
 }: {
   icon: React.ElementType;
   tone: Tone;
@@ -99,15 +122,33 @@ function PeriodCard({
   year: number;
   labels: { day: string; month: string; year: string };
   loading?: boolean;
+  onClick?: () => void;
+  onPeriodClick?: (period: DashboardPeriod) => void;
 }) {
-  const rows = [
+  const rows: Array<{ key: DashboardPeriod; label: string; value: number }> = [
     { key: "day", label: labels.day, value: day },
     { key: "month", label: labels.month, value: month },
     { key: "year", label: labels.year, value: year },
   ];
+  const cardInteractive = !!onClick;
 
   return (
-    <div className="bg-card rounded-2xl border border-border/60 shadow-sm p-6">
+    <div
+      role={cardInteractive ? "button" : undefined}
+      tabIndex={cardInteractive ? 0 : undefined}
+      aria-label={cardInteractive ? `Open ${label}` : undefined}
+      onClick={cardInteractive ? onClick : undefined}
+      onKeyDown={cardInteractive ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      } : undefined}
+      className={cn(
+        "bg-card rounded-2xl border border-border/60 shadow-sm p-6 transition-all",
+        cardInteractive && "cursor-pointer hover:border-primary/40 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      )}
+    >
       <div className="flex items-center gap-3">
         <div className={cn("p-2.5 rounded-xl shrink-0", toneClass[tone])}>
           <Icon className="w-5 h-5" />
@@ -116,32 +157,50 @@ function PeriodCard({
       </div>
 
       <dl className="mt-4 divide-y divide-border/50">
-        {rows.map((row, i) => (
-          <div key={row.key} className="flex items-center justify-between gap-4 py-3 first:pt-1">
-            <dt
-              className={cn(
-                "text-sm",
-                i === 0 ? "font-medium" : "text-muted-foreground",
-              )}
-            >
-              {row.label}
-            </dt>
-            <dd>
-              {loading ? (
-                <Skeleton className="h-5 w-24 ml-auto" />
-              ) : (
-                <span
-                  className={cn(
-                    "tabular-nums",
-                    i === 0 ? "text-lg font-bold" : "text-sm font-semibold",
-                  )}
-                >
-                  {fmtMoney(row.value)}
-                </span>
-              )}
-            </dd>
-          </div>
-        ))}
+        {rows.map((row, i) => {
+          const rowContent = (
+            <>
+              <dt
+                className={cn(
+                  "text-sm",
+                  i === 0 ? "font-medium" : "text-muted-foreground",
+                )}
+              >
+                {row.label}
+              </dt>
+              <dd>
+                {loading ? (
+                  <Skeleton className="h-5 w-24 ml-auto" />
+                ) : (
+                  <span
+                    className={cn(
+                      "tabular-nums",
+                      i === 0 ? "text-lg font-bold" : "text-sm font-semibold",
+                    )}
+                  >
+                    {fmtMoney(row.value)}
+                  </span>
+                )}
+              </dd>
+            </>
+          );
+
+          return onPeriodClick ? (
+            <div key={row.key} className="py-0.5 first:pt-0">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-4 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => onPeriodClick(row.key)}
+              >
+                {rowContent}
+              </button>
+            </div>
+          ) : (
+            <div key={row.key} className="flex items-center justify-between gap-4 py-3 first:pt-1">
+              {rowContent}
+            </div>
+          );
+        })}
       </dl>
     </div>
   );
@@ -152,6 +211,7 @@ function PeriodCard({
 export default function Dashboard() {
   const { t } = useI18n();
   const { locale } = useFmtDate();
+  const [, navigate] = useLocation();
   const { data: me, isLoading: meLoading } = useGetMe();
   const { data: kpis, isLoading: loading } = useGetDashboardKpis();
 
@@ -192,6 +252,7 @@ export default function Dashboard() {
           loading={loading}
           value={(kpis?.activeMembers.count ?? 0).toLocaleString()}
           hint={t("dashboard.activeMembersHint")}
+          onClick={() => navigate("/members-overview")}
         />
         <HeroCard
           icon={TrendingUp}
@@ -201,6 +262,7 @@ export default function Dashboard() {
           restricted={!canViewProfit}
           value={fmtMoney(kpis?.profit.total ?? 0)}
           hint={t("dashboard.totalProfitHint")}
+          onClick={canViewProfit ? () => navigate("/financials") : undefined}
         />
       </div>
 
@@ -215,6 +277,7 @@ export default function Dashboard() {
           month={kpis?.revenue.month ?? 0}
           year={kpis?.revenue.year ?? 0}
           labels={periodLabels}
+          onClick={() => navigate("/financials")}
         />
         <PeriodCard
           icon={Receipt}
@@ -225,6 +288,7 @@ export default function Dashboard() {
           month={kpis?.expenses.month ?? 0}
           year={kpis?.expenses.year ?? 0}
           labels={periodLabels}
+          onPeriodClick={(period) => navigate(`/accounts?type=expense&period=${period}`)}
         />
       </div>
     </div>
