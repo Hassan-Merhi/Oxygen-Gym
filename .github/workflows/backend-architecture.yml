@@ -9,6 +9,7 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
+      - "render.yaml"
       - ".github/workflows/backend-architecture.yml"
   push:
     branches: [main]
@@ -19,6 +20,7 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
+      - "render.yaml"
 
 permissions:
   contents: read
@@ -39,6 +41,10 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Validate DB migration architecture
+        run: pnpm --filter @workspace/db run check:architecture
+      - name: Validate DB admin scripts
+        run: pnpm --filter @workspace/db run check:scripts
       - name: Typecheck workspace
         run: pnpm run typecheck
       - name: Build production backend

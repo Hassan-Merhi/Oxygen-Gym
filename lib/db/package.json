@@ -8,8 +8,12 @@
     "./schema": "./src/schema/index.ts"
   },
   "scripts": {
-    "push": "drizzle-kit push --config ./drizzle.config.ts",
-    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts"
+    "migrate": "node ./scripts/migrate.mjs",
+    "check:architecture": "node ./scripts/check-migration-architecture.mjs",
+    "check:scripts": "node --check ./scripts/migrate.mjs && node --check ./scripts/check-migration-architecture.mjs && node --check ./scripts/repair-legacy-financials.mjs && node --check ./scripts/repair-inventory-quantities.mjs && node --check ./scripts/cash-wipe-v1.mjs",
+    "repair:legacy-financials": "node ./scripts/repair-legacy-financials.mjs",
+    "repair:inventory-quantities": "node ./scripts/repair-inventory-quantities.mjs",
+    "admin:cash-wipe-v1": "node ./scripts/cash-wipe-v1.mjs"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",

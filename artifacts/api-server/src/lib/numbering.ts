@@ -1,5 +1,5 @@
-import { db, systemCountersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, systemCountersTable, type DbExecutor } from "@workspace/db";
+import { sql } from "drizzle-orm";
 
 const PREFIXES: Record<string, string> = {
   member: "MEM",
@@ -12,27 +12,32 @@ const PREFIXES: Record<string, string> = {
   product: "PRD",
 };
 
-export async function getNextNumber(entity: string): Promise<string> {
+/**
+ * Allocate a sequential business number with a single atomic UPSERT.
+ * Passing a transaction executor keeps number allocation in the same unit of
+ * work as the record being created and avoids nested transactions.
+ */
+export async function getNextNumber(
+  entity: string,
+  executor: DbExecutor = db,
+): Promise<string> {
   const prefix = PREFIXES[entity] ?? entity.toUpperCase().slice(0, 3);
 
-  const count = await db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select()
-      .from(systemCountersTable)
-      .where(eq(systemCountersTable.entity, entity));
+  const [counter] = await executor
+    .insert(systemCountersTable)
+    .values({ entity, currentCount: 1 })
+    .onConflictDoUpdate({
+      target: systemCountersTable.entity,
+      set: {
+        currentCount: sql`${systemCountersTable.currentCount} + 1`,
+        updatedAt: new Date(),
+      },
+    })
+    .returning({ currentCount: systemCountersTable.currentCount });
 
-    if (existing) {
-      const next = existing.currentCount + 1;
-      await tx
-        .update(systemCountersTable)
-        .set({ currentCount: next })
-        .where(eq(systemCountersTable.entity, entity));
-      return next;
-    } else {
-      await tx.insert(systemCountersTable).values({ entity, currentCount: 1 });
-      return 1;
-    }
-  });
+  if (!counter) {
+    throw new Error(`Unable to allocate sequence number for ${entity}`);
+  }
 
-  return `${prefix}-${String(count).padStart(6, "0")}`;
+  return `${prefix}-${String(counter.currentCount).padStart(6, "0")}`;
 }
