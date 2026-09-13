@@ -1,10 +1,9 @@
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
-import { db } from "@workspace/db";
+import { db, withTransaction } from "@workspace/db";
 import {
   payrollTable,
   staffEmployeesTable,
-  settingsTable,
   paymentsTable,
   commissionsTable,
 } from "@workspace/db/schema";
@@ -13,17 +12,13 @@ import { getNextNumber } from "../lib/numbering";
 import { logActivity } from "../lib/activity";
 import { appendLedgerEntry } from "../lib/ledger";
 import { postDoubleEntry, reverseEntries } from "../lib/accounting";
+import { getExchangeRate } from "../repositories/settings";
 
 const router = Router();
 router.use(requireAuth());
 
 function callerName(req: Request): string {
   return (req as unknown as { __gymproUserName?: string }).__gymproUserName ?? "System";
-}
-
-async function getExchangeRate(): Promise<number> {
-  const [s] = await db.select({ rate: settingsTable.usdToCdfRate }).from(settingsTable);
-  return s?.rate ?? 2800;
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────
@@ -89,58 +84,64 @@ router.post("/", async (req: Request, res: Response) => {
   const bonusAmt = bonus ?? 0;
   const deductionAmt = deduction ?? 0;
   const salCurrency = currency ?? employee.salaryCurrency ?? "USD";
-
-  const pendingCommissions = await db
-    .select()
-    .from(commissionsTable)
-    .where(and(eq(commissionsTable.staffEmployeeId, staffEmployeeId), eq(commissionsTable.status, "pending")));
-  const commissionBonus = pendingCommissions.reduce((total, c) => {
-    const amt = c.amount ?? 0;
-    const commCur = c.currency ?? salCurrency;
-    if (commCur === salCurrency) return total + amt;
-    if (salCurrency === "USD" && commCur === "CDF") return total + amt / rate;
-    if (salCurrency === "CDF" && commCur === "USD") return total + amt * rate;
-    return total + amt;
-  }, 0);
-
-  const netPay = baseSalary + bonusAmt + commissionBonus - deductionAmt;
-  const netPayUsd = salCurrency === "USD" ? netPay : netPay / rate;
-
-  const payrollNumber = await getNextNumber("payroll");
   const creator = callerName(req);
 
-  const [record] = await db.insert(payrollTable).values({
-    payrollNumber,
-    staffEmployeeId: employee.id,
-    staffName: employee.name,
-    staffNumber: employee.staffNumber ?? null,
-    periodStart: periodStart ? new Date(periodStart) : null,
-    periodEnd: periodEnd ? new Date(periodEnd) : null,
-    baseSalary,
-    bonus: bonusAmt,
-    commissionBonus,
-    deduction: deductionAmt,
-    netPay,
-    currency: salCurrency,
-    exchangeRate: rate,
-    netPayUsd,
-    notes: notes ?? null,
-    status: "draft",
-    createdBy: creator,
-  }).returning();
+  const record = await withTransaction(async (tx) => {
+    const pendingCommissions = await tx
+      .select()
+      .from(commissionsTable)
+      .where(and(eq(commissionsTable.staffEmployeeId, staffEmployeeId), eq(commissionsTable.status, "pending")))
+      .for("update");
 
-  if (pendingCommissions.length > 0) {
-    await db
-      .update(commissionsTable)
-      .set({ payrollId: record.id, status: "draft" })
-      .where(and(eq(commissionsTable.staffEmployeeId, staffEmployeeId), eq(commissionsTable.status, "pending")));
-  }
+    const commissionBonus = pendingCommissions.reduce((total, c) => {
+      const amt = c.amount ?? 0;
+      const commCur = c.currency ?? salCurrency;
+      if (commCur === salCurrency) return total + amt;
+      if (salCurrency === "USD" && commCur === "CDF") return total + amt / rate;
+      if (salCurrency === "CDF" && commCur === "USD") return total + amt * rate;
+      return total + amt;
+    }, 0);
+
+    const netPay = baseSalary + bonusAmt + commissionBonus - deductionAmt;
+    const netPayUsd = salCurrency === "USD" ? netPay : netPay / rate;
+    const payrollNumber = await getNextNumber("payroll", tx);
+
+    const [created] = await tx.insert(payrollTable).values({
+      payrollNumber,
+      staffEmployeeId: employee.id,
+      staffName: employee.name,
+      staffNumber: employee.staffNumber ?? null,
+      periodStart: periodStart ? new Date(periodStart) : null,
+      periodEnd: periodEnd ? new Date(periodEnd) : null,
+      baseSalary,
+      bonus: bonusAmt,
+      commissionBonus,
+      deduction: deductionAmt,
+      netPay,
+      currency: salCurrency,
+      exchangeRate: rate,
+      netPayUsd,
+      notes: notes ?? null,
+      status: "draft",
+      createdBy: creator,
+    }).returning();
+    if (!created) throw new Error("Unable to create payroll");
+
+    if (pendingCommissions.length > 0) {
+      await tx
+        .update(commissionsTable)
+        .set({ payrollId: created.id, status: "draft" })
+        .where(and(eq(commissionsTable.staffEmployeeId, staffEmployeeId), eq(commissionsTable.status, "pending")));
+    }
+
+    return created;
+  });
 
   await logActivity(req, "payroll_generated", "payroll", record.id, {
-    payrollNumber,
+    payrollNumber: record.payrollNumber,
     staffName: employee.name,
-    netPay,
-    currency: salCurrency,
+    netPay: record.netPay,
+    currency: record.currency,
   });
 
   res.status(201).json(record);
@@ -149,49 +150,52 @@ router.post("/", async (req: Request, res: Response) => {
 // ── Mark as paid ──────────────────────────────────────────────────────────────
 router.patch("/:id/pay", async (req: Request, res: Response) => {
   const id = parseInt(req.params.id as string);
-  const [record] = await db.select().from(payrollTable).where(eq(payrollTable.id, id));
-  if (!record) { res.status(404).json({ error: "Payroll record not found" }); return; }
-  if (record.status === "paid") { res.status(400).json({ error: "Already paid" }); return; }
-  if (record.status === "cancelled") { res.status(400).json({ error: "Cannot pay a cancelled payroll" }); return; }
-
-  const rate = await getExchangeRate();
   const creator = callerName(req);
-  const netPayUsd = record.currency === "USD" ? record.netPay : record.netPay / rate;
-  const netPayCdf = record.currency === "CDF" ? record.netPay : record.netPay * rate;
 
-  // 1. Create payment record — use original currency/amount (not USD-converted)
-  const paymentNumber = await getNextNumber("PAY");
-  const [payment] = await db.insert(paymentsTable).values({
-    paymentNumber,
-    direction: "out",
-    category: "payroll",
-    type: "payroll",
-    amount: record.netPay,
-    currency: record.currency,
-    exchangeRate: rate,
-    amountUsd: netPayUsd,
-    amountCdf: netPayCdf,
-    account: "cash",
-    notes: `Payroll ${record.payrollNumber} — ${record.staffName}`,
-    createdBy: creator,
-    status: "completed",
-  }).returning();
+  const result = await withTransaction(async (tx) => {
+    const [record] = await tx
+      .select()
+      .from(payrollTable)
+      .where(eq(payrollTable.id, id))
+      .for("update");
+    if (!record) return { kind: "not_found" as const };
+    if (record.status === "paid") return { kind: "already_paid" as const };
+    if (record.status === "cancelled") return { kind: "cancelled" as const };
 
-  // 2. Cash ledger OUT — use original currency/amount
-  await appendLedgerEntry({
-    sourceType: "payroll",
-    sourceNumber: record.payrollNumber ?? undefined,
-    sourceId: record.id,
-    direction: "out",
-    amount: record.netPay,
-    currency: record.currency,
-    exchangeRate: rate,
-    description: `Payroll ${record.payrollNumber} — ${record.staffName}`,
-    createdBy: creator,
-  });
+    const rate = await getExchangeRate(tx);
+    const netPayUsd = record.currency === "USD" ? record.netPay : record.netPay / rate;
+    const netPayCdf = record.currency === "CDF" ? record.netPay : record.netPay * rate;
+    const paymentNumber = await getNextNumber("PAY", tx);
 
-  // 3. Double-entry accounting: Payroll Expense debit / Cash credit
-  try {
+    const [payment] = await tx.insert(paymentsTable).values({
+      paymentNumber,
+      direction: "out",
+      category: "payroll",
+      type: "payroll",
+      amount: record.netPay,
+      currency: record.currency,
+      exchangeRate: rate,
+      amountUsd: netPayUsd,
+      amountCdf: netPayCdf,
+      account: "cash",
+      notes: `Payroll ${record.payrollNumber} — ${record.staffName}`,
+      createdBy: creator,
+      status: "completed",
+    }).returning();
+    if (!payment) throw new Error("Unable to create payroll payment");
+
+    await appendLedgerEntry({
+      sourceType: "payroll",
+      sourceNumber: record.payrollNumber ?? undefined,
+      sourceId: record.id,
+      direction: "out",
+      amount: record.netPay,
+      currency: record.currency,
+      exchangeRate: rate,
+      description: `Payroll ${record.payrollNumber} — ${record.staffName}`,
+      createdBy: creator,
+    }, tx);
+
     await postDoubleEntry({
       sourceType: "payroll",
       sourceId: record.id,
@@ -207,95 +211,108 @@ router.patch("/:id/pay", async (req: Request, res: Response) => {
       exchangeRate: rate,
       description: `Payroll ${record.payrollNumber} — ${record.staffName}`,
       createdBy: creator,
-    });
-  } catch { /* non-fatal */ }
+    }, tx);
 
-  // 4. Mark linked commissions as paid
-  await db
-    .update(commissionsTable)
-    .set({ status: "paid", paidAt: new Date() })
-    .where(and(eq(commissionsTable.payrollId, id), eq(commissionsTable.status, "pending")));
+    await tx
+      .update(commissionsTable)
+      .set({ status: "paid", paidAt: new Date() })
+      .where(and(eq(commissionsTable.payrollId, id), eq(commissionsTable.status, "draft")));
 
-  // 5. Update payroll record
-  const [updated] = await db.update(payrollTable).set({
-    status: "paid",
-    paidAt: new Date(),
-    paidBy: creator,
-    paymentId: payment.id,
-    netPayUsd,
-    exchangeRate: rate,
-  }).where(eq(payrollTable.id, id)).returning();
+    const [updated] = await tx.update(payrollTable).set({
+      status: "paid",
+      paidAt: new Date(),
+      paidBy: creator,
+      paymentId: payment.id,
+      netPayUsd,
+      exchangeRate: rate,
+    }).where(eq(payrollTable.id, id)).returning();
+    if (!updated) throw new Error("Unable to mark payroll paid");
 
-  await logActivity(req, "payroll_paid", "payroll", id, {
-    payrollNumber: record.payrollNumber,
-    staffName: record.staffName,
-    netPay: record.netPay,
-    currency: record.currency,
+    return { kind: "ok" as const, record, updated };
   });
 
-  res.json(updated);
+  if (result.kind === "not_found") { res.status(404).json({ error: "Payroll record not found" }); return; }
+  if (result.kind === "already_paid") { res.status(400).json({ error: "Already paid" }); return; }
+  if (result.kind === "cancelled") { res.status(400).json({ error: "Cannot pay a cancelled payroll" }); return; }
+
+  await logActivity(req, "payroll_paid", "payroll", id, {
+    payrollNumber: result.record.payrollNumber,
+    staffName: result.record.staffName,
+    netPay: result.record.netPay,
+    currency: result.record.currency,
+  });
+
+  res.json(result.updated);
 });
 
 // ── Cancel payroll ────────────────────────────────────────────────────────────
 router.patch("/:id/cancel", async (req: Request, res: Response) => {
   const { reason } = req.body as { reason: string };
   const id = parseInt(req.params.id as string);
-
-  const [record] = await db.select().from(payrollTable).where(eq(payrollTable.id, id));
-  if (!record) { res.status(404).json({ error: "Payroll record not found" }); return; }
-  if (record.status === "cancelled") { res.status(400).json({ error: "Already cancelled" }); return; }
-
-  const rate = await getExchangeRate();
   const creator = callerName(req);
 
-  if (record.status === "paid") {
-    const netPayAmt = record.netPay;
-    const netPayCur = record.currency;
-    const netPayUsd = record.netPayUsd ?? (netPayCur === "USD" ? netPayAmt : netPayAmt / rate);
-    const netPayCdf = netPayCur === "CDF" ? netPayAmt : netPayAmt * rate;
+  const result = await withTransaction(async (tx) => {
+    const [record] = await tx
+      .select()
+      .from(payrollTable)
+      .where(eq(payrollTable.id, id))
+      .for("update");
+    if (!record) return { kind: "not_found" as const };
+    if (record.status === "cancelled") return { kind: "already_cancelled" as const };
 
-    // Reverse ledger entry
-    await appendLedgerEntry({
-      sourceType: "payroll_reversal",
-      sourceNumber: record.payrollNumber ?? undefined,
-      sourceId: record.id,
-      direction: "in",
-      amount: netPayAmt,
-      currency: netPayCur,
-      exchangeRate: record.exchangeRate ?? rate,
-      description: `Reversal of payroll ${record.payrollNumber} — ${reason}`,
-      createdBy: creator,
-    });
+    const rate = await getExchangeRate(tx);
+    if (record.status === "paid") {
+      await appendLedgerEntry({
+        sourceType: "payroll_reversal",
+        sourceNumber: record.payrollNumber ?? undefined,
+        sourceId: record.id,
+        direction: "in",
+        amount: record.netPay,
+        currency: record.currency,
+        exchangeRate: record.exchangeRate ?? rate,
+        description: `Reversal of payroll ${record.payrollNumber} — ${reason}`,
+        createdBy: creator,
+      }, tx);
 
-    // Reverse accounting entries
-    try {
-      await reverseEntries("payroll", record.id, "payroll_reversal", creator);
-    } catch { /* non-fatal */ }
+      await reverseEntries("payroll", record.id, "payroll_reversal", creator, tx);
 
-    // Cancel the payment record
-    if (record.paymentId) {
-      await db.update(paymentsTable).set({ status: "cancelled" }).where(eq(paymentsTable.id, record.paymentId));
+      if (record.paymentId) {
+        await tx.update(paymentsTable).set({ status: "cancelled" }).where(eq(paymentsTable.id, record.paymentId));
+      }
+
+      await tx
+        .update(commissionsTable)
+        .set({ status: "pending", paidAt: null, payrollId: null })
+        .where(and(eq(commissionsTable.payrollId, id), eq(commissionsTable.status, "paid")));
+    } else {
+      await tx
+        .update(commissionsTable)
+        .set({ status: "pending", payrollId: null })
+        .where(and(eq(commissionsTable.payrollId, id), eq(commissionsTable.status, "draft")));
     }
 
-    void netPayUsd;
-    void netPayCdf;
-  }
+    const [updated] = await tx.update(payrollTable).set({
+      status: "cancelled",
+      cancelledAt: new Date(),
+      cancelledBy: creator,
+      cancelReason: reason,
+    }).where(eq(payrollTable.id, id)).returning();
+    if (!updated) throw new Error("Unable to cancel payroll");
 
-  const [updated] = await db.update(payrollTable).set({
-    status: "cancelled",
-    cancelledAt: new Date(),
-    cancelledBy: creator,
-    cancelReason: reason,
-  }).where(eq(payrollTable.id, id)).returning();
-
-  await logActivity(req, "payroll_cancelled", "payroll", id, {
-    payrollNumber: record.payrollNumber,
-    staffName: record.staffName,
-    reason,
-    wasPaid: record.status === "paid",
+    return { kind: "ok" as const, record, updated };
   });
 
-  res.json(updated);
+  if (result.kind === "not_found") { res.status(404).json({ error: "Payroll record not found" }); return; }
+  if (result.kind === "already_cancelled") { res.status(400).json({ error: "Already cancelled" }); return; }
+
+  await logActivity(req, "payroll_cancelled", "payroll", id, {
+    payrollNumber: result.record.payrollNumber,
+    staffName: result.record.staffName,
+    reason,
+    wasPaid: result.record.status === "paid",
+  });
+
+  res.json(result.updated);
 });
 
 export default router;
