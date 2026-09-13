@@ -27,6 +27,7 @@ const DEFAULT_TYPES: Record<string, "asset" | "liability" | "income" | "expense"
   "Mobile Money":       "asset",
   "Petty Cash":         "asset",
   "Inventory":          "asset",
+  "Accounts Payable":   "liability",
   "Membership Revenue": "income",
   "Sales Revenue":      "income",
   "Other Income":       "income",
@@ -50,14 +51,15 @@ export async function resolveAccountId(
   if (rows.length > 0) return rows[0] as { id: number; name: string };
 
   const type = DEFAULT_TYPES[name] ?? fallbackType;
-  try {
-    const created = await executor
-      .insert(chartOfAccountsTable)
-      .values({ name, type })
-      .onConflictDoNothing()
-      .returning({ id: chartOfAccountsTable.id, name: chartOfAccountsTable.name });
-    if (created.length > 0) return created[0] as { id: number; name: string };
-  } catch { /* concurrent insert race — fall through */ }
+  // onConflictDoNothing handles the expected concurrent-create race. Any other
+  // database error is a real accounting failure and must abort the caller's
+  // transaction rather than being swallowed as non-fatal.
+  const created = await executor
+    .insert(chartOfAccountsTable)
+    .values({ name, type })
+    .onConflictDoNothing()
+    .returning({ id: chartOfAccountsTable.id, name: chartOfAccountsTable.name });
+  if (created.length > 0) return created[0] as { id: number; name: string };
 
   const refetched = await executor
     .select({ id: chartOfAccountsTable.id, name: chartOfAccountsTable.name })
@@ -126,6 +128,16 @@ export async function postDoubleEntry(
   input: PostEntryInput,
   executor: DbExecutor = db,
 ): Promise<void> {
+  if (!Number.isFinite(input.amount) || input.amount < 0) {
+    throw new Error("Accounting amount must be a non-negative finite number");
+  }
+  if (!Number.isFinite(input.amountUsd) || input.amountUsd < 0 || !Number.isFinite(input.amountCdf) || input.amountCdf < 0) {
+    throw new Error("Accounting converted amounts must be non-negative finite numbers");
+  }
+  if (!Number.isFinite(input.exchangeRate) || input.exchangeRate <= 0) {
+    throw new Error("Accounting exchange rate must be greater than zero");
+  }
+
   const [debit, credit] = await Promise.all([
     resolveAccountId(input.debitName, input.debitType ?? "asset", executor),
     resolveAccountId(input.creditName, input.creditType ?? "asset", executor),
