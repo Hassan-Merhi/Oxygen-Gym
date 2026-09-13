@@ -23,6 +23,8 @@ import type {
   AccountSummary,
   ActivityLog,
   AddStockPurchaseBody,
+  ApplyCashCleanup200,
+  ApplyCashCleanupBody,
   AttendanceCheckIn,
   AttendanceDailyEntry,
   AttendanceHourlyEntry,
@@ -110,6 +112,7 @@ import type {
   PermissionsUpdate,
   Plan,
   PlanInput,
+  PreviewCashCleanup200,
   ProductHistoryEntry,
   ProductRecord,
   ProductsPage,
@@ -9259,5 +9262,153 @@ export const useBroadcastWhatsappMessage = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getBroadcastWhatsappMessageMutationOptions(options));
+    }
+
+export const getPreviewCashCleanupUrl = () => {
+
+
+
+
+  return `/api/payments/admin/cash-cleanup`
+}
+
+/**
+ * @summary Preview one-time cash cleanup
+ */
+export const previewCashCleanup = async ( options?: RequestInit): Promise<PreviewCashCleanup200> => {
+
+  return customFetch<PreviewCashCleanup200>(getPreviewCashCleanupUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getPreviewCashCleanupQueryKey = () => {
+    return [
+    `/api/payments/admin/cash-cleanup`
+    ] as const;
+    }
+
+
+export const getPreviewCashCleanupQueryOptions = <TData = Awaited<ReturnType<typeof previewCashCleanup>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof previewCashCleanup>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPreviewCashCleanupQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof previewCashCleanup>>> = ({ signal }) => previewCashCleanup({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof previewCashCleanup>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type PreviewCashCleanupQueryResult = NonNullable<Awaited<ReturnType<typeof previewCashCleanup>>>
+export type PreviewCashCleanupQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Preview one-time cash cleanup
+ */
+
+export function usePreviewCashCleanup<TData = Awaited<ReturnType<typeof previewCashCleanup>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof previewCashCleanup>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getPreviewCashCleanupQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getApplyCashCleanupUrl = () => {
+
+
+
+
+  return `/api/payments/admin/cash-cleanup`
+}
+
+/**
+ * @summary Apply one-time cash cleanup
+ */
+export const applyCashCleanup = async (applyCashCleanupBody?: ApplyCashCleanupBody, options?: RequestInit): Promise<ApplyCashCleanup200> => {
+
+  return customFetch<ApplyCashCleanup200>(getApplyCashCleanupUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      applyCashCleanupBody,)
+  }
+);}
+
+
+
+
+export const getApplyCashCleanupMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyCashCleanup>>, TError,{data?: BodyType<ApplyCashCleanupBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyCashCleanup>>, TError,{data?: BodyType<ApplyCashCleanupBody>}, TContext> => {
+
+const mutationKey = ['applyCashCleanup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyCashCleanup>>, {data?: BodyType<ApplyCashCleanupBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  applyCashCleanup(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyCashCleanupMutationResult = NonNullable<Awaited<ReturnType<typeof applyCashCleanup>>>
+    export type ApplyCashCleanupMutationBody = BodyType<ApplyCashCleanupBody> | undefined
+    export type ApplyCashCleanupMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Apply one-time cash cleanup
+ */
+export const useApplyCashCleanup = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyCashCleanup>>, TError,{data?: BodyType<ApplyCashCleanupBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyCashCleanup>>,
+        TError,
+        {data?: BodyType<ApplyCashCleanupBody>},
+        TContext
+      > => {
+      return useMutation(getApplyCashCleanupMutationOptions(options));
     }
 

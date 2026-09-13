@@ -1,4 +1,4 @@
-import { contractBodyAs, contractQueryAs } from "../http/contracts";
+import { contractBodyAs, contractParams, contractQueryAs } from "../http/contracts";
 import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
@@ -282,7 +282,7 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ─── Get by ID ───────────────────────────────────────────────────────────────
 router.get("/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.GetMemberParams).id);
   const [member] = await db.select().from(membersTable)
     .where(and(eq(membersTable.id, id), isNull(membersTable.deletedAt)));
   if (!member) { res.status(404).json({ error: "Not found" }); return; }
@@ -291,7 +291,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 
 // ─── Update ──────────────────────────────────────────────────────────────────
 router.patch("/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.UpdateMemberParams).id);
   const body = contractBodyAs<Record<string, unknown>>(req, ApiContracts.UpdateMemberBody);
 
   // cashAccountId is not a member column — extract it separately
@@ -494,7 +494,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
 // ─── Archive ─────────────────────────────────────────────────────────────────
 router.delete("/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.DeleteMemberParams).id);
   const [member] = await db.update(membersTable)
     .set({ status: "archived", deletedAt: new Date() })
     .where(eq(membersTable.id, id)).returning();
@@ -508,7 +508,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
 
 // ─── Check-in ────────────────────────────────────────────────────────────────
 router.post("/:id/checkin", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.CheckInMemberParams).id);
   const force = !!(contractBodyAs<{ force?: boolean }>(req, ApiContracts.CheckInMemberBody)).force;
 
   const [member] = await db.select().from(membersTable)
@@ -543,7 +543,7 @@ router.post("/:id/checkin", async (req: Request, res: Response) => {
 
 // ─── Renew ───────────────────────────────────────────────────────────────────
 router.post("/:id/renew", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.RenewMemberParams).id);
   const body = contractBodyAs<{ planId: number; startDate: string; expiryDate: string; amountPaid: number; discount: number; currency: string; cashAccountId?: number; notes?: string }>(req, ApiContracts.RenewMemberBody);
 
   const [existing] = await db.select().from(membersTable).where(eq(membersTable.id, id));
@@ -668,7 +668,7 @@ router.post("/:id/renew", async (req: Request, res: Response) => {
 
 // ─── Freeze ──────────────────────────────────────────────────────────────────
 router.post("/:id/freeze", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.FreezeMemberParams).id);
   const body = contractBodyAs<{ frozenAt: string; frozenUntil: string; reason?: string }>(req, ApiContracts.FreezeMemberBody);
   const frozenAt = new Date(body.frozenAt);
   const frozenUntil = new Date(body.frozenUntil);
@@ -685,7 +685,7 @@ router.post("/:id/freeze", async (req: Request, res: Response) => {
 
 // ─── Reactivate ──────────────────────────────────────────────────────────────
 router.post("/:id/reactivate", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.ReactivateMemberParams).id);
   const [existing] = await db.select().from(membersTable)
     .where(and(eq(membersTable.id, id), isNull(membersTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
@@ -707,7 +707,7 @@ router.post("/:id/reactivate", async (req: Request, res: Response) => {
 
 // ─── Set status ──────────────────────────────────────────────────────────────
 router.patch("/:id/status", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.SetMemberStatusParams).id);
   const { status } = contractBodyAs<{ status: string }>(req, ApiContracts.SetMemberStatusBody);
   if (!["active","inactive","archived"].includes(status)) {
     res.status(400).json({ error: "Invalid status" }); return;
@@ -721,7 +721,7 @@ router.patch("/:id/status", async (req: Request, res: Response) => {
 
 // ─── Payment history ─────────────────────────────────────────────────────────
 router.get("/:id/payments", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.GetMemberPaymentsParams).id);
   const payments = await db.select().from(paymentsTable)
     .where(eq(paymentsTable.memberId, id)).orderBy(desc(paymentsTable.createdAt));
   res.json(payments.map((p) => ({
@@ -733,7 +733,7 @@ router.get("/:id/payments", async (req: Request, res: Response) => {
 
 // ─── Check-in history ────────────────────────────────────────────────────────
 router.get("/:id/checkins", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.GetMemberCheckinsParams).id);
   const [member] = await db.select().from(membersTable).where(eq(membersTable.id, id));
   const checkins = await db.select().from(checkInsTable)
     .where(eq(checkInsTable.memberId, id))

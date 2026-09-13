@@ -1,4 +1,4 @@
-import { contractQueryAs } from "../http/contracts";
+import { contractBody, contractParams, contractQueryAs } from "../http/contracts";
 import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
@@ -141,7 +141,7 @@ router.post("/", async (req: Request, res: Response) => {
     name, barcode, description, category, supplier, notes,
     quantity = 0, alertQuantity = 5,
     costPrice = 0, sellingPrice = 0, currency = "USD", status = "active",
-  } = req.body;
+  } = contractBody(req, ApiContracts.CreateProductBody);
 
   if (!name) {
     res.status(400).json({ error: "Name is required" });
@@ -187,7 +187,7 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ── Get one ───────────────────────────────────────────────────────────────────
 router.get("/:id", async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id as string);
+  const id = parseInt(contractParams(req, ApiContracts.GetProductParams).id as string);
   const rate = await getExchangeRate();
   const [p] = await db.select().from(productsTable).where(eq(productsTable.id, id));
   if (!p) {
@@ -199,7 +199,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 router.patch("/:id", async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id as string);
+  const id = parseInt(contractParams(req, ApiContracts.UpdateProductParams).id as string);
   const [existing] = await db.select().from(productsTable).where(eq(productsTable.id, id));
   if (!existing) {
     res.status(404).json({ error: "Not found" });
@@ -209,7 +209,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
   const {
     name, barcode, description, category, supplier, notes,
     quantity, alertQuantity, costPrice, sellingPrice, currency, status,
-  } = req.body;
+  } = contractBody(req, ApiContracts.UpdateProductBody);
 
   if (barcode && barcode !== existing.barcode) {
     const dup = await db
@@ -261,7 +261,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
 // ── List purchases ────────────────────────────────────────────────────────────
 router.get("/:id/purchases", async (req: Request, res: Response) => {
-  const productId = parseInt(req.params.id as string);
+  const productId = parseInt(contractParams(req, ApiContracts.ListProductPurchasesParams).id as string);
   const purchases = await db
     .select()
     .from(stockPurchasesTable)
@@ -272,7 +272,7 @@ router.get("/:id/purchases", async (req: Request, res: Response) => {
 
 // ── Add stock purchase ────────────────────────────────────────────────────────
 router.post("/:id/purchases", async (req: Request, res: Response) => {
-  const productId = parseInt(req.params.id as string);
+  const productId = parseInt(contractParams(req, ApiContracts.AddStockPurchaseParams).id as string);
   const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
   if (!product) {
     res.status(404).json({ error: "Product not found" });
@@ -282,7 +282,7 @@ router.post("/:id/purchases", async (req: Request, res: Response) => {
   const {
     quantityAdded, costPerUnit, totalCost, currency = product.currency, exchangeRate,
     supplier, notes, paidFromCash = false, purchaseDate,
-  } = req.body;
+  } = contractBody(req, ApiContracts.AddStockPurchaseBody);
 
   const qty = Number(quantityAdded);
   const unitCost = Number(costPerUnit ?? 0);
@@ -409,7 +409,7 @@ router.post("/:id/purchases", async (req: Request, res: Response) => {
 
 // ── Product history ───────────────────────────────────────────────────────────
 router.get("/:id/history", async (req: Request, res: Response) => {
-  const productId = parseInt(req.params.id as string);
+  const productId = parseInt(contractParams(req, ApiContracts.GetProductHistoryParams).id as string);
   const entries = await db
     .select()
     .from(activityLogsTable)

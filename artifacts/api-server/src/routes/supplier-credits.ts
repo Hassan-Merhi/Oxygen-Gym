@@ -1,4 +1,4 @@
-import { contractBodyAs } from "../http/contracts";
+import { contractBodyAs, contractParams } from "../http/contracts";
 import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
@@ -105,7 +105,7 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ── Update credit ─────────────────────────────────────────────────────────────
 router.patch("/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.UpdateSupplierCreditParams).id);
   const body = contractBodyAs<Record<string, unknown>>(req, ApiContracts.UpdateSupplierCreditBody);
   const allowed = ["supplier", "description", "productId", "productName", "totalAmount", "currency", "purchaseDate", "notes", "status"];
   const update: Record<string, unknown> = {};
@@ -124,7 +124,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
 // ── Delete credit ─────────────────────────────────────────────────────────────
 router.delete("/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.DeleteSupplierCreditParams).id);
   const [existing] = await db.select().from(supplierCreditsTable).where(eq(supplierCreditsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   await db.delete(supplierPaymentsTable).where(eq(supplierPaymentsTable.creditId, id));
@@ -134,7 +134,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
 
 // ── List payments for a credit ────────────────────────────────────────────────
 router.get("/:id/payments", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.ListSupplierPaymentsParams).id);
   const payments = await db
     .select()
     .from(supplierPaymentsTable)
@@ -145,7 +145,7 @@ router.get("/:id/payments", async (req: Request, res: Response) => {
 
 // ── Record an installment payment ─────────────────────────────────────────────
 router.post("/:id/payments", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.CreateSupplierPaymentParams).id);
   const body = contractBodyAs<{ amount: number; currency?: string; paymentDate?: string; notes?: string }>(req, ApiContracts.CreateSupplierPaymentBody);
 
   if (!body.amount || body.amount <= 0) { res.status(400).json({ error: "amount must be positive" }); return; }
@@ -180,8 +180,8 @@ router.post("/:id/payments", async (req: Request, res: Response) => {
 
 // ── Delete a payment (undo) ───────────────────────────────────────────────────
 router.delete("/:id/payments/:paymentId", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  const paymentId = Number(req.params.paymentId);
+  const id = Number(contractParams(req, ApiContracts.DeleteSupplierPaymentParams).id);
+  const paymentId = Number(contractParams(req, ApiContracts.DeleteSupplierPaymentParams).paymentId);
 
   const [payment] = await db.select().from(supplierPaymentsTable)
     .where(and(eq(supplierPaymentsTable.id, paymentId), eq(supplierPaymentsTable.creditId, id)));

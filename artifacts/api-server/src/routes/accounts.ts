@@ -1,4 +1,4 @@
-import { contractBodyAs, contractQueryAs } from "../http/contracts";
+import { contractBodyAs, contractParams, contractQueryAs } from "../http/contracts";
 import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
@@ -348,7 +348,7 @@ router.post("/chart", async (req: Request, res: Response) => {
 
 // PUT /accounts/chart/:id
 router.put("/chart/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.UpdateChartAccountParams).id);
   const { name, type, description, isActive } = contractBodyAs<{
     name?: string;
     type?: string;
@@ -371,7 +371,7 @@ router.put("/chart/:id", async (req: Request, res: Response) => {
 
 // DELETE /accounts/chart/:id — soft-deactivate; reject if it has accounting entries
 router.delete("/chart/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.DeactivateChartAccountParams).id);
 
   // Refuse hard-delete if any accounting entries are linked to this account
   const [hasEntries] = await db
@@ -399,7 +399,7 @@ router.delete("/chart/:id", async (req: Request, res: Response) => {
 
 // GET /accounts/chart/:id/statement?dateFrom=&dateTo=
 router.get("/chart/:id/statement", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.GetChartAccountStatementParams).id);
   const { dateFrom, dateTo } = contractQueryAs<Record<string, string>>(req, ApiContracts.GetChartAccountStatementQueryParams);
 
   const account = await db.query.chartOfAccountsTable.findFirst({

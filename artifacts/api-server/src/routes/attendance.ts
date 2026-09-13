@@ -1,4 +1,4 @@
-import { contractQueryAs } from "../http/contracts";
+import { contractParams, contractQueryAs } from "../http/contracts";
 import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
@@ -260,7 +260,7 @@ router.get("/plans", async (_req: Request, res: Response) => {
 
 // ── Member attendance stats ───────────────────────────────────────────────────
 router.get("/member/:id", async (req: Request, res: Response) => {
-  const memberId = parseInt(req.params.id as string);
+  const memberId = parseInt(contractParams(req, ApiContracts.GetMemberAttendanceStatsParams).id as string);
   if (isNaN(memberId)) { res.status(400).json({ error: "Invalid member id" }); return; }
 
   const now = new Date();

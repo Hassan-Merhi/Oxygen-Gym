@@ -1,4 +1,4 @@
-import { contractBodyAs } from "../http/contracts";
+import { contractBodyAs, contractParams } from "../http/contracts";
 import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
@@ -56,7 +56,7 @@ router.post("/chats", async (req: Request, res: Response) => {
 // PATCH /api/whatsapp/chats/:id
 router.patch("/chats/:id", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
-  const id = parseInt(req.params.id as string, 10);
+  const id = parseInt(contractParams(req, ApiContracts.UpdateWhatsappChatParams).id as string, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const { label, chatId, enabled } = contractBodyAs<Record<string, unknown>>(req, ApiContracts.UpdateWhatsappChatBody);
@@ -85,7 +85,7 @@ router.patch("/chats/:id", async (req: Request, res: Response) => {
 // DELETE /api/whatsapp/chats/:id
 router.delete("/chats/:id", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
-  const id = parseInt(req.params.id as string, 10);
+  const id = parseInt(contractParams(req, ApiContracts.DeleteWhatsappChatParams).id as string, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     await db.delete(whatsappChatsTable).where(eq(whatsappChatsTable.id, id));
@@ -205,7 +205,7 @@ router.post("/test", async (req: Request, res: Response) => {
 // POST /api/whatsapp/send-member/:id — send a per-member notification
 router.post("/send-member/:id", async (req: Request, res: Response) => {
   if (!requireAdmin(req, res)) return;
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.SendMemberWhatsappParams).id);
   try {
     const settings = await db.query.settingsTable.findFirst();
     if (!settings?.greenApiInstanceId || !settings?.greenApiToken) {

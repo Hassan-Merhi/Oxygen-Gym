@@ -1,4 +1,4 @@
-import { contractBodyAs, contractQueryAs } from "../http/contracts";
+import { contractBody, contractBodyAs, contractParams, contractQueryAs } from "../http/contracts";
 import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
@@ -303,7 +303,7 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ─── Update ───────────────────────────────────────────────────────────────────
 router.patch("/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.UpdatePaymentParams).id);
   const body = contractBodyAs<Record<string, unknown>>(req, ApiContracts.UpdatePaymentBody);
 
   const [existing] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
@@ -409,7 +409,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
 // ─── Delete / cancel ─────────────────────────────────────────────────────────
 router.delete("/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.DeletePaymentParams).id);
   const [existing] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   const [payment] = await db.update(paymentsTable)
@@ -451,14 +451,16 @@ void sql;
 // ─── One-time Cash Cleanup Migration (admin only) ─────────────────────────────
 // GET  /api/payments/admin/cash-cleanup         → dry run (preview counts)
 // POST /api/payments/admin/cash-cleanup         → apply (dry_run=false in body)
-router.all("/admin/cash-cleanup", async (req: Request, res: Response) => {
+async function cashCleanupHandler(req: Request, res: Response) {
   const caller = req.__gymproUser;
   if (caller?.role !== "admin") {
     res.status(403).json({ error: "Admin only" });
     return;
   }
 
-  const dryRun = req.method === "GET" || (req.body?.dry_run !== false);
+  const dryRun = req.method === "GET"
+    ? true
+    : contractBody(req, ApiContracts.ApplyCashCleanupBody).dry_run !== false;
 
   // ── 1. Member duplicate vouchers ─────────────────────────────────────────
   // When a member is edited with a cash account, a voucher is created on top
@@ -526,11 +528,14 @@ router.all("/admin/cash-cleanup", async (req: Request, res: Response) => {
     member_vouchers_preview: memberVouchers.slice(0, 20),
     sale_payments_preview: salePayments.slice(0, 20),
   });
-});
+}
+
+router.get("/admin/cash-cleanup", cashCleanupHandler);
+router.post("/admin/cash-cleanup", cashCleanupHandler);
 
 // ── Send WhatsApp receipt for a payment ──────────────────────────────────────
 router.post("/:id/send-receipt", async (req: Request, res: Response) => {
-  const paymentId = parseInt(req.params.id as string);
+  const paymentId = parseInt(contractParams(req, ApiContracts.SendPaymentReceiptParams).id as string);
   if (isNaN(paymentId)) { res.status(400).json({ error: "Invalid ID" }); return; }
 
   const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, paymentId)).limit(1);

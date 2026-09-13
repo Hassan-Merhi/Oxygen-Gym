@@ -3062,3 +3062,21 @@ export const BroadcastWhatsappMessageResponse = zod.object({
 })
 
 
+/**
+ * @summary Preview one-time cash cleanup
+ */
+export const PreviewCashCleanupResponse = zod.record(zod.string(), zod.unknown())
+
+
+/**
+ * @summary Apply one-time cash cleanup
+ */
+export const applyCashCleanupBodyDryRunDefault = false;
+
+export const ApplyCashCleanupBody = zod.object({
+  "dry_run": zod.boolean().default(applyCashCleanupBodyDryRunDefault)
+})
+
+export const ApplyCashCleanupResponse = zod.record(zod.string(), zod.unknown())
+
+

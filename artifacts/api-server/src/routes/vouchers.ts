@@ -1,4 +1,4 @@
-import { contractBodyAs, contractQueryAs } from "../http/contracts";
+import { contractBodyAs, contractParams, contractQueryAs } from "../http/contracts";
 import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
@@ -167,7 +167,7 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ─── Get single ───────────────────────────────────────────────────────────────
 router.get("/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.GetVoucherParams).id);
   const [voucher] = await db.select().from(vouchersTable)
     .where(and(eq(vouchersTable.id, id), isNull(vouchersTable.deletedAt)));
   if (!voucher) { res.status(404).json({ error: "Not found" }); return; }
@@ -176,7 +176,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 
 // ─── Update ───────────────────────────────────────────────────────────────────
 router.patch("/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.UpdateVoucherParams).id);
   const body = contractBodyAs<Record<string, unknown>>(req, ApiContracts.UpdateVoucherBody);
 
   const [existing] = await db.select().from(vouchersTable).where(and(eq(vouchersTable.id, id), isNull(vouchersTable.deletedAt)));
@@ -282,7 +282,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
 // ─── Delete / cancel ─────────────────────────────────────────────────────────
 router.delete("/:id", async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = Number(contractParams(req, ApiContracts.DeleteVoucherParams).id);
   const [existing] = await db.select().from(vouchersTable).where(and(eq(vouchersTable.id, id), isNull(vouchersTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   const [voucher] = await db.update(vouchersTable)

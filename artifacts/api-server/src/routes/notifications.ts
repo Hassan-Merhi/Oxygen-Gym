@@ -1,5 +1,5 @@
 import { authenticatedUser } from "../middlewares/auth";
-import { contractQueryAs } from "../http/contracts";
+import { contractParams, contractQueryAs } from "../http/contracts";
 import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
@@ -190,7 +190,7 @@ router.get("/count", async (req: Request, res: Response) => {
 // ── Mark one as read ──────────────────────────────────────────────────────────
 router.patch("/:key/read", async (req: Request, res: Response) => {
   const user = authenticatedUser(req);
-  const key = req.params.key as string;
+  const key = contractParams(req, ApiContracts.MarkNotificationReadParams).key as string;
 
   await db.insert(notificationReadsTable).values({
     userId: user.id,

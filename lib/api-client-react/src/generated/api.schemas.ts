@@ -1761,3 +1761,11 @@ export type BroadcastWhatsappMessage200 = {
   ok: boolean;
 };
 
+export type PreviewCashCleanup200 = { [key: string]: unknown };
+
+export type ApplyCashCleanupBody = {
+  dry_run?: boolean;
+};
+
+export type ApplyCashCleanup200 = { [key: string]: unknown };
+

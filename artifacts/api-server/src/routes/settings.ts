@@ -1,3 +1,5 @@
+import { contractBody } from "../http/contracts";
+import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db, settingsTable } from "@workspace/db";
@@ -40,7 +42,7 @@ router.get("/", async (req, res) => {
 
 // PATCH /api/settings — credential fields (greenApiInstanceId, greenApiToken) are admin-only
 router.patch("/", async (req, res) => {
-  const parsed = UpdateSettingsBody.safeParse(req.body);
+  const parsed = UpdateSettingsBody.safeParse(contractBody(req, ApiContracts.UpdateSettingsBody));
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input", details: parsed.error.issues });
     return;

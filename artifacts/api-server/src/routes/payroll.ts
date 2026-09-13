@@ -1,4 +1,4 @@
-import { contractBodyAs, contractQueryAs } from "../http/contracts";
+import { contractBodyAs, contractParams, contractQueryAs } from "../http/contracts";
 import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
@@ -62,7 +62,7 @@ router.get("/", async (req: Request, res: Response) => {
 
 // ── Get single ────────────────────────────────────────────────────────────────
 router.get("/:id", async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id as string);
+  const id = parseInt(contractParams(req, ApiContracts.GetPayrollParams).id as string);
   const [record] = await db.select().from(payrollTable).where(eq(payrollTable.id, id));
   if (!record) { res.status(404).json({ error: "Payroll record not found" }); return; }
   res.json(record);
@@ -150,7 +150,7 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ── Mark as paid ──────────────────────────────────────────────────────────────
 router.patch("/:id/pay", async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id as string);
+  const id = parseInt(contractParams(req, ApiContracts.MarkPayrollPaidParams).id as string);
   const [record] = await db.select().from(payrollTable).where(eq(payrollTable.id, id));
   if (!record) { res.status(404).json({ error: "Payroll record not found" }); return; }
   if (record.status === "paid") { res.status(400).json({ error: "Already paid" }); return; }
@@ -241,7 +241,7 @@ router.patch("/:id/pay", async (req: Request, res: Response) => {
 // ── Cancel payroll ────────────────────────────────────────────────────────────
 router.patch("/:id/cancel", async (req: Request, res: Response) => {
   const { reason } = contractBodyAs<{ reason: string }>(req, ApiContracts.CancelPayrollBody);
-  const id = parseInt(req.params.id as string);
+  const id = parseInt(contractParams(req, ApiContracts.CancelPayrollParams).id as string);
 
   const [record] = await db.select().from(payrollTable).where(eq(payrollTable.id, id));
   if (!record) { res.status(404).json({ error: "Payroll record not found" }); return; }

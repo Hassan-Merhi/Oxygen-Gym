@@ -2555,6 +2555,42 @@ paths:
                 properties:
                   ok: { type: boolean }
 
+  /payments/admin/cash-cleanup:
+    get:
+      tags: [payments]
+      summary: Preview one-time cash cleanup
+      operationId: PreviewCashCleanup
+      responses:
+        '200':
+          description: Cleanup preview
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    post:
+      tags: [payments]
+      summary: Apply one-time cash cleanup
+      operationId: ApplyCashCleanup
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dry_run:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: Cleanup result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
 components:
   schemas:
     MoneyPair:

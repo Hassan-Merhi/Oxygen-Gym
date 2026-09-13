@@ -1,4 +1,4 @@
-import { contractBodyAs, contractQueryAs } from "../http/contracts";
+import { contractBody, contractBodyAs, contractParams, contractQueryAs } from "../http/contracts";
 import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { PatchSaleBody as PatchSaleBodySchema } from "@workspace/api-zod";
@@ -86,7 +86,7 @@ router.get("/", async (req: Request, res: Response) => {
 
 // ── Get single sale ────────────────────────────────────────────────────────────
 router.get("/:id", async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id as string);
+  const id = parseInt(contractParams(req, ApiContracts.GetSaleParams).id as string);
   const [sale] = await db.select().from(salesTable).where(eq(salesTable.id, id));
   if (!sale) {
     res.status(404).json({ error: "Sale not found" });
@@ -283,9 +283,9 @@ router.patch("/:id", async (req: Request, res: Response) => {
     return;
   }
 
-  const id = parseInt(req.params.id as string);
+  const id = parseInt(contractParams(req, ApiContracts.PatchSaleParams).id as string);
 
-  const parsed = PatchSaleBodySchema.safeParse(req.body);
+  const parsed = PatchSaleBodySchema.safeParse(contractBody(req, ApiContracts.PatchSaleBody));
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid patch body", details: parsed.error.issues });
     return;
@@ -368,7 +368,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 
 // ── Void sale ──────────────────────────────────────────────────────────────────
 router.patch("/:id/void", async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id as string);
+  const id = parseInt(contractParams(req, ApiContracts.VoidSaleParams).id as string);
   const { reason } = contractBodyAs<{ reason: string }>(req, ApiContracts.VoidSaleBody);
 
   const [sale] = await db.select().from(salesTable).where(eq(salesTable.id, id));
