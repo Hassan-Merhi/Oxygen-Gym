@@ -1,10 +1,10 @@
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
-import { cashLedgerTable } from "@workspace/db/schema";
+import { cashLedgerTable, settingsTable } from "@workspace/db/schema";
 import { and, gte, lte, eq, count, desc } from "drizzle-orm";
 import { getCurrentBalance, appendLedgerEntry } from "../lib/ledger";
-import { settingsTable } from "@workspace/db/schema";
+import { postDoubleEntry } from "../lib/accounting";
 
 const router = Router();
 router.use(requireAuth());
@@ -15,8 +15,8 @@ router.get("/balance", async (_req: Request, res: Response) => {
 });
 
 // POST /api/ledger/opening-balance
-// Sets a new starting balance by inserting an adjustment entry.
-// Nothing is deleted — existing history is preserved.
+// Sets the canonical Cash balance through a balanced accounting adjustment.
+// The legacy cash ledger entry is retained as an operational audit trail.
 router.post("/opening-balance", async (req: Request, res: Response) => {
   const { targetAmountUsd, date, notes } = req.body as {
     targetAmountUsd: number;
@@ -29,7 +29,7 @@ router.post("/opening-balance", async (req: Request, res: Response) => {
     return;
   }
 
-  // Get current running balance and exchange rate
+  // Current balance now comes from the canonical double-entry Cash account.
   const [currentBalance, [settingsRow]] = await Promise.all([
     getCurrentBalance(),
     db.select({ usdToCdfRate: settingsTable.usdToCdfRate }).from(settingsTable).limit(1),
@@ -39,22 +39,48 @@ router.post("/opening-balance", async (req: Request, res: Response) => {
   const delta = targetAmountUsd - currentBalance.balanceUsd;
 
   if (Math.abs(delta) < 0.001) {
-    // Balance already matches — no entry needed
     res.json({ ok: true, skipped: true, balance: currentBalance });
     return;
   }
 
   const entryDate = date ? new Date(date) : new Date();
+  const amount = Math.abs(delta);
+  const description = notes ?? "Opening balance adjustment";
+  const createdByRaw = (req as unknown as { auth?: { userId?: string | number } }).auth?.userId;
+  const createdBy = createdByRaw === undefined ? undefined : String(createdByRaw);
+  const sourceNumber = `OPENING-${Date.now()}`;
 
+  // Keep the operational ledger trail for audit/history. It is no longer the
+  // source used to calculate the displayed current cash balance.
   await appendLedgerEntry({
     entryDate,
     sourceType: "opening_balance",
+    sourceNumber,
     direction: delta > 0 ? "in" : "out",
-    amount: Math.abs(delta),
+    amount,
     currency: "USD",
     exchangeRate,
-    description: notes ?? "Opening balance adjustment",
-    createdBy: (req as any).auth?.userId,
+    description,
+    createdBy,
+  });
+
+  // Post the same adjustment to double-entry accounting so Cash, Accounts and
+  // the Cash Book all use one financial source of truth going forward.
+  await postDoubleEntry({
+    entryDate,
+    sourceType: "opening_balance",
+    sourceNumber,
+    debitName: delta > 0 ? "Cash" : "Opening Balance Equity",
+    debitType: delta > 0 ? "asset" : "equity",
+    creditName: delta > 0 ? "Opening Balance Equity" : "Cash",
+    creditType: delta > 0 ? "equity" : "asset",
+    amount,
+    amountUsd: amount,
+    amountCdf: amount * exchangeRate,
+    currency: "USD",
+    exchangeRate,
+    description,
+    createdBy,
   });
 
   const newBalance = await getCurrentBalance();
