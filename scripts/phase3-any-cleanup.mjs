@@ -106,12 +106,13 @@ if (writeIfChanged(paymentsPath, (source) => source.replace("          )) as any
 // Generated path contracts coerce integer parameters to numbers. Legacy route
 // code still wrapped several of those values in parseInt(... as string), which
 // is both redundant and rejected by TS 5.9. Normalize only this generated-
-// contract pattern; unrelated string assertions are left untouched.
+// contract pattern; unrelated string assertions are left untouched. The regex
+// also accepts the legacy explicit radix form parseInt(value, 10).
 for (const entry of fs.readdirSync(routes, { withFileTypes: true })) {
   if (!entry.isFile() || !entry.name.endsWith(".ts") || entry.name === "index.ts") continue;
   const file = path.join(routes, entry.name);
   if (writeIfChanged(file, (source) => source.replace(
-    /parseInt\((contractParams\(req,\s*ApiContracts\.[A-Za-z0-9_]+Params\)\.[A-Za-z0-9_]+)\s+as\s+string\)/g,
+    /parseInt\((contractParams\(req,\s*ApiContracts\.[A-Za-z0-9_]+Params\)\.[A-Za-z0-9_]+)\s+as\s+string(?:,\s*10)?\)/g,
     "Number($1)",
   ))) {
     markChanged(entry.name);
