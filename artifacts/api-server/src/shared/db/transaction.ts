@@ -1,10 +1,29 @@
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
+import { getMutationRequestContext } from "../http/idempotency-context";
 
 export type DatabaseTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-export function withTransaction<T>(work: (tx: DatabaseTransaction) => Promise<T>): Promise<T> {
-  return db.transaction(work);
+let ensureIdempotencyTablePromise: Promise<void> | undefined;
+
+function ensureIdempotencyTable(): Promise<void> {
+  if (!ensureIdempotencyTablePromise) {
+    ensureIdempotencyTablePromise = db.execute(sql`
+      CREATE TABLE IF NOT EXISTS financial_idempotency (
+        scope TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'processing',
+        response_json JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        completed_at TIMESTAMPTZ,
+        PRIMARY KEY (scope, idempotency_key)
+      )
+    `).then(() => undefined).catch((error) => {
+      ensureIdempotencyTablePromise = undefined;
+      throw error;
+    });
+  }
+  return ensureIdempotencyTablePromise;
 }
 
 /**
@@ -27,11 +46,66 @@ export async function lockFinancialEvents(tx: DatabaseTransaction, keys: string[
   for (const key of uniqueKeys) await lockFinancialEvent(tx, key);
 }
 
+/**
+ * Execute all writes as one unit. Financial HTTP mutations also take one shared
+ * transaction-scoped lock. This deliberately favors correctness over parallel
+ * financial writes: sales, stock, supplier balances, payroll, payments, and
+ * reversals cannot race each other while they read/modify shared money or stock.
+ *
+ * When the caller supplies Idempotency-Key, the key and serialized result are
+ * stored in the SAME transaction as the business event. Concurrent retries wait
+ * on the primary key; failed transactions roll back both the event and the claim.
+ */
+export async function withTransaction<T>(work: (tx: DatabaseTransaction) => Promise<T>): Promise<T> {
+  const context = getMutationRequestContext();
+  if (context?.idempotencyKey) await ensureIdempotencyTable();
+
+  return db.transaction(async (tx) => {
+    if (context?.financial) {
+      await lockFinancialEvent(tx, "financial-write");
+    }
+
+    if (!context?.idempotencyKey) return work(tx);
+
+    const claimed = await tx.execute(sql`
+      INSERT INTO financial_idempotency (scope, idempotency_key, status)
+      VALUES (${context.scope}, ${context.idempotencyKey}, 'processing')
+      ON CONFLICT (scope, idempotency_key) DO NOTHING
+      RETURNING idempotency_key
+    `);
+
+    if (claimed.rows.length === 0) {
+      const prior = await tx.execute(sql`
+        SELECT status, response_json
+        FROM financial_idempotency
+        WHERE scope = ${context.scope}
+          AND idempotency_key = ${context.idempotencyKey}
+        FOR UPDATE
+      `);
+      const row = prior.rows[0] as { status?: string; response_json?: unknown } | undefined;
+      if (row?.status === "completed") return row.response_json as T;
+      throw new Error(`Idempotency key is already in progress for ${context.scope}`);
+    }
+
+    const result = await work(tx);
+    const serialized = JSON.stringify(result ?? null);
+    await tx.execute(sql`
+      UPDATE financial_idempotency
+      SET status = 'completed',
+          response_json = ${serialized}::jsonb,
+          completed_at = NOW()
+      WHERE scope = ${context.scope}
+        AND idempotency_key = ${context.idempotencyKey}
+    `);
+    return result;
+  });
+}
+
 export function withLockedTransaction<T>(
   key: string,
   work: (tx: DatabaseTransaction) => Promise<T>,
 ): Promise<T> {
-  return db.transaction(async (tx) => {
+  return withTransaction(async (tx) => {
     await lockFinancialEvent(tx, key);
     return work(tx);
   });
