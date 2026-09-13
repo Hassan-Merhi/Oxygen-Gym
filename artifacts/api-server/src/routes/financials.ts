@@ -23,7 +23,7 @@ type Kind = "revenue" | "expense";
 
 type FinancialTransaction = {
   id: string;
-  sourceType: "payment" | "voucher" | "sale_cogs";
+  sourceType: "payment" | "voucher" | "sale_revenue" | "sale_cogs";
   sourceId: number;
   reference: string;
   date: string;
@@ -164,6 +164,8 @@ router.get("/", async (req: Request, res: Response) => {
       paymentDate: paymentsTable.paymentDate,
       notes: paymentsTable.notes,
       memberName: paymentsTable.memberName,
+      linkedEntity: paymentsTable.linkedEntity,
+      linkedEntityId: paymentsTable.linkedEntityId,
       linkedEntityName: paymentsTable.linkedEntityName,
       planName: paymentsTable.planName,
     })
@@ -200,10 +202,13 @@ router.get("/", async (req: Request, res: Response) => {
       id: salesTable.id,
       saleNumber: salesTable.saleNumber,
       saleDate: salesTable.saleDate,
+      totalAmount: salesTable.totalAmount,
+      totalAmountUsd: salesTable.totalAmountUsd,
       totalCost: salesTable.totalCost,
       totalCostUsd: salesTable.totalCostUsd,
       currency: salesTable.currency,
       exchangeRate: salesTable.exchangeRate,
+      notes: salesTable.notes,
       items: salesTable.items,
     })
       .from(salesTable)
@@ -217,6 +222,15 @@ router.get("/", async (req: Request, res: Response) => {
   const transactions: FinancialTransaction[] = [];
 
   for (const payment of payments) {
+    // POS creates a linked payment for cash-book purposes. Product revenue is
+    // read from the sale itself below so edits to sale date/value stay aligned
+    // with COGS and the same sale is never counted twice.
+    const isLinkedPosSale = payment.direction === "in"
+      && payment.category === "product_sale"
+      && payment.linkedEntity === "sale"
+      && payment.linkedEntityId !== null;
+    if (isLinkedPosSale) continue;
+
     const category = categoryForPayment(payment.category, payment.direction);
     if (!category) continue;
     const kind: Kind = payment.direction === "in" ? "revenue" : "expense";
@@ -254,14 +268,29 @@ router.get("/", async (req: Request, res: Response) => {
     }, rate);
   }
 
-  // Product purchases are inventory assets. Recognize their cost only when sold.
-  // This prevents stock purchases from crushing profit in the purchase month and
-  // matches the POS sale's stored cost-at-sale value.
   for (const sale of sales) {
-    const costUsd = amountUsd(sale.totalCostUsd, sale.totalCost, sale.currency, sale.exchangeRate);
     const itemSummary = (sale.items ?? [])
       .map((item) => `${item.quantity > 1 ? `${item.quantity}× ` : ""}${item.productName}`)
       .join(", ");
+    const saleDescription = itemSummary || sale.notes || "Product sale";
+
+    // Gross sale value is revenue. Use salesTable as the authoritative source
+    // so sale edits and the P&L period remain synchronized.
+    addTransaction(transactions, {
+      id: `sale-revenue-${sale.id}`,
+      sourceType: "sale_revenue",
+      sourceId: sale.id,
+      reference: sale.saleNumber ?? `SALE-${sale.id}`,
+      date: sale.saleDate,
+      kind: "revenue",
+      category: "Product Sales",
+      description: saleDescription,
+      party: "POS",
+      amountUsd: amountUsd(sale.totalAmountUsd, sale.totalAmount, sale.currency, sale.exchangeRate),
+    }, rate);
+
+    // Product purchases are inventory assets. Recognize cost only when sold,
+    // using the cost captured by the POS at the time of sale.
     addTransaction(transactions, {
       id: `sale-cogs-${sale.id}`,
       sourceType: "sale_cogs",
@@ -270,9 +299,9 @@ router.get("/", async (req: Request, res: Response) => {
       date: sale.saleDate,
       kind: "expense",
       category: "Cost of Goods Sold",
-      description: itemSummary || "Cost of goods sold",
+      description: saleDescription,
       party: "POS",
-      amountUsd: costUsd,
+      amountUsd: amountUsd(sale.totalCostUsd, sale.totalCost, sale.currency, sale.exchangeRate),
     }, rate);
   }
 
