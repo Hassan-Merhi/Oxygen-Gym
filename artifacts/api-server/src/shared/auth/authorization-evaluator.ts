@@ -36,19 +36,23 @@ function hasOwn(body: unknown, key: string): boolean {
 }
 
 /**
- * The Members page needs the user-facing chart definitions to resolve the Cash
- * account used by member payments. The chart endpoint does not return balances
- * or accounting reports, so users who can access Members may read this one
- * support endpoint without receiving the broader viewAccounting permission.
+ * Members is an operational page used by front-desk staff. A user who has the
+ * Members page permission must be able to complete the workflows exposed by
+ * that page without also receiving broad accounting access.
  *
- * Keep this deliberately narrow: only GET /accounts/chart receives the Members
- * fallback. Every other accounting endpoint remains protected by its canonical
- * accounting permissions.
+ * Keep the exception deliberately narrow:
+ * - GET /accounts/chart is only the lightweight Cash-account lookup used by the form.
+ * - POST /members is the create-member action exposed on the Members page.
+ *
+ * All other accounting and member-management endpoints keep their canonical
+ * authorization rules.
  */
-function hasMembersChartReadFallback(policy: EndpointPolicy, user: AuthorizationUser): boolean {
-  return policy.method === "GET"
-    && policy.path === "/accounts/chart"
-    && user.permissions.members === true;
+function hasMembersOperationalFallback(policy: EndpointPolicy, user: AuthorizationUser): boolean {
+  if (user.permissions.members !== true) return false;
+
+  const chartRead = policy.method === "GET" && policy.path === "/accounts/chart";
+  const memberCreate = policy.method === "POST" && policy.path === "/members";
+  return chartRead || memberCreate;
 }
 
 export function evaluateEndpointAccess(
@@ -88,8 +92,8 @@ export function evaluateEndpointAccess(
       : { allowed: false, status: 403, reason: "May only access own user record", policy };
   }
 
-  if (hasMembersChartReadFallback(policy, user)) {
-    return { allowed: true, status: 200, reason: "Members page support read", policy };
+  if (hasMembersOperationalFallback(policy, user)) {
+    return { allowed: true, status: 200, reason: "Members operational workflow", policy };
   }
 
   const allOf = policy.allOf ?? [];
