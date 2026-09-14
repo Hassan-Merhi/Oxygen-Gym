@@ -50,6 +50,20 @@ function nullablePositiveInt(value: unknown, field: string): number | null | und
   return optionalPositiveInt(value, field);
 }
 
+/**
+ * A one-day membership can legitimately start and expire on the same calendar
+ * date. Internally the command service compares timestamps, so represent a
+ * same-day expiry as the end of that date while keeping the user-facing date
+ * unchanged. This also repairs legacy one-day memberships when staff edit them.
+ */
+function normalizeSameDayExpiry(
+  startDate: Date | null | undefined,
+  expiryDate: Date | null | undefined,
+): Date | null | undefined {
+  if (!startDate || !expiryDate || expiryDate.getTime() !== startDate.getTime()) return expiryDate;
+  return new Date(expiryDate.getTime() + (24 * 60 * 60 * 1000) - 1);
+}
+
 router.get("/", async (req, res) => {
   const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListMembersQueryParams);
   const sortBy = query.sortBy === "joinDate" || query.sortBy === "expiryDate" ? query.sortBy : "name";
@@ -73,12 +87,14 @@ router.get("/", async (req, res) => {
 
 router.post("/", async (req, res) => {
   const body = asRecord(contractBody(req, ApiContracts.CreateMemberBody));
+  const startDate = optionalDate(body.startDate, "startDate");
+  const expiryDate = optionalDate(body.expiryDate, "expiryDate");
   const member = await createMember({
     name: requiredString(body.name, "name"),
     phone: optionalString(body.phone),
     planId: optionalPositiveInt(body.planId, "planId"),
-    startDate: optionalDate(body.startDate, "startDate"),
-    expiryDate: optionalDate(body.expiryDate, "expiryDate"),
+    startDate,
+    expiryDate: normalizeSameDayExpiry(startDate, expiryDate) ?? undefined,
     status: optionalString(body.status),
     amountPaid: body.amountPaid === undefined ? undefined : nonNegativeNumber(body.amountPaid, "amountPaid"),
     discount: body.discount === undefined ? undefined : nonNegativeNumber(body.discount, "discount"),
@@ -107,12 +123,14 @@ router.get("/:id", async (req, res) => {
 router.patch("/:id", async (req, res) => {
   const id = parseId(contractParams(req, ApiContracts.UpdateMemberParams).id, "member id");
   const body = asRecord(contractBody(req, ApiContracts.UpdateMemberBody));
+  const startDate = nullableDate(body.startDate, "startDate");
+  const expiryDate = nullableDate(body.expiryDate, "expiryDate");
   const input: UpdateMemberInput = {
     name: body.name === undefined ? undefined : requiredString(body.name, "name"),
     phone: nullableString(body.phone),
     planId: nullablePositiveInt(body.planId, "planId"),
-    startDate: nullableDate(body.startDate, "startDate"),
-    expiryDate: nullableDate(body.expiryDate, "expiryDate"),
+    startDate,
+    expiryDate: normalizeSameDayExpiry(startDate, expiryDate),
     status: optionalString(body.status),
     amountPaid: body.amountPaid === undefined ? undefined : nonNegativeNumber(body.amountPaid, "amountPaid"),
     discount: body.discount === undefined ? undefined : nonNegativeNumber(body.discount, "discount"),
@@ -156,7 +174,7 @@ router.post("/:id/checkin", async (req, res) => {
     checkIn: {
       id: result.checkIn.id,
       memberId: result.checkIn.memberId,
-      memberName: result.checkIn.memberName,
+      memberName: result.memberName,
       memberNumber: result.member.memberNumber,
       checkedInAt: result.checkIn.checkedInAt,
       note: null,
@@ -170,11 +188,13 @@ router.post("/:id/renew", async (req, res) => {
   const startDate = optionalDate(body.startDate, "startDate");
   const expiryDate = optionalDate(body.expiryDate, "expiryDate");
   if (!startDate || !expiryDate) throw badRequest("startDate and expiryDate are required");
+  const normalizedExpiryDate = normalizeSameDayExpiry(startDate, expiryDate);
+  if (!normalizedExpiryDate) throw badRequest("expiryDate is required");
 
   const member = await renewMember(id, {
     planId: parseId(body.planId as string | number | undefined, "planId"),
     startDate,
-    expiryDate,
+    expiryDate: normalizedExpiryDate,
     amountPaid: nonNegativeNumber(body.amountPaid, "amountPaid"),
     discount: nonNegativeNumber(body.discount, "discount"),
     currency: requiredString(body.currency, "currency"),
