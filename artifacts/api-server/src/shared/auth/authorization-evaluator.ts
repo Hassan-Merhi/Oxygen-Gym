@@ -37,12 +37,13 @@ function hasOwn(body: unknown, key: string): boolean {
 
 /**
  * Members is an operational page used by front-desk staff. A user who has the
- * Members page permission must be able to complete the workflows exposed by
- * that page without also receiving broad accounting access.
+ * Members page permission must be able to complete the save workflows exposed
+ * by that page without also receiving broad accounting access.
  *
  * Keep the exception deliberately narrow:
  * - GET /accounts/chart is only the lightweight Cash-account lookup used by the form.
- * - POST /members is the create-member action exposed on the Members page.
+ * - POST /members creates a member from the Members page.
+ * - PATCH /members/:id saves edits made from the same member form.
  *
  * All other accounting and member-management endpoints keep their canonical
  * authorization rules.
@@ -52,7 +53,8 @@ function hasMembersOperationalFallback(policy: EndpointPolicy, user: Authorizati
 
   const chartRead = policy.method === "GET" && policy.path === "/accounts/chart";
   const memberCreate = policy.method === "POST" && policy.path === "/members";
-  return chartRead || memberCreate;
+  const memberUpdate = policy.method === "PATCH" && policy.path === "/members/:id";
+  return chartRead || memberCreate || memberUpdate;
 }
 
 export function evaluateEndpointAccess(
