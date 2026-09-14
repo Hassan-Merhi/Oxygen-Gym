@@ -35,6 +35,22 @@ function hasOwn(body: unknown, key: string): boolean {
   return Boolean(body && typeof body === "object" && Object.prototype.hasOwnProperty.call(body, key));
 }
 
+/**
+ * The Members page needs the user-facing chart definitions to resolve the Cash
+ * account used by member payments. The chart endpoint does not return balances
+ * or accounting reports, so users who can access Members may read this one
+ * support endpoint without receiving the broader viewAccounting permission.
+ *
+ * Keep this deliberately narrow: only GET /accounts/chart receives the Members
+ * fallback. Every other accounting endpoint remains protected by its canonical
+ * accounting permissions.
+ */
+function hasMembersChartReadFallback(policy: EndpointPolicy, user: AuthorizationUser): boolean {
+  return policy.method === "GET"
+    && policy.path === "/accounts/chart"
+    && user.permissions.members === true;
+}
+
 export function evaluateEndpointAccess(
   method: string,
   path: string,
@@ -70,6 +86,10 @@ export function evaluateEndpointAccess(
     return Number(params.id) === user.id
       ? { allowed: true, status: 200, reason: "Self-service endpoint", policy }
       : { allowed: false, status: 403, reason: "May only access own user record", policy };
+  }
+
+  if (hasMembersChartReadFallback(policy, user)) {
+    return { allowed: true, status: 200, reason: "Members page support read", policy };
   }
 
   const allOf = policy.allOf ?? [];
