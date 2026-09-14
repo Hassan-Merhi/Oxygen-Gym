@@ -174,7 +174,7 @@ router.post("/:id/checkin", async (req, res) => {
     checkIn: {
       id: result.checkIn.id,
       memberId: result.checkIn.memberId,
-      memberName: result.memberName,
+      memberName: result.member.name,
       memberNumber: result.member.memberNumber,
       checkedInAt: result.checkIn.checkedInAt,
       note: null,
