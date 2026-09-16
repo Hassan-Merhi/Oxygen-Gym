@@ -1295,6 +1295,96 @@ paths:
               schema:
                 $ref: "#/components/schemas/LedgerBalance"
 
+
+  /rollout/access:
+    get:
+      operationId: getRolloutAccess
+      summary: Check whether the current user is in the active rollout cohort
+      tags: [audit]
+      responses:
+        "200":
+          description: Rollout access decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RolloutAccess"
+
+  /rollout:
+    get:
+      operationId: getOperationalRollout
+      summary: Read staged rollout status and readiness blockers
+      tags: [audit]
+      responses:
+        "200":
+          description: Current rollout and readiness status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationalRollout"
+
+  /rollout/acknowledge-warnings:
+    post:
+      operationId: acknowledgeOperationalRolloutWarnings
+      summary: Acknowledge current readiness warnings for rollout
+      tags: [audit]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcknowledgeOperationalRolloutWarningsBody"
+      responses:
+        "200":
+          description: Updated rollout status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationalRollout"
+        "400":
+          description: Invalid warning keys
+
+  /rollout/advance:
+    post:
+      operationId: advanceOperationalRollout
+      summary: Advance rollout one stage after readiness gates pass
+      tags: [audit]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdvanceOperationalRolloutBody"
+      responses:
+        "200":
+          description: Updated rollout status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationalRollout"
+        "409":
+          description: Readiness blockers or unacknowledged warnings prevent promotion
+
+  /rollout/rollback:
+    post:
+      operationId: rollbackOperationalRollout
+      summary: Roll rollout back one stage
+      tags: [audit]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RollbackOperationalRolloutBody"
+      responses:
+        "200":
+          description: Updated rollout status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationalRollout"
+        "409":
+          description: Invalid rollback target
+
   /audit/run:
     get:
       operationId: runAudit
@@ -3887,6 +3977,112 @@ components:
             $ref: "#/components/schemas/AuditIssue"
       required: [name, pass, issueCount, issues]
 
+    OperationalRolloutStage:
+      type: string
+      enum: [internal, canary, general]
+
+    OperationalReadinessIssue:
+      type: object
+      properties:
+        key: { type: string }
+        section: { type: string }
+        id: { oneOf: [{ type: string }, { type: integer }], nullable: true }
+        description: { type: string }
+        severity: { type: string, enum: [error, warning] }
+      required: [key, section, description, severity]
+
+    OperationalReadiness:
+      type: object
+      properties:
+        generatedAt: { type: string, format: date-time }
+        blockerCount: { type: integer }
+        warningCount: { type: integer }
+        blockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationalReadinessIssue"
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationalReadinessIssue"
+        acknowledgedWarningKeys:
+          type: array
+          items: { type: string }
+        unacknowledgedWarningKeys:
+          type: array
+          items: { type: string }
+        readyForCanary: { type: boolean }
+        readyForGeneral: { type: boolean }
+      required: [generatedAt, blockerCount, warningCount, blockers, warnings, acknowledgedWarningKeys, unacknowledgedWarningKeys, readyForCanary, readyForGeneral]
+
+    OperationalRollout:
+      type: object
+      properties:
+        featureKey: { type: string }
+        stage:
+          $ref: "#/components/schemas/OperationalRolloutStage"
+        nextStage:
+          oneOf:
+            - $ref: "#/components/schemas/OperationalRolloutStage"
+            - type: "null"
+        canAdvance: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+        lastTransitionAt:
+          type: ["string", "null"]
+          format: date-time
+        updatedBy:
+          type: ["integer", "null"]
+        updatedByName:
+          type: ["string", "null"]
+        acknowledgedWarningKeys:
+          type: array
+          items: { type: string }
+        readiness:
+          $ref: "#/components/schemas/OperationalReadiness"
+      required: [featureKey, stage, nextStage, canAdvance, updatedAt, lastTransitionAt, updatedBy, updatedByName, acknowledgedWarningKeys, readiness]
+
+    RolloutAccess:
+      type: object
+      properties:
+        stage:
+          $ref: "#/components/schemas/OperationalRolloutStage"
+        allowed: { type: boolean }
+        cohort:
+          type: string
+          enum: [admin, internal, canary, general, none]
+        reason: { type: string }
+      required: [stage, allowed, cohort, reason]
+
+    AcknowledgeOperationalRolloutWarningsBody:
+      type: object
+      properties:
+        warningKeys:
+          type: array
+          items: { type: string }
+        note: { type: string }
+      required: [warningKeys]
+
+    AdvanceOperationalRolloutBody:
+      type: object
+      properties:
+        targetStage:
+          type: string
+          enum: [canary, general]
+        warningKeys:
+          type: array
+          items: { type: string }
+        note: { type: string }
+      required: [targetStage]
+
+    RollbackOperationalRolloutBody:
+      type: object
+      properties:
+        targetStage:
+          type: string
+          enum: [internal, canary]
+        reason: { type: string, minLength: 1 }
+      required: [targetStage, reason]
+
     AuditAccounting:
       type: object
       properties:
@@ -3937,7 +4133,9 @@ components:
           items: { type: object }
         systemHealth:
           $ref: "#/components/schemas/AuditSystemHealth"
-      required: [generatedAt, totalIssues, accounting, sections, inventoryRows, systemHealth]
+        readiness:
+          $ref: "#/components/schemas/OperationalReadiness"
+      required: [generatedAt, totalIssues, accounting, sections, inventoryRows, systemHealth, readiness]
 
     AttendanceSummary:
       type: object

@@ -1210,6 +1210,110 @@ export interface AuditSection {
   issues: AuditIssue[];
 }
 
+export type OperationalRolloutStage = typeof OperationalRolloutStage[keyof typeof OperationalRolloutStage];
+
+
+export const OperationalRolloutStage = {
+  internal: 'internal',
+  canary: 'canary',
+  general: 'general',
+} as const;
+
+export type OperationalReadinessIssueSeverity = typeof OperationalReadinessIssueSeverity[keyof typeof OperationalReadinessIssueSeverity];
+
+
+export const OperationalReadinessIssueSeverity = {
+  error: 'error',
+  warning: 'warning',
+} as const;
+
+export interface OperationalReadinessIssue {
+  key: string;
+  section: string;
+  id?: string | number | null;
+  description: string;
+  severity: OperationalReadinessIssueSeverity;
+}
+
+export interface OperationalReadiness {
+  generatedAt: string;
+  blockerCount: number;
+  warningCount: number;
+  blockers: OperationalReadinessIssue[];
+  warnings: OperationalReadinessIssue[];
+  acknowledgedWarningKeys: string[];
+  unacknowledgedWarningKeys: string[];
+  readyForCanary: boolean;
+  readyForGeneral: boolean;
+}
+
+export interface OperationalRollout {
+  featureKey: string;
+  stage: OperationalRolloutStage;
+  nextStage: OperationalRolloutStage | null;
+  canAdvance: boolean;
+  updatedAt: string;
+  /** @nullable */
+  lastTransitionAt: string | null;
+  /** @nullable */
+  updatedBy: number | null;
+  /** @nullable */
+  updatedByName: string | null;
+  acknowledgedWarningKeys: string[];
+  readiness: OperationalReadiness;
+}
+
+export type RolloutAccessCohort = typeof RolloutAccessCohort[keyof typeof RolloutAccessCohort];
+
+
+export const RolloutAccessCohort = {
+  admin: 'admin',
+  internal: 'internal',
+  canary: 'canary',
+  general: 'general',
+  none: 'none',
+} as const;
+
+export interface RolloutAccess {
+  stage: OperationalRolloutStage;
+  allowed: boolean;
+  cohort: RolloutAccessCohort;
+  reason: string;
+}
+
+export interface AcknowledgeOperationalRolloutWarningsBody {
+  warningKeys: string[];
+  note?: string;
+}
+
+export type AdvanceOperationalRolloutBodyTargetStage = typeof AdvanceOperationalRolloutBodyTargetStage[keyof typeof AdvanceOperationalRolloutBodyTargetStage];
+
+
+export const AdvanceOperationalRolloutBodyTargetStage = {
+  canary: 'canary',
+  general: 'general',
+} as const;
+
+export interface AdvanceOperationalRolloutBody {
+  targetStage: AdvanceOperationalRolloutBodyTargetStage;
+  warningKeys?: string[];
+  note?: string;
+}
+
+export type RollbackOperationalRolloutBodyTargetStage = typeof RollbackOperationalRolloutBodyTargetStage[keyof typeof RollbackOperationalRolloutBodyTargetStage];
+
+
+export const RollbackOperationalRolloutBodyTargetStage = {
+  internal: 'internal',
+  canary: 'canary',
+} as const;
+
+export interface RollbackOperationalRolloutBody {
+  targetStage: RollbackOperationalRolloutBodyTargetStage;
+  /** @minLength 1 */
+  reason: string;
+}
+
 export interface AuditAccounting {
   totalRevenue: number;
   totalExpenses: number;
@@ -1249,6 +1353,7 @@ export interface AuditReport {
   sections: AuditSection[];
   inventoryRows: AuditReportInventoryRowsItem[];
   systemHealth: AuditSystemHealth;
+  readiness: OperationalReadiness;
 }
 
 export interface AttendanceSummary {

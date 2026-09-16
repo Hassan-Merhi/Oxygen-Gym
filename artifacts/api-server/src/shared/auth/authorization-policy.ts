@@ -95,6 +95,16 @@ export const ENDPOINT_POLICIES: readonly EndpointPolicy[] = [
   // Audit / administrative observability.
   p("GET", "/activity-logs", "admin", "Read activity logs"),
   p("GET", "/audit/run", "admin", "Run system audit"),
+
+  // Operational rollout control plane. The access probe is available to every
+  // authenticated user so the client can explain a cohort hold; promotion,
+  // acknowledgement, and rollback remain administrator-only.
+  p("GET", "/rollout/access", "authenticated", "Read current rollout cohort access"),
+  p("GET", "/rollout", "admin", "Read rollout readiness and stage"),
+  p("POST", "/rollout/acknowledge-warnings", "admin", "Acknowledge rollout readiness warnings"),
+  p("POST", "/rollout/advance", "admin", "Advance staged rollout"),
+  p("POST", "/rollout/rollback", "admin", "Rollback staged rollout"),
+
   p("POST", "/audit/fix/inventory", "admin", "Inventory repair compatibility endpoint"),
   p("POST", "/audit/fix/dashboard", "admin", "Dashboard repair compatibility endpoint"),
   p("POST", "/audit/fix/accounts", "admin", "Accounts repair compatibility endpoint"),

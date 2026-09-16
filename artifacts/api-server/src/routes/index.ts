@@ -22,6 +22,7 @@ import commissionsRouter from "./commissions";
 import attendanceRouter from "./attendance";
 import notificationsRouter from "./notifications";
 import auditRouter from "./audit";
+import rolloutRouter from "./rollout";
 import whatsappRouter from "./whatsapp";
 import { enforceApiAuthorization } from "../shared/auth/authorization-gate";
 
@@ -54,6 +55,7 @@ router.use("/commissions", commissionsRouter);
 router.use("/attendance", attendanceRouter);
 router.use("/notifications", notificationsRouter);
 router.use("/audit", auditRouter);
+router.use("/rollout", rolloutRouter);
 router.use("/whatsapp", whatsappRouter);
 
 export default router;

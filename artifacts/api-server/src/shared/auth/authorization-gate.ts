@@ -1,7 +1,14 @@
 import type { NextFunction, Request, Response } from "express";
 import { requireAuth } from "../../middlewares/auth";
-import { evaluateEndpointAccess, matchingEndpointPolicies } from "./authorization-evaluator";
+import {
+  evaluateEndpointAccess,
+  matchingEndpointPolicies,
+} from "./authorization-evaluator";
 import { getCurrentUser, normalizePermissions } from "./permissions";
+import {
+  getRolloutAccess,
+  isRolloutControlEndpoint,
+} from "../../domains/rollout/service";
 
 const authenticate = requireAuth();
 
@@ -33,26 +40,67 @@ export function enforceApiAuthorization() {
       }
       if (res.headersSent) return;
 
-      const current = getCurrentUser(req);
-      const decision = evaluateEndpointAccess(req.method, req.path, {
-        id: current.id,
-        role: current.role,
-        permissions: normalizePermissions(current.role, current.permissions),
-      }, req.body);
+      void (async () => {
+        const current = getCurrentUser(req);
+        const decision = evaluateEndpointAccess(
+          req.method,
+          req.path,
+          {
+            id: current.id,
+            role: current.role,
+            permissions: normalizePermissions(
+              current.role,
+              current.permissions,
+            ),
+          },
+          req.body,
+        );
 
-      if (!decision.allowed) {
-        req.log.warn({
-          userId: current.id,
-          role: current.role,
-          method: req.method,
-          path: req.path,
-          reason: decision.reason,
-        }, "Authorization denied");
-        res.status(decision.status).json({ error: "Forbidden" });
-        return;
-      }
+        if (!decision.allowed) {
+          req.log.warn(
+            {
+              userId: current.id,
+              role: current.role,
+              method: req.method,
+              path: req.path,
+              reason: decision.reason,
+            },
+            "Authorization denied",
+          );
+          res.status(decision.status).json({ error: "Forbidden" });
+          return;
+        }
 
-      next();
+        // Keep identity, logout, password recovery, and the access probe
+        // available to users outside the active cohort. Everything else is
+        // staged by the persisted rollout control-plane record.
+        if (!isRolloutControlEndpoint(req.method, req.path)) {
+          const rollout = await getRolloutAccess({
+            id: current.id,
+            name: current.name,
+            role: current.role,
+          });
+          if (!rollout.allowed) {
+            req.log.info(
+              {
+                userId: current.id,
+                stage: rollout.stage,
+                cohort: rollout.cohort,
+              },
+              "Request held by operational rollout",
+            );
+            res.status(403).json({
+              error: rollout.reason,
+              code: "ROLLOUT_NOT_ENABLED",
+              stage: rollout.stage,
+              cohort: rollout.cohort,
+            });
+            return;
+          }
+        }
+
+        next();
+      })().catch(next);
     });
   };
 }

@@ -1716,6 +1716,192 @@ export const GetLedgerBalanceResponse = zod.object({
 
 
 /**
+ * @summary Check whether the current user is in the active rollout cohort
+ */
+export const GetRolloutAccessResponse = zod.object({
+  "stage": zod.enum(['internal', 'canary', 'general']),
+  "allowed": zod.boolean(),
+  "cohort": zod.enum(['admin', 'internal', 'canary', 'general', 'none']),
+  "reason": zod.string()
+})
+
+
+/**
+ * @summary Read staged rollout status and readiness blockers
+ */
+export const GetOperationalRolloutResponse = zod.object({
+  "featureKey": zod.string(),
+  "stage": zod.enum(['internal', 'canary', 'general']),
+  "nextStage": zod.union([zod.enum(['internal', 'canary', 'general']),zod.null()]),
+  "canAdvance": zod.boolean(),
+  "updatedAt": zod.coerce.date(),
+  "lastTransitionAt": zod.coerce.date().nullable(),
+  "updatedBy": zod.number().nullable(),
+  "updatedByName": zod.string().nullable(),
+  "acknowledgedWarningKeys": zod.array(zod.string()),
+  "readiness": zod.object({
+  "generatedAt": zod.coerce.date(),
+  "blockerCount": zod.number(),
+  "warningCount": zod.number(),
+  "blockers": zod.array(zod.object({
+  "key": zod.string(),
+  "section": zod.string(),
+  "id": zod.union([zod.string(),zod.number()]).nullish(),
+  "description": zod.string(),
+  "severity": zod.enum(['error', 'warning'])
+})),
+  "warnings": zod.array(zod.object({
+  "key": zod.string(),
+  "section": zod.string(),
+  "id": zod.union([zod.string(),zod.number()]).nullish(),
+  "description": zod.string(),
+  "severity": zod.enum(['error', 'warning'])
+})),
+  "acknowledgedWarningKeys": zod.array(zod.string()),
+  "unacknowledgedWarningKeys": zod.array(zod.string()),
+  "readyForCanary": zod.boolean(),
+  "readyForGeneral": zod.boolean()
+})
+})
+
+
+/**
+ * @summary Acknowledge current readiness warnings for rollout
+ */
+export const AcknowledgeOperationalRolloutWarningsBody = zod.object({
+  "warningKeys": zod.array(zod.string()),
+  "note": zod.string().optional()
+})
+
+export const AcknowledgeOperationalRolloutWarningsResponse = zod.object({
+  "featureKey": zod.string(),
+  "stage": zod.enum(['internal', 'canary', 'general']),
+  "nextStage": zod.union([zod.enum(['internal', 'canary', 'general']),zod.null()]),
+  "canAdvance": zod.boolean(),
+  "updatedAt": zod.coerce.date(),
+  "lastTransitionAt": zod.coerce.date().nullable(),
+  "updatedBy": zod.number().nullable(),
+  "updatedByName": zod.string().nullable(),
+  "acknowledgedWarningKeys": zod.array(zod.string()),
+  "readiness": zod.object({
+  "generatedAt": zod.coerce.date(),
+  "blockerCount": zod.number(),
+  "warningCount": zod.number(),
+  "blockers": zod.array(zod.object({
+  "key": zod.string(),
+  "section": zod.string(),
+  "id": zod.union([zod.string(),zod.number()]).nullish(),
+  "description": zod.string(),
+  "severity": zod.enum(['error', 'warning'])
+})),
+  "warnings": zod.array(zod.object({
+  "key": zod.string(),
+  "section": zod.string(),
+  "id": zod.union([zod.string(),zod.number()]).nullish(),
+  "description": zod.string(),
+  "severity": zod.enum(['error', 'warning'])
+})),
+  "acknowledgedWarningKeys": zod.array(zod.string()),
+  "unacknowledgedWarningKeys": zod.array(zod.string()),
+  "readyForCanary": zod.boolean(),
+  "readyForGeneral": zod.boolean()
+})
+})
+
+
+/**
+ * @summary Advance rollout one stage after readiness gates pass
+ */
+export const AdvanceOperationalRolloutBody = zod.object({
+  "targetStage": zod.enum(['canary', 'general']),
+  "warningKeys": zod.array(zod.string()).optional(),
+  "note": zod.string().optional()
+})
+
+export const AdvanceOperationalRolloutResponse = zod.object({
+  "featureKey": zod.string(),
+  "stage": zod.enum(['internal', 'canary', 'general']),
+  "nextStage": zod.union([zod.enum(['internal', 'canary', 'general']),zod.null()]),
+  "canAdvance": zod.boolean(),
+  "updatedAt": zod.coerce.date(),
+  "lastTransitionAt": zod.coerce.date().nullable(),
+  "updatedBy": zod.number().nullable(),
+  "updatedByName": zod.string().nullable(),
+  "acknowledgedWarningKeys": zod.array(zod.string()),
+  "readiness": zod.object({
+  "generatedAt": zod.coerce.date(),
+  "blockerCount": zod.number(),
+  "warningCount": zod.number(),
+  "blockers": zod.array(zod.object({
+  "key": zod.string(),
+  "section": zod.string(),
+  "id": zod.union([zod.string(),zod.number()]).nullish(),
+  "description": zod.string(),
+  "severity": zod.enum(['error', 'warning'])
+})),
+  "warnings": zod.array(zod.object({
+  "key": zod.string(),
+  "section": zod.string(),
+  "id": zod.union([zod.string(),zod.number()]).nullish(),
+  "description": zod.string(),
+  "severity": zod.enum(['error', 'warning'])
+})),
+  "acknowledgedWarningKeys": zod.array(zod.string()),
+  "unacknowledgedWarningKeys": zod.array(zod.string()),
+  "readyForCanary": zod.boolean(),
+  "readyForGeneral": zod.boolean()
+})
+})
+
+
+/**
+ * @summary Roll rollout back one stage
+ */
+
+
+
+export const RollbackOperationalRolloutBody = zod.object({
+  "targetStage": zod.enum(['internal', 'canary']),
+  "reason": zod.string().min(1)
+})
+
+export const RollbackOperationalRolloutResponse = zod.object({
+  "featureKey": zod.string(),
+  "stage": zod.enum(['internal', 'canary', 'general']),
+  "nextStage": zod.union([zod.enum(['internal', 'canary', 'general']),zod.null()]),
+  "canAdvance": zod.boolean(),
+  "updatedAt": zod.coerce.date(),
+  "lastTransitionAt": zod.coerce.date().nullable(),
+  "updatedBy": zod.number().nullable(),
+  "updatedByName": zod.string().nullable(),
+  "acknowledgedWarningKeys": zod.array(zod.string()),
+  "readiness": zod.object({
+  "generatedAt": zod.coerce.date(),
+  "blockerCount": zod.number(),
+  "warningCount": zod.number(),
+  "blockers": zod.array(zod.object({
+  "key": zod.string(),
+  "section": zod.string(),
+  "id": zod.union([zod.string(),zod.number()]).nullish(),
+  "description": zod.string(),
+  "severity": zod.enum(['error', 'warning'])
+})),
+  "warnings": zod.array(zod.object({
+  "key": zod.string(),
+  "section": zod.string(),
+  "id": zod.union([zod.string(),zod.number()]).nullish(),
+  "description": zod.string(),
+  "severity": zod.enum(['error', 'warning'])
+})),
+  "acknowledgedWarningKeys": zod.array(zod.string()),
+  "unacknowledgedWarningKeys": zod.array(zod.string()),
+  "readyForCanary": zod.boolean(),
+  "readyForGeneral": zod.boolean()
+})
+})
+
+
+/**
  * @summary Run full system audit
  */
 export const RunAuditResponse = zod.object({
@@ -1759,6 +1945,29 @@ export const RunAuditResponse = zod.object({
   "tableSizes": zod.array(zod.object({
 
 }).passthrough())
+}),
+  "readiness": zod.object({
+  "generatedAt": zod.coerce.date(),
+  "blockerCount": zod.number(),
+  "warningCount": zod.number(),
+  "blockers": zod.array(zod.object({
+  "key": zod.string(),
+  "section": zod.string(),
+  "id": zod.union([zod.string(),zod.number()]).nullish(),
+  "description": zod.string(),
+  "severity": zod.enum(['error', 'warning'])
+})),
+  "warnings": zod.array(zod.object({
+  "key": zod.string(),
+  "section": zod.string(),
+  "id": zod.union([zod.string(),zod.number()]).nullish(),
+  "description": zod.string(),
+  "severity": zod.enum(['error', 'warning'])
+})),
+  "acknowledgedWarningKeys": zod.array(zod.string()),
+  "unacknowledgedWarningKeys": zod.array(zod.string()),
+  "readyForCanary": zod.boolean(),
+  "readyForGeneral": zod.boolean()
 })
 })
 

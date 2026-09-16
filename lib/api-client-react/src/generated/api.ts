@@ -21,8 +21,10 @@ import type {
 
 import type {
   AccountSummary,
+  AcknowledgeOperationalRolloutWarningsBody,
   ActivityLog,
   AddStockPurchaseBody,
+  AdvanceOperationalRolloutBody,
   ApplyCashCleanup200,
   ApplyCashCleanupBody,
   AttendanceCheckIn,
@@ -102,6 +104,7 @@ import type {
   MembersPage,
   NotificationCountResponse,
   NotificationsResponse,
+  OperationalRollout,
   PatchSaleBody,
   PaymentInput,
   PaymentRecord,
@@ -120,6 +123,8 @@ import type {
   RenewBody,
   ResetUserPassword200,
   ResetUserPasswordBody,
+  RollbackOperationalRolloutBody,
+  RolloutAccess,
   RunSetupBody,
   SaleListResponse,
   SaleRecord,
@@ -4830,6 +4835,373 @@ export function useGetLedgerBalance<TData = Awaited<ReturnType<typeof getLedgerB
 
 
 
+
+export const getGetRolloutAccessUrl = () => {
+
+
+
+
+  return `/api/rollout/access`
+}
+
+/**
+ * @summary Check whether the current user is in the active rollout cohort
+ */
+export const getRolloutAccess = async ( options?: RequestInit): Promise<RolloutAccess> => {
+
+  return customFetch<RolloutAccess>(getGetRolloutAccessUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRolloutAccessQueryKey = () => {
+    return [
+    `/api/rollout/access`
+    ] as const;
+    }
+
+
+export const getGetRolloutAccessQueryOptions = <TData = Awaited<ReturnType<typeof getRolloutAccess>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRolloutAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRolloutAccessQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRolloutAccess>>> = ({ signal }) => getRolloutAccess({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRolloutAccess>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRolloutAccessQueryResult = NonNullable<Awaited<ReturnType<typeof getRolloutAccess>>>
+export type GetRolloutAccessQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Check whether the current user is in the active rollout cohort
+ */
+
+export function useGetRolloutAccess<TData = Awaited<ReturnType<typeof getRolloutAccess>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRolloutAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRolloutAccessQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetOperationalRolloutUrl = () => {
+
+
+
+
+  return `/api/rollout`
+}
+
+/**
+ * @summary Read staged rollout status and readiness blockers
+ */
+export const getOperationalRollout = async ( options?: RequestInit): Promise<OperationalRollout> => {
+
+  return customFetch<OperationalRollout>(getGetOperationalRolloutUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOperationalRolloutQueryKey = () => {
+    return [
+    `/api/rollout`
+    ] as const;
+    }
+
+
+export const getGetOperationalRolloutQueryOptions = <TData = Awaited<ReturnType<typeof getOperationalRollout>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOperationalRollout>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOperationalRolloutQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOperationalRollout>>> = ({ signal }) => getOperationalRollout({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOperationalRollout>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOperationalRolloutQueryResult = NonNullable<Awaited<ReturnType<typeof getOperationalRollout>>>
+export type GetOperationalRolloutQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Read staged rollout status and readiness blockers
+ */
+
+export function useGetOperationalRollout<TData = Awaited<ReturnType<typeof getOperationalRollout>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOperationalRollout>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOperationalRolloutQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getAcknowledgeOperationalRolloutWarningsUrl = () => {
+
+
+
+
+  return `/api/rollout/acknowledge-warnings`
+}
+
+/**
+ * @summary Acknowledge current readiness warnings for rollout
+ */
+export const acknowledgeOperationalRolloutWarnings = async (acknowledgeOperationalRolloutWarningsBody: AcknowledgeOperationalRolloutWarningsBody, options?: RequestInit): Promise<OperationalRollout> => {
+
+  return customFetch<OperationalRollout>(getAcknowledgeOperationalRolloutWarningsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      acknowledgeOperationalRolloutWarningsBody,)
+  }
+);}
+
+
+
+
+export const getAcknowledgeOperationalRolloutWarningsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acknowledgeOperationalRolloutWarnings>>, TError,{data: BodyType<AcknowledgeOperationalRolloutWarningsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acknowledgeOperationalRolloutWarnings>>, TError,{data: BodyType<AcknowledgeOperationalRolloutWarningsBody>}, TContext> => {
+
+const mutationKey = ['acknowledgeOperationalRolloutWarnings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acknowledgeOperationalRolloutWarnings>>, {data: BodyType<AcknowledgeOperationalRolloutWarningsBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  acknowledgeOperationalRolloutWarnings(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcknowledgeOperationalRolloutWarningsMutationResult = NonNullable<Awaited<ReturnType<typeof acknowledgeOperationalRolloutWarnings>>>
+    export type AcknowledgeOperationalRolloutWarningsMutationBody = BodyType<AcknowledgeOperationalRolloutWarningsBody>
+    export type AcknowledgeOperationalRolloutWarningsMutationError = ErrorType<void>
+
+    /**
+ * @summary Acknowledge current readiness warnings for rollout
+ */
+export const useAcknowledgeOperationalRolloutWarnings = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acknowledgeOperationalRolloutWarnings>>, TError,{data: BodyType<AcknowledgeOperationalRolloutWarningsBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof acknowledgeOperationalRolloutWarnings>>,
+        TError,
+        {data: BodyType<AcknowledgeOperationalRolloutWarningsBody>},
+        TContext
+      > => {
+      return useMutation(getAcknowledgeOperationalRolloutWarningsMutationOptions(options));
+    }
+
+export const getAdvanceOperationalRolloutUrl = () => {
+
+
+
+
+  return `/api/rollout/advance`
+}
+
+/**
+ * @summary Advance rollout one stage after readiness gates pass
+ */
+export const advanceOperationalRollout = async (advanceOperationalRolloutBody: AdvanceOperationalRolloutBody, options?: RequestInit): Promise<OperationalRollout> => {
+
+  return customFetch<OperationalRollout>(getAdvanceOperationalRolloutUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      advanceOperationalRolloutBody,)
+  }
+);}
+
+
+
+
+export const getAdvanceOperationalRolloutMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof advanceOperationalRollout>>, TError,{data: BodyType<AdvanceOperationalRolloutBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof advanceOperationalRollout>>, TError,{data: BodyType<AdvanceOperationalRolloutBody>}, TContext> => {
+
+const mutationKey = ['advanceOperationalRollout'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof advanceOperationalRollout>>, {data: BodyType<AdvanceOperationalRolloutBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  advanceOperationalRollout(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdvanceOperationalRolloutMutationResult = NonNullable<Awaited<ReturnType<typeof advanceOperationalRollout>>>
+    export type AdvanceOperationalRolloutMutationBody = BodyType<AdvanceOperationalRolloutBody>
+    export type AdvanceOperationalRolloutMutationError = ErrorType<void>
+
+    /**
+ * @summary Advance rollout one stage after readiness gates pass
+ */
+export const useAdvanceOperationalRollout = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof advanceOperationalRollout>>, TError,{data: BodyType<AdvanceOperationalRolloutBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof advanceOperationalRollout>>,
+        TError,
+        {data: BodyType<AdvanceOperationalRolloutBody>},
+        TContext
+      > => {
+      return useMutation(getAdvanceOperationalRolloutMutationOptions(options));
+    }
+
+export const getRollbackOperationalRolloutUrl = () => {
+
+
+
+
+  return `/api/rollout/rollback`
+}
+
+/**
+ * @summary Roll rollout back one stage
+ */
+export const rollbackOperationalRollout = async (rollbackOperationalRolloutBody: RollbackOperationalRolloutBody, options?: RequestInit): Promise<OperationalRollout> => {
+
+  return customFetch<OperationalRollout>(getRollbackOperationalRolloutUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      rollbackOperationalRolloutBody,)
+  }
+);}
+
+
+
+
+export const getRollbackOperationalRolloutMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rollbackOperationalRollout>>, TError,{data: BodyType<RollbackOperationalRolloutBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rollbackOperationalRollout>>, TError,{data: BodyType<RollbackOperationalRolloutBody>}, TContext> => {
+
+const mutationKey = ['rollbackOperationalRollout'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rollbackOperationalRollout>>, {data: BodyType<RollbackOperationalRolloutBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  rollbackOperationalRollout(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RollbackOperationalRolloutMutationResult = NonNullable<Awaited<ReturnType<typeof rollbackOperationalRollout>>>
+    export type RollbackOperationalRolloutMutationBody = BodyType<RollbackOperationalRolloutBody>
+    export type RollbackOperationalRolloutMutationError = ErrorType<void>
+
+    /**
+ * @summary Roll rollout back one stage
+ */
+export const useRollbackOperationalRollout = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rollbackOperationalRollout>>, TError,{data: BodyType<RollbackOperationalRolloutBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rollbackOperationalRollout>>,
+        TError,
+        {data: BodyType<RollbackOperationalRolloutBody>},
+        TContext
+      > => {
+      return useMutation(getRollbackOperationalRolloutMutationOptions(options));
+    }
 
 export const getRunAuditUrl = () => {
 

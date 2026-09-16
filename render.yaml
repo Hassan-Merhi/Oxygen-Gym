@@ -21,3 +21,7 @@ services:
         sync: false
       - key: SESSION_SECRET
         sync: false
+      - key: ROLLOUT_INTERNAL_USER_IDS
+        sync: false
+      - key: ROLLOUT_CANARY_USER_IDS
+        sync: false

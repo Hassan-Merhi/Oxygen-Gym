@@ -17,6 +17,8 @@ The feature-permission keys are `dashboard`, `members`, `plans`, `staff`, `payro
 
 `viewCost` and `viewProfit` are data-visibility permissions, not merely menu flags. Inventory and sales responses are redacted server-side when those permissions are absent.
 
+The authorization gate also enforces the persisted Phase 13 operational rollout. Administrators retain control-plane access at every stage; application requests for other users are limited to the configured internal/canary cohort until the rollout reaches `general`. Identity, logout, password change, and `GET /rollout/access` remain available to held users so the client can explain the staged hold.
+
 ## Endpoint → permission matrix
 
 `self` below means the authenticated user's own user ID. `authenticated` means any known active role. `admin` means the administrator role only. Multiple permissions joined by `+` are all required; permissions joined by `OR` require at least one.
@@ -41,6 +43,11 @@ The feature-permission keys are `dashboard`, `members`, `plans`, `staff`, `payro
 | PATCH | `/settings` | `manageSettings`; backup configuration and Green API credentials are admin-only fields |
 | GET | `/activity-logs` | admin |
 | GET | `/audit/run` | admin |
+| GET | `/rollout/access` | authenticated; staged cohort check is evaluated after endpoint authorization |
+| GET | `/rollout` | admin |
+| POST | `/rollout/acknowledge-warnings` | admin |
+| POST | `/rollout/advance` | admin; zero blockers, plus warning acknowledgement for general |
+| POST | `/rollout/rollback` | admin; one-stage rollback with an operator reason |
 | POST | `/audit/fix/inventory` | admin |
 | POST | `/audit/fix/dashboard` | admin |
 | POST | `/audit/fix/accounts` | admin |
@@ -165,3 +172,5 @@ There is currently no HTTP backup/restore/export endpoint. The only backup-relat
 4. Role/permission escalation fields are blocked server-side.
 5. New unclassified application API routes fail closed.
 6. Authorization matrix coverage and role/permission combinations are CI-gated.
+7. Rollout promotion re-runs the existing readiness audit; blockers cannot be acknowledged away, and general access requires explicit warning acknowledgement.
+8. Rollout state is database-backed and promotion/rollback actions are activity-logged.

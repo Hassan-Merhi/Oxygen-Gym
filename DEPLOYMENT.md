@@ -79,6 +79,19 @@ Once the first deploy finishes, you need to push the database schema to Neon **o
 
 ---
 
+## Phase 13 — staged operational rollout
+
+The application is not enabled for everyone immediately after deployment. Versioned migrations create the rollout control-plane row at `internal`; promote it through `internal → canary → general` from the administrator-only **Audit** page after the existing audit readiness checks pass. Follow the complete operator runbook in [`OPERATIONAL_ROLLOUT.md`](./OPERATIONAL_ROLLOUT.md).
+
+Configure comma-separated user IDs for the cohorts in the Render service environment when you are ready to test with them:
+
+| Variable | Purpose |
+|---|---|
+| `ROLLOUT_INTERNAL_USER_IDS` | Users who receive the internal stage |
+| `ROLLOUT_CANARY_USER_IDS` | Additional users who receive the canary stage |
+
+Administrators can always inspect readiness and operate the rollout. Canary promotion requires zero audit blockers. General promotion requires zero blockers **and explicit acknowledgement of every current audit warning**. Rollback is available one stage at a time and is recorded with a reason.
+
 ## Important notes
 
 - **Free tier sleep**: The Render free tier sleeps after 15 minutes of inactivity. The first visitor after a quiet period waits ~30 seconds for the app to wake up. It stays fast for the rest of the day.

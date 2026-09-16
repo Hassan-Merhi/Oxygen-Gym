@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from 'wouter';
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { ApiError } from "@workspace/api-client-react";
+import { ApiError, useGetRolloutAccess } from "@workspace/api-client-react";
+import type { RolloutAccess } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useI18nDirection } from "@/lib/i18n";
@@ -92,14 +93,99 @@ function NoAccessScreen() {
   );
 }
 
+function RolloutHoldScreen({ access }: { access: RolloutAccess }) {
+  const { logout } = useAuth();
+  const stageLabel =
+    access.stage.charAt(0).toUpperCase() + access.stage.slice(1);
+  return (
+    <div className="min-h-[100dvh] flex items-center justify-center bg-slate-50 dark:bg-slate-950 px-6">
+      <div className="max-w-md rounded-2xl border border-indigo-100 dark:border-indigo-900/50 bg-white dark:bg-slate-900 p-8 text-center shadow-sm">
+        <div className="mx-auto h-12 w-12 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 text-2xl">
+          ⏳
+        </div>
+        <h2 className="mt-5 text-lg font-semibold text-slate-800 dark:text-slate-100">
+          Oxygen Gym is rolling out in stages
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
+          {access.reason}
+        </p>
+        <div className="mt-5 rounded-lg bg-slate-50 dark:bg-slate-800 px-4 py-3 text-left text-sm">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-slate-500 dark:text-slate-400">
+              Current stage
+            </span>
+            <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+              {stageLabel}
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            Your administrator will enable access for your cohort after the
+            readiness checks pass.
+          </p>
+        </div>
+        <button
+          onClick={logout}
+          className="mt-6 text-sm text-indigo-600 hover:underline"
+        >
+          Sign out
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RolloutUnavailableScreen({ onRetry }: { onRetry: () => void }) {
+  const { logout } = useAuth();
+  return (
+    <div className="min-h-[100dvh] flex items-center justify-center bg-slate-50 dark:bg-slate-950 px-6">
+      <div className="max-w-md rounded-2xl border border-amber-100 dark:border-amber-900/50 bg-white dark:bg-slate-900 p-8 text-center shadow-sm">
+        <div className="mx-auto h-12 w-12 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 text-2xl">!</div>
+        <h2 className="mt-5 text-lg font-semibold text-slate-800 dark:text-slate-100">Rollout status unavailable</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">Access remains paused until the operational rollout status can be checked safely.</p>
+        <div className="mt-5 flex justify-center gap-3">
+          <button onClick={onRetry} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Retry</button>
+          <button onClick={logout} className="rounded-md px-4 py-2 text-sm text-indigo-600 hover:underline">Sign out</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function useRolloutAccess(isAuthenticated: boolean) {
+  return useGetRolloutAccess({
+    query: {
+      queryKey: ["getRolloutAccess"],
+      enabled: isAuthenticated,
+      staleTime: 5_000,
+      retry: false,
+    },
+  });
+}
+
+
 // ── Protected wrapper ─────────────────────────────────────────────────────────
-function ProtectedRoute({ component: Component, permKey }: { component: React.ComponentType; permKey?: string }) {
+function ProtectedRoute({
+  component: Component,
+  permKey,
+}: {
+  component: React.ComponentType;
+  permKey?: string;
+}) {
   const { isAuthenticated, isLoading } = useAuth();
   const hasPermission = useHasPermission(permKey);
   const firstRoute = useFirstAccessibleRoute();
+  const rollout = useRolloutAccess(isAuthenticated);
 
-  if (isLoading || (isAuthenticated && hasPermission === null)) return <LoadingScreen />;
+  if (
+    isLoading ||
+    (isAuthenticated && (hasPermission === null || rollout.isLoading))
+  )
+    return <LoadingScreen />;
   if (!isAuthenticated) return <Redirect to="/login" />;
+  if (rollout.isError) return <RolloutUnavailableScreen onRetry={() => void rollout.refetch()} />;
+  if (rollout.data && !rollout.data.allowed)
+    return <RolloutHoldScreen access={rollout.data} />;
+  if (!rollout.data) return <LoadingScreen />;
   if (hasPermission === false) {
     if (!firstRoute) return <NoAccessScreen />;
     return <Redirect to={firstRoute} />;
@@ -117,9 +203,18 @@ function ProtectedMemberProfile({ id }: { id: number }) {
   const { isAuthenticated, isLoading } = useAuth();
   const hasPermission = useHasPermission("members");
   const firstRoute = useFirstAccessibleRoute();
+  const rollout = useRolloutAccess(isAuthenticated);
 
-  if (isLoading || (isAuthenticated && hasPermission === null)) return <LoadingScreen />;
+  if (
+    isLoading ||
+    (isAuthenticated && (hasPermission === null || rollout.isLoading))
+  )
+    return <LoadingScreen />;
   if (!isAuthenticated) return <Redirect to="/login" />;
+  if (rollout.isError) return <RolloutUnavailableScreen onRetry={() => void rollout.refetch()} />;
+  if (rollout.data && !rollout.data.allowed)
+    return <RolloutHoldScreen access={rollout.data} />;
+  if (!rollout.data) return <LoadingScreen />;
   if (hasPermission === false) {
     if (!firstRoute) return <NoAccessScreen />;
     return <Redirect to={firstRoute} />;

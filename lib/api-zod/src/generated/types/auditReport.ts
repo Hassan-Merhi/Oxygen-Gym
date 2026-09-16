@@ -9,6 +9,7 @@ import type { AuditAccounting } from './auditAccounting';
 import type { AuditReportInventoryRowsItem } from './auditReportInventoryRowsItem';
 import type { AuditSection } from './auditSection';
 import type { AuditSystemHealth } from './auditSystemHealth';
+import type { OperationalReadiness } from './operationalReadiness';
 
 export interface AuditReport {
   generatedAt: string;
@@ -17,4 +18,5 @@ export interface AuditReport {
   sections: AuditSection[];
   inventoryRows: AuditReportInventoryRowsItem[];
   systemHealth: AuditSystemHealth;
+  readiness: OperationalReadiness;
 }

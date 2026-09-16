@@ -6,8 +6,12 @@ import {
   useFixAuditInventory,
   useFixAuditDashboard,
   useFixAuditAccounts,
+  useGetOperationalRollout,
+  useAcknowledgeOperationalRolloutWarnings,
+  useAdvanceOperationalRollout,
+  useRollbackOperationalRollout,
 } from "@workspace/api-client-react";
-import type { AuditReport, AuditSection } from "@workspace/api-client-react";
+import type { AuditReport, AuditSection, OperationalRollout } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -144,6 +148,252 @@ function GoLiveChecklist({ items, t }: { items: ChecklistItem[]; t: (k: string) 
   );
 }
 
+function OperationalRolloutPanel({
+  status,
+  loading,
+  statusError,
+  onRefresh,
+}: {
+  status?: OperationalRollout;
+  loading: boolean;
+  statusError: boolean;
+  onRefresh: () => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const acknowledge = useAcknowledgeOperationalRolloutWarnings();
+  const advance = useAdvanceOperationalRollout();
+  const rollback = useRollbackOperationalRollout();
+
+  const busy = acknowledge.isPending || advance.isPending || rollback.isPending;
+  const unacknowledged = status?.readiness.unacknowledgedWarningKeys ?? [];
+  const nextStage = status?.nextStage;
+
+  const runAction = (action: () => void) => {
+    setError(null);
+    action();
+  };
+
+  const acknowledgeWarnings = () =>
+    runAction(() => {
+      acknowledge.mutate(
+        { data: { warningKeys: unacknowledged } },
+        {
+          onSuccess: onRefresh,
+          onError: () =>
+            setError(
+              "Warnings could not be acknowledged. Refresh the readiness report and try again.",
+            ),
+        },
+      );
+    });
+
+  const advanceRollout = () => {
+    if (nextStage !== "canary" && nextStage !== "general") return;
+    runAction(() => {
+      advance.mutate(
+        { data: { targetStage: nextStage } },
+        {
+          onSuccess: onRefresh,
+          onError: () =>
+            setError(
+              "The rollout is still gated. Resolve blockers and acknowledge warnings before promoting.",
+            ),
+        },
+      );
+    });
+  };
+
+  const rollbackRollout = () => {
+    if (!status || status.stage === "internal") return;
+    const targetStage = status.stage === "general" ? "canary" : "internal";
+    const reason = window
+      .prompt(`Why are you rolling back to ${targetStage}?`)
+      ?.trim();
+    if (!reason) return;
+    runAction(() => {
+      rollback.mutate(
+        { data: { targetStage, reason } },
+        {
+          onSuccess: onRefresh,
+          onError: () =>
+            setError(
+              "Rollback failed. Refresh the rollout status and try again.",
+            ),
+        },
+      );
+    });
+  };
+
+  return (
+    <Card className="shadow-sm border-indigo-200 dark:border-indigo-900/60">
+      <CardHeader className="px-4 pt-4 pb-3">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Activity className="w-4 h-4 text-indigo-500" />
+              Operational rollout
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Promote internal → canary → general only after the readiness gates
+              pass.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={onRefresh}
+            disabled={loading || busy}
+          >
+            <Activity className="w-3 h-3 mr-1" /> Refresh
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="px-4 pb-4">
+        {statusError ? (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+            Rollout status is unavailable. Access remains fail-closed until the server can read the control-plane state.
+          </p>
+        ) : loading || !status ? (
+          <Skeleton className="h-28 w-full" />
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-2">
+              {["internal", "canary", "general"].map((stage) => {
+                const active = stage === status.stage;
+                const reached =
+                  ["internal", "canary", "general"].indexOf(stage) <=
+                  ["internal", "canary", "general"].indexOf(status.stage);
+                return (
+                  <div
+                    key={stage}
+                    className={cn(
+                      "rounded-lg border px-3 py-2 text-center text-xs capitalize",
+                      active
+                        ? "border-indigo-400 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
+                        : reached
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300"
+                          : "border-border/60 text-muted-foreground",
+                    )}
+                  >
+                    <div className="font-semibold">{stage}</div>
+                    <div className="mt-0.5 text-[10px]">
+                      {active ? "current" : reached ? "passed" : "pending"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-xs",
+                  status.readiness.blockerCount === 0
+                    ? "border-emerald-200 bg-emerald-50/60 dark:border-emerald-800"
+                    : "border-red-200 bg-red-50/70 dark:border-red-800",
+                )}
+              >
+                <div className="flex items-center gap-2 font-semibold">
+                  {status.readiness.blockerCount === 0 ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                  ) : (
+                    <XCircle className="w-3.5 h-3.5 text-red-500" />
+                  )}
+                  {status.readiness.blockerCount} readiness blockers
+                </div>
+                {status.readiness.blockers.length > 0 && (
+                  <ul className="mt-2 space-y-1 text-red-700 dark:text-red-300">
+                    {status.readiness.blockers.map((issue) => (
+                      <li key={issue.key}>• {issue.description}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-xs",
+                  unacknowledged.length === 0
+                    ? "border-emerald-200 bg-emerald-50/60 dark:border-emerald-800"
+                    : "border-amber-200 bg-amber-50/70 dark:border-amber-800",
+                )}
+              >
+                <div className="flex items-center gap-2 font-semibold">
+                  <AlertTriangle
+                    className={cn(
+                      "w-3.5 h-3.5",
+                      unacknowledged.length === 0
+                        ? "text-emerald-500"
+                        : "text-amber-500",
+                    )}
+                  />
+                  {status.readiness.warningCount} readiness warnings
+                </div>
+                {unacknowledged.length > 0 && (
+                  <ul className="mt-2 space-y-1 text-amber-700 dark:text-amber-300">
+                    {status.readiness.warnings
+                      .filter((issue) => unacknowledged.includes(issue.key))
+                      .map((issue) => (
+                        <li key={issue.key}>• {issue.description}</li>
+                      ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            {error && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-300">
+                {error}
+              </p>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2">
+              {unacknowledged.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={acknowledgeWarnings}
+                  disabled={busy}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 mr-1" /> Acknowledge
+                  warnings
+                </Button>
+              )}
+              {nextStage && (
+                <Button
+                  size="sm"
+                  onClick={advanceRollout}
+                  disabled={busy || !status.canAdvance}
+                >
+                  <TrendingUp className="w-3.5 h-3.5 mr-1" /> Promote to{" "}
+                  {nextStage}
+                </Button>
+              )}
+              {status.stage !== "internal" && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={rollbackRollout}
+                  disabled={busy}
+                >
+                  <TrendingDown className="w-3.5 h-3.5 mr-1" /> Roll back
+                </Button>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {status.stage === "general"
+                ? "General access is enabled. Use rollback if monitoring identifies a regression."
+                : status.canAdvance
+                  ? `Ready to promote to ${nextStage}.`
+                  : "Promotion is disabled until the listed readiness gates are satisfied."}
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function FixTool({ label, running, done, onRun, warning }: {
   label: string; running: boolean; done: boolean; onRun: () => void; warning: string;
 }) {
@@ -184,6 +434,14 @@ export default function AuditPage() {
   const { data, isLoading, isFetching, refetch } = useRunAudit({
     query: { enabled: false, staleTime: Infinity } as any,
   });
+  const rollout = useGetOperationalRollout({
+    query: { queryKey: ["getOperationalRollout"], enabled: isAdmin, staleTime: 0 },
+  });
+
+  const refreshRollout = () => {
+    void rollout.refetch();
+    void refetch();
+  };
 
   const fixInventory = useFixAuditInventory();
   const fixDashboard = useFixAuditDashboard();
@@ -238,6 +496,15 @@ export default function AuditPage() {
           </Button>
         </div>
       </div>
+
+      {isAdmin && (
+        <OperationalRolloutPanel
+          status={rollout.data}
+          loading={rollout.isLoading || rollout.isFetching}
+          statusError={rollout.isError}
+          onRefresh={refreshRollout}
+        />
+      )}
 
       {/* Empty state */}
       {!report && !isLoading && !isFetching && (

@@ -21,3 +21,4 @@ export * from "./whatsapp_chats";
 export * from "./whatsapp_reminder_logs";
 export * from "./supplier_credits";
 export * from "./financial_idempotency";
+export * from "./operational_rollouts";
