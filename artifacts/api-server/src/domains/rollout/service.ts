@@ -250,9 +250,11 @@ async function updateRecord(
     })
     .where(
       and(
+        // Stage is the optimistic concurrency guard. Do not compare the
+        // database timestamp here: migration-created rows can retain
+        // PostgreSQL microseconds that JavaScript Date intentionally drops.
         eq(operationalRolloutsTable.id, ROLLOUT_ID),
         eq(operationalRolloutsTable.stage, current.stage),
-        eq(operationalRolloutsTable.updatedAt, current.updatedAt),
       ),
     )
     .returning();
