@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
-import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from 'wouter';
+import { Switch, Route, Router as WouterRouter, Redirect } from 'wouter';
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
@@ -43,7 +43,9 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
       refetchOnReconnect: true,
       retry: (failureCount, error) => {
-        if (error instanceof ApiError && error.status === 401) return false;
+        // Authentication/authorization failures are deterministic for the current
+        // user. Retrying them only turns one denied request into a log storm.
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) return false;
         return failureCount < 2;
       },
     },
@@ -53,35 +55,39 @@ const queryClient = new QueryClient({
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 // ── Permission check helper ────────────────────────────────────────────────────
-function useHasPermission(permKey?: string): boolean | null {
+function useHasAccess(allOf: readonly string[] = [], adminOnly = false): boolean | null {
   const me = useGetMe();
   if (!me) return null;
-  if (!permKey) return true;
-  if (me.role === "admin" || me.role === "manager") return true;
+  if (me.role === "admin") return true;
+  if (adminOnly) return false;
+
   const perms = me.permissions as unknown as Record<string, boolean> | undefined;
-  return !!perms?.[permKey];
+  return allOf.every((permission) => perms?.[permission] === true);
 }
 
 // ── First accessible route for the current user ───────────────────────────────
 const ORDERED_ROUTES = [
-  { permKey: "dashboard",     href: "/dashboard"  },
-  { permKey: "members",       href: "/members"    },
-  { permKey: "plans",         href: "/plans"      },
-  { permKey: "staff",         href: "/staff"      },
-  { permKey: "payments",      href: "/payments"   },
-  { permKey: "accounts",      href: "/accounts"   },
-  { permKey: "viewAccounting",href: "/financials" },
-  { permKey: "stock",         href: "/stock"      },
-  { permKey: "sales",         href: "/sales"      },
-  { permKey: "settings",      href: "/settings"   },
+  { allOf: ["dashboard", "viewProfit"],                 href: "/dashboard"  },
+  { allOf: ["members"],                                  href: "/members"    },
+  { allOf: ["plans"],                                    href: "/plans"      },
+  { allOf: ["staff", "payroll"],                       href: "/staff"      },
+  { allOf: ["payments"],                                 href: "/payments"   },
+  { allOf: ["accounts", "viewAccounting"],             href: "/accounts"   },
+  { allOf: ["viewAccounting", "viewProfit", "viewCost"], href: "/financials" },
+  { allOf: ["stock"],                                    href: "/stock"      },
+  { allOf: ["sales"],                                    href: "/sales"      },
+  { allOf: ["manageSettings"],                           href: "/settings"   },
 ] as const;
 
 function useFirstAccessibleRoute(): string | null {
   const me = useGetMe();
   if (!me) return null;
-  if (me.role === "admin" || me.role === "manager") return "/dashboard";
+  if (me.role === "admin") return "/dashboard";
+
   const perms = me.permissions as unknown as Record<string, boolean> | undefined;
-  return ORDERED_ROUTES.find(r => !!perms?.[r.permKey])?.href ?? null;
+  return ORDERED_ROUTES.find((route) =>
+    route.allOf.every((permission) => perms?.[permission] === true),
+  )?.href ?? null;
 }
 
 // ── No-access screen (staff with all pages disabled) ─────────────────────────
@@ -100,14 +106,22 @@ function NoAccessScreen() {
 }
 
 // ── Protected wrapper ─────────────────────────────────────────────────────────
-function ProtectedRoute({ component: Component, permKey }: { component: React.ComponentType; permKey?: string }) {
+function ProtectedRoute({
+  component: Component,
+  allOf = [],
+  adminOnly = false,
+}: {
+  component: React.ComponentType;
+  allOf?: readonly string[];
+  adminOnly?: boolean;
+}) {
   const { isAuthenticated, isLoading } = useAuth();
-  const hasPermission = useHasPermission(permKey);
+  const hasAccess = useHasAccess(allOf, adminOnly);
   const firstRoute = useFirstAccessibleRoute();
 
-  if (isLoading || (isAuthenticated && hasPermission === null)) return <LoadingScreen />;
+  if (isLoading || (isAuthenticated && hasAccess === null)) return <LoadingScreen />;
   if (!isAuthenticated) return <Redirect to="/login" />;
-  if (hasPermission === false) {
+  if (hasAccess === false) {
     if (!firstRoute) return <NoAccessScreen />;
     return <Redirect to={firstRoute} />;
   }
@@ -122,12 +136,12 @@ function ProtectedRoute({ component: Component, permKey }: { component: React.Co
 // ── Protected member profile (needs params) ───────────────────────────────────
 function ProtectedMemberProfile({ id }: { id: number }) {
   const { isAuthenticated, isLoading } = useAuth();
-  const hasPermission = useHasPermission("members");
+  const hasAccess = useHasAccess(["members"]);
   const firstRoute = useFirstAccessibleRoute();
 
-  if (isLoading || (isAuthenticated && hasPermission === null)) return <LoadingScreen />;
+  if (isLoading || (isAuthenticated && hasAccess === null)) return <LoadingScreen />;
   if (!isAuthenticated) return <Redirect to="/login" />;
-  if (hasPermission === false) {
+  if (hasAccess === false) {
     if (!firstRoute) return <NoAccessScreen />;
     return <Redirect to={firstRoute} />;
   }
@@ -208,25 +222,25 @@ function AppShell() {
           <Route path="/login" component={LoginGuard} />
           <Route path="/setup" component={SetupPage} />
 
-          <Route path="/dashboard"><ProtectedRoute component={Dashboard} permKey="dashboard" /></Route>
-          <Route path="/staff"><ProtectedRoute component={Staff} permKey="staff" /></Route>
-          <Route path="/settings"><ProtectedRoute component={Settings} permKey="settings" /></Route>
-          <Route path="/period-reset"><ProtectedRoute component={PeriodReset} permKey="settings" /></Route>
-          <Route path="/members"><ProtectedRoute component={Members} permKey="members" /></Route>
-          <Route path="/members-overview"><ProtectedRoute component={MembersOverview} permKey="members" /></Route>
+          <Route path="/dashboard"><ProtectedRoute component={Dashboard} allOf={["dashboard", "viewProfit"]} /></Route>
+          <Route path="/staff"><ProtectedRoute component={Staff} allOf={["staff", "payroll"]} /></Route>
+          <Route path="/settings"><ProtectedRoute component={Settings} allOf={["manageSettings"]} /></Route>
+          <Route path="/period-reset"><ProtectedRoute component={PeriodReset} adminOnly /></Route>
+          <Route path="/members"><ProtectedRoute component={Members} allOf={["members"]} /></Route>
+          <Route path="/members-overview"><ProtectedRoute component={MembersOverview} allOf={["members"]} /></Route>
           <Route path="/members/:id">{(params) => <ProtectedMemberProfile id={Number(params.id)} />}</Route>
-          <Route path="/plans"><ProtectedRoute component={Plans} permKey="plans" /></Route>
+          <Route path="/plans"><ProtectedRoute component={Plans} allOf={["plans"]} /></Route>
           <Route path="/payroll"><Redirect to="/staff" /></Route>
-          <Route path="/attendance"><ProtectedRoute component={Attendance} /></Route>
+          <Route path="/attendance"><ProtectedRoute component={Attendance} allOf={["members"]} /></Route>
           <Route path="/notifications"><ProtectedRoute component={NotificationsPage} /></Route>
-          <Route path="/audit"><ProtectedRoute component={AuditPage} /></Route>
-          <Route path="/payments"><ProtectedRoute component={Payments} permKey="payments" /></Route>
+          <Route path="/audit"><ProtectedRoute component={AuditPage} adminOnly /></Route>
+          <Route path="/payments"><ProtectedRoute component={Payments} allOf={["payments"]} /></Route>
           <Route path="/vouchers"><Redirect to="/payments" /></Route>
-          <Route path="/accounts"><ProtectedRoute component={Accounts} permKey="accounts" /></Route>
-          <Route path="/financials"><ProtectedRoute component={Financials} permKey="viewAccounting" /></Route>
-          <Route path="/stock"><ProtectedRoute component={Stock} permKey="stock" /></Route>
-          <Route path="/sales"><ProtectedRoute component={Sales} permKey="sales" /></Route>
-          <Route path="/supplements"><ProtectedRoute component={Supplements} permKey="stock" /></Route>
+          <Route path="/accounts"><ProtectedRoute component={Accounts} allOf={["accounts", "viewAccounting"]} /></Route>
+          <Route path="/financials"><ProtectedRoute component={Financials} allOf={["viewAccounting", "viewProfit", "viewCost"]} /></Route>
+          <Route path="/stock"><ProtectedRoute component={Stock} allOf={["stock"]} /></Route>
+          <Route path="/sales"><ProtectedRoute component={Sales} allOf={["sales"]} /></Route>
+          <Route path="/supplements"><ProtectedRoute component={Supplements} allOf={["stock", "viewCost", "viewProfit"]} /></Route>
 
           <Route path="*"><NotFound /></Route>
         </Switch>
