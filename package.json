@@ -10,6 +10,7 @@
     "architecture:audit": "pnpm --filter @workspace/scripts run architecture:audit",
     "contracts:check": "pnpm --filter @workspace/scripts run contracts:check",
     "architecture:check": "pnpm run contracts:check && pnpm run architecture:audit && pnpm run typecheck",
+    "test:critical": "pnpm --filter @workspace/scripts run test:critical",
     "db:migrate": "pnpm --filter @workspace/db run migrate",
     "dev:desktop": "pnpm --filter @workspace/desktop run dev:desktop",
     "build:web": "pnpm --filter @workspace/desktop run build:web",
