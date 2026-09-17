@@ -12,6 +12,7 @@ export const NAVIGATION_COPY: Record<NavigationLanguage, {
   openMenu: string;
   closeMenu: string;
   moreActions: string;
+  languageLabel: string;
   memberOverview: string;
   periodReset: string;
   collapse: string;
@@ -23,6 +24,7 @@ export const NAVIGATION_COPY: Record<NavigationLanguage, {
     openMenu: "Open menu",
     closeMenu: "Close menu",
     moreActions: "More actions",
+    languageLabel: "Language",
     memberOverview: "Member Overview",
     periodReset: "New Period / Reset",
     collapse: "Collapse",
@@ -34,6 +36,7 @@ export const NAVIGATION_COPY: Record<NavigationLanguage, {
     openMenu: "Ouvrir le menu",
     closeMenu: "Fermer le menu",
     moreActions: "Plus d’actions",
+    languageLabel: "Langue",
     memberOverview: "Aperçu des membres",
     periodReset: "Nouvelle période / Réinitialiser",
     collapse: "Réduire",
@@ -45,6 +48,7 @@ export const NAVIGATION_COPY: Record<NavigationLanguage, {
     openMenu: "فتح القائمة",
     closeMenu: "إغلاق القائمة",
     moreActions: "المزيد من الإجراءات",
+    languageLabel: "اللغة",
     memberOverview: "نظرة عامة على الأعضاء",
     periodReset: "فترة جديدة / إعادة تعيين",
     collapse: "طي",
