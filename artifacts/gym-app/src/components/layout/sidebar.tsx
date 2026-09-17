@@ -66,7 +66,7 @@ export function Sidebar() {
 
       <aside
         className={cn(
-          "bg-sidebar border-r border-sidebar-border h-full flex flex-col fixed left-0 top-0 z-40 transition-all duration-300",
+          "mobile-safe-sidebar bg-sidebar border-r border-sidebar-border h-full flex flex-col fixed left-0 top-0 z-40 transition-all duration-300",
           "w-64",
           collapsed && "md:w-16",
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
@@ -92,7 +92,7 @@ export function Sidebar() {
           </span>
           <button
             onClick={closeMobile}
-            className="md:hidden shrink-0 text-sidebar-foreground/60 hover:text-white transition-colors"
+            className="md:hidden flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:text-white"
             aria-label="Close menu"
           >
             <X className="w-5 h-5" />
@@ -100,7 +100,7 @@ export function Sidebar() {
         </div>
 
         {/* Nav */}
-        <div className="flex-1 overflow-y-auto py-3">
+        <div className="flex-1 overflow-y-auto overscroll-contain py-3">
           <nav className="space-y-0.5 px-2">
             {visibleItems.map((item) => {
               const isActive = item.href === "/members"
@@ -114,7 +114,7 @@ export function Sidebar() {
                   title={collapsed ? label : undefined}
                   onClick={closeMobile}
                   className={cn(
-                    "relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group",
+                    "relative flex min-h-11 touch-manipulation items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group md:min-h-0",
                     collapsed && "md:justify-center md:px-2",
                     isActive
                       ? "bg-primary/20 text-white"
