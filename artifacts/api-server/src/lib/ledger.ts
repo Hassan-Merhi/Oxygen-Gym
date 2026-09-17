@@ -69,6 +69,7 @@ export interface CashMovement {
   sourceNumber: string | null;
   date: Date;
   direction: "in" | "out";
+  category: string;
   amount: number;
   currency: string;
   exchangeRate: number;
@@ -79,8 +80,8 @@ export interface CashMovement {
 }
 
 /**
- * Canonical effective physical-cash movements. Both the Cash statement and
- * current balance use this exact stream so balance, inflows, and outflows cannot drift.
+ * Canonical effective physical-cash movements. This is the only movement stream
+ * that Cash Book, the Cash account statement, and the current balance should use.
  *
  * Important legacy rules:
  * - derive currency equivalents from amount + locked FX whenever possible instead
@@ -126,6 +127,7 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
         p.payment_number AS source_number,
         p.payment_date AS entry_date,
         p.direction,
+        COALESCE(NULLIF(TRIM(p.category), ''), 'other') AS category,
         p.amount,
         p.currency,
         p.exchange_rate,
@@ -161,6 +163,7 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
         v.voucher_number AS source_number,
         v.voucher_date AS entry_date,
         v.direction,
+        'voucher'::text AS category,
         v.amount,
         v.currency,
         v.exchange_rate,
@@ -196,6 +199,7 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
         sp.purchase_number AS source_number,
         sp.purchase_date AS entry_date,
         'out'::text AS direction,
+        'stock_purchase'::text AS category,
         sp.total_cost AS amount,
         sp.currency,
         sp.exchange_rate,
@@ -232,6 +236,7 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
         sc.credit_number AS source_number,
         sp.payment_date AS entry_date,
         'out'::text AS direction,
+        'supplier_payment'::text AS category,
         sp.amount,
         sp.currency,
         COALESCE(NULLIF(sp.exchange_rate, 0), 1) AS exchange_rate,
@@ -265,6 +270,7 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
         cl.source_number,
         cl.entry_date,
         cl.direction,
+        'opening_balance'::text AS category,
         cl.amount,
         cl.currency,
         cl.exchange_rate,
@@ -301,6 +307,7 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
     source_number?: string | null;
     entry_date?: Date | string;
     direction?: string;
+    category?: string | null;
     amount?: number | string;
     currency?: string;
     exchange_rate?: number | string;
@@ -324,6 +331,7 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
       sourceNumber: row.source_number ?? null,
       date: row.entry_date instanceof Date ? row.entry_date : new Date(row.entry_date ?? 0),
       direction: row.direction === "out" ? "out" : "in",
+      category: row.category ?? "other",
       amount,
       currency,
       exchangeRate: rate,
@@ -335,8 +343,29 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
   });
 }
 
-export async function getCurrentBalance(executor: DbExecutor = db): Promise<{ balanceUsd: number; balanceCdf: number }> {
+/**
+ * Revalue the canonical native cash stream using the one live USD/CDF rate from
+ * Settings. Stored transaction rates stay intact for audit/accounting history;
+ * these values are the current display equivalents used by Cash Book/Accounts.
+ */
+export async function getCurrentCashMovements(executor: DbExecutor = db): Promise<{
+  exchangeRate: number;
+  movements: CashMovement[];
+}> {
   const movements = await getCashMovements(executor);
+  const exchangeRate = await getExchangeRate(executor);
+  return {
+    exchangeRate,
+    movements: movements.map((movement) => ({
+      ...movement,
+      exchangeRate,
+      ...toUsdCdf(movement.amount, movement.currency, exchangeRate),
+    })),
+  };
+}
+
+export async function getCurrentBalance(executor: DbExecutor = db): Promise<{ balanceUsd: number; balanceCdf: number }> {
+  const { movements } = await getCurrentCashMovements(executor);
   return movements.reduce(
     (balance, movement) => ({
       balanceUsd: movement.direction === "in" ? addMoney(balance.balanceUsd, movement.amountUsd) : subtractMoney(balance.balanceUsd, movement.amountUsd),
