@@ -1428,6 +1428,35 @@ dateFrom?: string;
 dateTo?: string;
 };
 
+export type ListCurrentCashMovements200ItemsItemDirection = typeof ListCurrentCashMovements200ItemsItemDirection[keyof typeof ListCurrentCashMovements200ItemsItemDirection];
+
+
+export const ListCurrentCashMovements200ItemsItemDirection = {
+  in: 'in',
+  out: 'out',
+} as const;
+
+export type ListCurrentCashMovements200ItemsItem = {
+  sourceType: string;
+  sourceId: number | null;
+  sourceNumber: string | null;
+  date: string;
+  direction: ListCurrentCashMovements200ItemsItemDirection;
+  category: string;
+  amount: number;
+  currency: string;
+  exchangeRate: number;
+  amountUsd: number;
+  amountCdf: number;
+  description: string;
+  party: string;
+};
+
+export type ListCurrentCashMovements200 = {
+  exchangeRate: number;
+  items: ListCurrentCashMovements200ItemsItem[];
+};
+
 export type SetOpeningBalanceBody = {
   targetAmountUsd: number;
   date?: string | null;
