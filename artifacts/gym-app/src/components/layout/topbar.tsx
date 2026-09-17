@@ -104,7 +104,7 @@ function NotificationBell() {
       <Button
         variant="ghost"
         size="icon"
-        className="relative h-9 w-9 text-muted-foreground hover:text-foreground"
+        className="relative h-11 w-11 text-muted-foreground hover:text-foreground md:h-9 md:w-9"
         onClick={() => setOpen(v => !v)}
         aria-label={t("notif.bell")}
         data-testid="btn-notifications"
@@ -129,14 +129,14 @@ function NotificationBell() {
               )}
             </div>
             {unread > 0 && (
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-primary hover:text-primary" onClick={handleMarkAll}>
+              <Button variant="ghost" size="sm" className="h-11 px-2 text-xs text-primary hover:text-primary md:h-7" onClick={handleMarkAll}>
                 <CheckCheck className="w-3 h-3 mr-1" />
                 {t("notif.markAllRead")}
               </Button>
             )}
           </div>
 
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-[min(20rem,calc(100dvh-12rem))] overflow-y-auto overscroll-contain">
             {recent.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
                 <Bell className="w-7 h-7 opacity-20" />
@@ -158,9 +158,10 @@ function NotificationBell() {
                       <p className="text-xs text-foreground leading-snug">{n.message}</p>
                     </div>
                     <button
-                      className="shrink-0 text-muted-foreground hover:text-emerald-500 mt-0.5 transition-colors"
+                      className="-my-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-emerald-500"
                       onClick={(e) => handleMarkRead(n.key, e)}
                       title={t("notif.markRead")}
+                      aria-label={t("notif.markRead")}
                     >
                       <Check className="w-3.5 h-3.5" />
                     </button>
@@ -173,7 +174,7 @@ function NotificationBell() {
           <div className="px-4 py-2.5 border-t border-border bg-muted/20">
             <a
               href="/notifications"
-              className="block w-full text-center text-xs text-primary hover:underline font-medium"
+              className="block w-full py-2 text-center text-xs text-primary hover:underline font-medium"
               onClick={() => setOpen(false)}
             >
               {t("notif.viewAll")}
@@ -202,13 +203,13 @@ export function Topbar() {
     : user?.username?.charAt(0).toUpperCase() ?? "U";
 
   return (
-    <header className="h-16 bg-background border-b border-border/60 flex items-center justify-between px-3 md:px-6 sticky top-0 z-20 w-full shadow-sm">
+    <header className="mobile-safe-topbar h-16 bg-background border-b border-border/60 flex items-center justify-between px-3 md:px-6 sticky top-0 z-20 w-full shadow-sm">
       {/* Left: hamburger on mobile */}
       <div className="flex items-center gap-2">
         <Button
           variant="ghost"
           size="icon"
-          className="md:hidden h-9 w-9 text-muted-foreground hover:text-foreground"
+          className="md:hidden h-11 w-11 text-muted-foreground hover:text-foreground"
           onClick={openMobile}
           aria-label="Open menu"
         >
@@ -216,7 +217,7 @@ export function Topbar() {
         </Button>
       </div>
 
-      <div className="flex items-center gap-1.5 md:gap-2">
+      <div className="flex min-w-0 items-center gap-0.5 sm:gap-1.5 md:gap-2">
         {/* Language selector */}
         <div className="hidden md:block">
           <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
@@ -233,7 +234,7 @@ export function Topbar() {
         <Button
           variant="ghost"
           size="sm"
-          className="md:hidden h-8 w-11 text-xs font-bold tracking-wide text-muted-foreground hover:text-foreground"
+          className="md:hidden h-11 min-w-11 px-2 text-xs font-bold tracking-wide text-muted-foreground hover:text-foreground"
           onClick={() => {
             const langs = ["en", "fr", "ar"] as const;
             const next = langs[(langs.indexOf(language as typeof langs[number]) + 1) % langs.length];
@@ -248,7 +249,7 @@ export function Topbar() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          className="h-11 w-11 text-muted-foreground hover:text-foreground md:h-8 md:w-8"
           onClick={toggle}
           aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
         >
@@ -262,24 +263,25 @@ export function Topbar() {
         <div className="hidden md:block h-6 w-px bg-border mx-1" />
 
         {/* User area */}
-        <div className="flex items-center gap-2 md:gap-2.5">
-          <Avatar className="h-8 w-8 rounded-lg border border-primary/20 shadow-sm">
+        <div className="flex min-w-0 items-center gap-0.5 sm:gap-2 md:gap-2.5">
+          <Avatar className="hidden h-8 w-8 rounded-lg border border-primary/20 shadow-sm xs:block sm:block">
             <AvatarFallback className="rounded-lg text-xs font-bold bg-primary/10 text-primary">
               {initials}
             </AvatarFallback>
           </Avatar>
 
-          <div className="hidden sm:flex flex-col leading-tight">
-            <span className="text-sm font-semibold text-foreground">{user?.name ?? user?.username}</span>
+          <div className="hidden sm:flex flex-col leading-tight min-w-0">
+            <span className="max-w-32 truncate text-sm font-semibold text-foreground">{user?.name ?? user?.username}</span>
             <span className="text-[11px] text-muted-foreground capitalize">{user?.role}</span>
           </div>
 
           <Button
             variant="ghost"
             size="sm"
-            className="text-muted-foreground hover:text-foreground px-2 md:px-2.5 h-8"
+            className="h-11 min-w-11 px-2 text-muted-foreground hover:text-foreground md:h-8 md:px-2.5"
             onClick={handleLogout}
             data-testid="button-logout"
+            aria-label={t("nav.logout")}
           >
             <LogOut className="w-4 h-4 md:me-1.5" />
             <span className="hidden md:inline text-sm">{t("nav.logout")}</span>
