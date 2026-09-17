@@ -6,12 +6,13 @@ import { logger } from "../lib/logger";
 import { sendDailySummaryNow, sendDirectMessage, formatExpiryReminderMessage } from "../lib/whatsapp";
 
 let scheduled = false;
+const scheduledTasks: Array<ReturnType<typeof cron.schedule>> = [];
 
 export function scheduleBackgroundJobs(): void {
   if (scheduled) return;
   scheduled = true;
 
-  cron.schedule("0 * * * *", async () => {
+  scheduledTasks.push(cron.schedule("0 * * * *", async () => {
     try {
       const settings = await db.query.settingsTable.findFirst();
       if (!settings?.greenApiInstanceId || !settings.greenApiToken) return;
@@ -26,9 +27,9 @@ export function scheduleBackgroundJobs(): void {
     } catch (err) {
       logger.error({ err }, "Daily cash summary job failed");
     }
-  });
+  }));
 
-  cron.schedule("15 * * * *", async () => {
+  scheduledTasks.push(cron.schedule("15 * * * *", async () => {
     try {
       const settings = await db.query.settingsTable.findFirst();
       if (!settings?.greenApiInstanceId || !settings.greenApiToken) return;
@@ -85,5 +86,11 @@ export function scheduleBackgroundJobs(): void {
     } catch (err) {
       logger.error({ err }, "24h expiry reminder job failed");
     }
-  });
+  }));
+}
+
+export async function stopBackgroundJobs(): Promise<void> {
+  const tasks = scheduledTasks.splice(0);
+  scheduled = false;
+  await Promise.allSettled(tasks.map((task) => Promise.resolve(task.stop())));
 }
