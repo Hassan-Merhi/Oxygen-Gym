@@ -3,10 +3,17 @@ import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { LogOut, Bell, Check, CheckCheck, AlertCircle, Package, DollarSign, UserX, Snowflake, Sun, Moon, Menu } from "lucide-react";
+import { LogOut, Bell, Check, CheckCheck, AlertCircle, Package, DollarSign, UserX, Snowflake, Sun, Moon, Menu, MoreVertical, Languages } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,6 +27,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme";
 import { useSidebarStore } from "@/lib/sidebar-store";
+import {
+  NAVIGATION_LANGUAGE_OPTIONS,
+  navigationCopy,
+  type NavigationLanguage,
+} from "@/lib/mobile-navigation";
 
 const TYPE_ICONS: Record<string, React.ElementType> = {
   member_expiring: AlertCircle,
@@ -90,13 +102,23 @@ function NotificationBell() {
   };
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
+    const handlePointerDown = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     };
-    if (open) document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+
+    if (open) {
+      document.addEventListener("mousedown", handlePointerDown);
+      document.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [open]);
 
   return (
@@ -107,30 +129,31 @@ function NotificationBell() {
         className="relative h-11 w-11 text-muted-foreground hover:text-foreground md:h-9 md:w-9"
         onClick={() => setOpen(v => !v)}
         aria-label={t("notif.bell")}
+        aria-expanded={open}
         data-testid="btn-notifications"
       >
-        <Bell className="w-4 h-4" />
+        <Bell className="h-4 w-4" />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-bold px-1 leading-none ring-2 ring-background">
+          <span className="absolute -top-0.5 end-[-2px] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-background">
             {unread > 99 ? "99+" : unread}
           </span>
         )}
       </Button>
 
       {open && (
-        <div className="absolute end-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1rem)] rounded-xl border border-border bg-popover shadow-xl z-50 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm">{t("notif.title")}</span>
+        <div className="absolute end-0 z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-border bg-popover shadow-xl sm:w-80">
+          <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm font-semibold">{t("notif.title")}</span>
               {unread > 0 && (
-                <Badge className="bg-rose-500 text-white text-xs px-1.5 py-0 border-0 rounded-full">
+                <Badge className="rounded-full border-0 bg-rose-500 px-1.5 py-0 text-xs text-white">
                   {unread}
                 </Badge>
               )}
             </div>
             {unread > 0 && (
-              <Button variant="ghost" size="sm" className="h-11 px-2 text-xs text-primary hover:text-primary md:h-7" onClick={handleMarkAll}>
-                <CheckCheck className="w-3 h-3 mr-1" />
+              <Button variant="ghost" size="sm" className="h-11 shrink-0 px-2 text-xs text-primary hover:text-primary md:h-7" onClick={handleMarkAll}>
+                <CheckCheck className="me-1 h-3 w-3" />
                 {t("notif.markAllRead")}
               </Button>
             )}
@@ -138,32 +161,33 @@ function NotificationBell() {
 
           <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto overscroll-contain sm:max-h-80">
             {recent.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
-                <Bell className="w-7 h-7 opacity-20" />
+              <div className="flex flex-col items-center justify-center gap-2 py-10 text-muted-foreground">
+                <Bell className="h-7 w-7 opacity-20" />
                 <p className="text-xs">{t("notif.empty")}</p>
               </div>
             ) : (
               recent.map((n) => {
                 const Icon = TYPE_ICONS[n.type] ?? Bell;
                 return (
-                  <div key={n.key} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/40 border-b border-border/40 last:border-0 transition-colors">
-                    <div className={cn("mt-1.5 w-2 h-2 rounded-full shrink-0", PRIORITY_DOT[n.priority] ?? "bg-slate-400")} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <Icon className="w-3 h-3 text-muted-foreground shrink-0" />
-                        <span className="text-xs font-medium text-muted-foreground truncate">
+                  <div key={n.key} className="flex items-start gap-3 border-b border-border/40 px-4 py-3 transition-colors last:border-0 hover:bg-muted/40 focus-within:bg-muted/40">
+                    <div className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", PRIORITY_DOT[n.priority] ?? "bg-slate-400")} />
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-0.5 flex items-center gap-1.5">
+                        <Icon className="h-3 w-3 shrink-0 text-muted-foreground" />
+                        <span className="truncate text-xs font-medium text-muted-foreground">
                           {t(`notif.type.${n.type}`)}
                         </span>
                       </div>
-                      <p className="text-xs text-foreground leading-snug">{n.message}</p>
+                      <p className="text-xs leading-snug text-foreground">{n.message}</p>
                     </div>
                     <button
-                      className="-my-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-emerald-500"
+                      type="button"
+                      className="-my-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       onClick={(e) => handleMarkRead(n.key, e)}
                       title={t("notif.markRead")}
                       aria-label={t("notif.markRead")}
                     >
-                      <Check className="w-3.5 h-3.5" />
+                      <Check className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 );
@@ -171,10 +195,10 @@ function NotificationBell() {
             )}
           </div>
 
-          <div className="px-4 py-2.5 border-t border-border bg-muted/20">
+          <div className="border-t border-border bg-muted/20 px-4 py-2.5">
             <a
               href="/notifications"
-              className="block w-full py-2 text-center text-xs text-primary hover:underline font-medium"
+              className="block min-h-11 w-full rounded-md py-3 text-center text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:min-h-0 sm:py-2"
               onClick={() => setOpen(false)}
             >
               {t("notif.viewAll")}
@@ -192,6 +216,8 @@ export function Topbar() {
   const [, setLocation] = useLocation();
   const { theme, toggle } = useTheme();
   const { openMobile } = useSidebarStore();
+  const navLanguage = language as NavigationLanguage;
+  const copy = navigationCopy(navLanguage);
 
   const handleLogout = () => {
     logout();
@@ -202,91 +228,129 @@ export function Topbar() {
     ? user.name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()
     : user?.username?.charAt(0).toUpperCase() ?? "U";
 
+  const nextThemeLabel = theme === "dark" ? copy.lightMode : copy.darkMode;
+
   return (
-    <header className="mobile-safe-topbar h-16 bg-background border-b border-border/60 flex items-center justify-between px-3 md:px-6 sticky top-0 z-20 w-full shadow-sm">
-      {/* Left: hamburger on mobile */}
-      <div className="flex items-center gap-2">
+    <header className="mobile-safe-topbar sticky top-0 z-20 flex h-16 w-full items-center justify-between border-b border-border/60 bg-background px-3 shadow-sm md:px-6">
+      {/* Mobile primary navigation */}
+      <div className="flex min-w-0 items-center gap-2">
         <Button
           variant="ghost"
           size="icon"
-          className="md:hidden h-11 w-11 text-muted-foreground hover:text-foreground"
+          className="h-11 w-11 text-muted-foreground hover:text-foreground md:hidden"
           onClick={openMobile}
-          aria-label="Open menu"
+          aria-label={copy.openMenu}
+          data-testid="button-mobile-menu"
         >
-          <Menu className="w-5 h-5" />
+          <Menu className="h-5 w-5" />
         </Button>
+        <span className="truncate text-sm font-semibold tracking-wide text-foreground md:hidden">OXYGEN GYM</span>
       </div>
 
       <div className="flex min-w-0 items-center gap-0.5 sm:gap-1.5 md:gap-2">
-        {/* Language selector */}
+        {/* Desktop language selector */}
         <div className="hidden md:block">
-          <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
-            <SelectTrigger className="w-28 h-8 text-xs bg-muted/50 border-border/60" data-testid="select-language">
+          <Select value={language} onValueChange={(val) => setLanguage(val as NavigationLanguage)}>
+            <SelectTrigger className="h-8 w-28 border-border/60 bg-muted/50 text-xs" data-testid="select-language">
               <SelectValue placeholder="Language" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="en">English</SelectItem>
-              <SelectItem value="fr">Français</SelectItem>
-              <SelectItem value="ar">العربية</SelectItem>
+              {NAVIGATION_LANGUAGE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="md:hidden h-11 min-w-11 px-2 text-xs font-bold tracking-wide text-muted-foreground hover:text-foreground"
-          onClick={() => {
-            const langs = ["en", "fr", "ar"] as const;
-            const next = langs[(langs.indexOf(language as typeof langs[number]) + 1) % langs.length];
-            setLanguage(next);
-          }}
-          aria-label="Change language"
-          data-testid="select-language"
-        >
-          {language.toUpperCase()}
-        </Button>
 
         <Button
           variant="ghost"
           size="icon"
-          className="h-11 w-11 text-muted-foreground hover:text-foreground md:h-8 md:w-8"
+          className="hidden h-8 w-8 text-muted-foreground hover:text-foreground md:inline-flex"
           onClick={toggle}
-          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          aria-label={nextThemeLabel}
         >
-          {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </Button>
 
-        <div className="hidden md:block h-6 w-px bg-border mx-1" />
+        <div className="mx-1 hidden h-6 w-px bg-border md:block" />
 
         <NotificationBell />
 
-        <div className="hidden md:block h-6 w-px bg-border mx-1" />
+        <div className="mx-1 hidden h-6 w-px bg-border md:block" />
 
-        {/* User area */}
-        <div className="flex min-w-0 items-center gap-0.5 sm:gap-2 md:gap-2.5">
-          <Avatar className="hidden h-8 w-8 rounded-lg border border-primary/20 shadow-sm sm:block">
-            <AvatarFallback className="rounded-lg text-xs font-bold bg-primary/10 text-primary">
+        {/* Desktop user area */}
+        <div className="hidden min-w-0 items-center gap-2.5 md:flex">
+          <Avatar className="h-8 w-8 rounded-lg border border-primary/20 shadow-sm">
+            <AvatarFallback className="rounded-lg bg-primary/10 text-xs font-bold text-primary">
               {initials}
             </AvatarFallback>
           </Avatar>
 
-          <div className="hidden sm:flex flex-col leading-tight min-w-0">
+          <div className="flex min-w-0 flex-col leading-tight">
             <span className="max-w-32 truncate text-sm font-semibold text-foreground">{user?.name ?? user?.username}</span>
-            <span className="text-[11px] text-muted-foreground capitalize">{user?.role}</span>
+            <span className="text-[11px] capitalize text-muted-foreground">{user?.role}</span>
           </div>
 
           <Button
             variant="ghost"
             size="sm"
-            className="h-11 min-w-11 px-2 text-muted-foreground hover:text-foreground md:h-8 md:px-2.5"
+            className="h-8 px-2.5 text-muted-foreground hover:text-foreground"
             onClick={handleLogout}
             data-testid="button-logout"
             aria-label={t("nav.logout")}
           >
-            <LogOut className="w-4 h-4 md:me-1.5" />
-            <span className="hidden md:inline text-sm">{t("nav.logout")}</span>
+            <LogOut className="me-1.5 h-4 w-4" />
+            <span className="text-sm">{t("nav.logout")}</span>
           </Button>
         </div>
+
+        {/* Mobile secondary actions keep the 320px topbar uncluttered. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-11 w-11 text-muted-foreground hover:text-foreground md:hidden"
+              aria-label={copy.moreActions}
+              data-testid="button-mobile-actions"
+            >
+              <MoreVertical className="h-5 w-5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-60">
+            <div className="px-2 py-2">
+              <p className="truncate text-sm font-semibold text-foreground">{user?.name ?? user?.username}</p>
+              <p className="text-xs capitalize text-muted-foreground">{user?.role}</p>
+            </div>
+            <DropdownMenuSeparator />
+            <div className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5"><Languages className="h-3.5 w-3.5" />Language</span>
+            </div>
+            {NAVIGATION_LANGUAGE_OPTIONS.map((option) => (
+              <DropdownMenuItem
+                key={option.value}
+                className="min-h-11 cursor-pointer"
+                onSelect={() => setLanguage(option.value)}
+              >
+                <span className="flex-1">{option.label}</span>
+                {language === option.value && <Check className="h-4 w-4 text-primary" />}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="min-h-11 cursor-pointer" onSelect={toggle}>
+              {theme === "dark" ? <Sun className="me-2 h-4 w-4" /> : <Moon className="me-2 h-4 w-4" />}
+              {nextThemeLabel}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="min-h-11 cursor-pointer text-destructive focus:text-destructive"
+              onSelect={handleLogout}
+              data-testid="button-mobile-logout"
+            >
+              <LogOut className="me-2 h-4 w-4" />
+              {t("nav.logout")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );
