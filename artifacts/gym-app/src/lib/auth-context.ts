@@ -1,18 +1,15 @@
 import { createContext, useContext } from "react";
+import type { CurrentUser } from "@workspace/api-client-react";
 import { AUTH_TOKEN_KEY } from "@/config/env";
 
 export const TOKEN_KEY = AUTH_TOKEN_KEY;
 
-export interface AuthUser {
-  id: number;
-  username: string;
-  name: string;
-  email?: string | null;
-  role: string;
-  status: string;
-  permissions: Record<string, boolean>;
-  lastLoginAt?: string | null;
-}
+/**
+ * Authentication and generated API consumers share the exact same current-user
+ * contract. Keeping one source of truth prevents permission/role drift while the
+ * auth provider seeds the generated /api/auth/me query cache.
+ */
+export type AuthUser = CurrentUser;
 
 export interface AuthState {
   user: AuthUser | null;

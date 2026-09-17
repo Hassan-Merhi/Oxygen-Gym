@@ -1,0 +1,72 @@
+name: Mobile Regression
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-regression-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install isolated browser test runner
+        run: pnpm add -Dw --lockfile=false @playwright/test@1.55.0
+      - name: Install Chromium and WebKit
+        run: pnpm exec playwright install --with-deps chromium webkit
+      - name: Build gym app
+        run: BASE_PATH=/ pnpm --filter @workspace/gym-app run build
+      - name: Start preview server
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --dir artifacts/gym-app exec vite preview --config vite.config.ts --host 127.0.0.1 --port 4173 > /tmp/oxygen-gym-preview.log 2>&1 &
+          echo $! > /tmp/oxygen-gym-preview.pid
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:4173/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/oxygen-gym-preview.log
+          exit 1
+      - name: Run mobile browser regression suite
+        run: pnpm exec playwright test --config=.github/mobile-regression/playwright.config.mjs
+      - name: Upload browser report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-regression-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop preview server
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/oxygen-gym-preview.pid ]; then
+            kill "$(cat /tmp/oxygen-gym-preview.pid)" 2>/dev/null || true
+          fi

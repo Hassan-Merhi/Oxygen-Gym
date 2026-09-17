@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGetMe } from "@/hooks/use-me";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useSidebarStore } from "@/lib/sidebar-store";
 import {
   directionForNavigationLanguage,
@@ -47,10 +48,12 @@ export function Sidebar() {
   const { t, language } = useI18n();
   const [location] = useLocation();
   const me = useGetMe();
+  const isMobile = useIsMobile();
   const { collapsed, toggle, mobileOpen, closeMobile } = useSidebarStore();
   const navLanguage = language as NavigationLanguage;
   const copy = navigationCopy(navLanguage);
   const isRtl = directionForNavigationLanguage(navLanguage) === "rtl";
+  const drawerHidden = isMobile && !mobileOpen;
 
   const isAdmin = me?.role === "admin";
   const perms = me?.permissions as Record<string, boolean> | undefined;
@@ -89,7 +92,6 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile backdrop */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm md:hidden"
@@ -107,8 +109,9 @@ export function Sidebar() {
             : "ltr:-translate-x-full rtl:translate-x-full md:translate-x-0"
         )}
         aria-label={copy.openMenu}
+        aria-hidden={drawerHidden || undefined}
+        inert={drawerHidden}
       >
-        {/* Logo header */}
         <div className="flex h-16 items-center gap-3 overflow-hidden border-b border-sidebar-border px-3">
           <div className="h-8 w-8 shrink-0 rounded-lg bg-primary flex items-center justify-center shadow-sm">
             <img
@@ -136,7 +139,6 @@ export function Sidebar() {
           </button>
         </div>
 
-        {/* Nav */}
         <div className="flex-1 overflow-y-auto overscroll-contain py-3">
           <nav className="space-y-0.5 px-2">
             {visibleItems.map((item) => {
@@ -159,7 +161,6 @@ export function Sidebar() {
                   )}
                   data-testid={`nav-${item.id}`}
                 >
-                  {/* Logical-edge accent bar for the active item */}
                   {isActive && (
                     <span className={cn(
                       "absolute top-1/2 h-6 w-[3px] -translate-y-1/2 bg-primary ltr:left-0 ltr:rounded-r-full rtl:right-0 rtl:rounded-l-full",
@@ -182,7 +183,6 @@ export function Sidebar() {
           </nav>
         </div>
 
-        {/* Collapse toggle — desktop only */}
         <div className="hidden border-t border-sidebar-border p-2 md:block">
           <button
             type="button"
