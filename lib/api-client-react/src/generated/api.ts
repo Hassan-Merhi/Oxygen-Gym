@@ -76,6 +76,7 @@ import type {
   ListActivityLogsParams,
   ListAttendanceParams,
   ListChartAccounts200Item,
+  ListCurrentCashMovements200,
   ListExpenseEntriesParams,
   ListLedgerParams,
   ListMembersParams,
@@ -4598,6 +4599,83 @@ export const useDeleteVoucher = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getDeleteVoucherMutationOptions(options));
     }
+
+export const getListCurrentCashMovementsUrl = () => {
+
+
+
+
+  return `/api/ledger/movements`
+}
+
+/**
+ * @summary List current cash movements revalued at the live exchange rate
+ */
+export const listCurrentCashMovements = async ( options?: RequestInit): Promise<ListCurrentCashMovements200> => {
+
+  return customFetch<ListCurrentCashMovements200>(getListCurrentCashMovementsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCurrentCashMovementsQueryKey = () => {
+    return [
+    `/api/ledger/movements`
+    ] as const;
+    }
+
+
+export const getListCurrentCashMovementsQueryOptions = <TData = Awaited<ReturnType<typeof listCurrentCashMovements>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCurrentCashMovements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCurrentCashMovementsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCurrentCashMovements>>> = ({ signal }) => listCurrentCashMovements({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCurrentCashMovements>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCurrentCashMovementsQueryResult = NonNullable<Awaited<ReturnType<typeof listCurrentCashMovements>>>
+export type ListCurrentCashMovementsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List current cash movements revalued at the live exchange rate
+ */
+
+export function useListCurrentCashMovements<TData = Awaited<ReturnType<typeof listCurrentCashMovements>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCurrentCashMovements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCurrentCashMovementsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getSetOpeningBalanceUrl = () => {
 

@@ -1652,6 +1652,29 @@ export const DeleteVoucherParams = zod.object({
 
 
 /**
+ * @summary List current cash movements revalued at the live exchange rate
+ */
+export const ListCurrentCashMovementsResponse = zod.object({
+  "exchangeRate": zod.number(),
+  "items": zod.array(zod.object({
+  "sourceType": zod.string(),
+  "sourceId": zod.number().nullable(),
+  "sourceNumber": zod.string().nullable(),
+  "date": zod.coerce.date(),
+  "direction": zod.enum(['in', 'out']),
+  "category": zod.string(),
+  "amount": zod.number(),
+  "currency": zod.string(),
+  "exchangeRate": zod.number(),
+  "amountUsd": zod.number(),
+  "amountCdf": zod.number(),
+  "description": zod.string(),
+  "party": zod.string()
+}))
+})
+
+
+/**
  * @summary Set a cash opening balance (inserts an adjustment entry, no data deleted)
  */
 export const SetOpeningBalanceBody = zod.object({
