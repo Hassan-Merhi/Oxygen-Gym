@@ -146,6 +146,7 @@ export const ENDPOINT_POLICIES: readonly EndpointPolicy[] = [
 
   // Ledger / accounting.
   p("GET", "/ledger/balance", "permission", "Read cash balance", { allOf: ["viewAccounting"] }),
+  p("GET", "/ledger/movements", "permission", "Read current cash movements", { allOf: ["viewAccounting"] }),
   p("POST", "/ledger/opening-balance", "admin", "Set opening cash balance"),
   p("GET", "/ledger", "permission", "Read cash ledger", { allOf: ["viewAccounting"] }),
   p("GET", "/accounts/summary", "permission", "Accounts summary", { allOf: ["viewAccounting"] }),
