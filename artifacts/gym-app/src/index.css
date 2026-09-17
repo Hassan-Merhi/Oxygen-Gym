@@ -55,7 +55,7 @@
   --color-sidebar-primary-border: var(--sidebar-primary-border);
   --color-sidebar-accent: hsl(var(--sidebar-accent));
   --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
-  --color-sidebar-accent-border: var(--sidebar-accent-border);
+  --color-sidebar-accent-border: hsl(var(--sidebar-accent-border));
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 
   --font-sans: var(--app-font-sans);
@@ -223,6 +223,269 @@
     }
     .mobile-safe-bottom {
       padding-bottom: max(1rem, env(safe-area-inset-bottom)) !important;
+    }
+
+    /* Phase 2: Sales POS cart becomes a real phone card list instead of a 760px table. */
+    table[class~="min-w-[760px]"] {
+      display: block;
+      min-width: 0 !important;
+      width: 100%;
+    }
+    table[class~="min-w-[760px]"] thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    table[class~="min-w-[760px]"] tbody {
+      display: block;
+      width: 100%;
+    }
+    table[class~="min-w-[760px]"] tbody tr {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 0.75rem 1rem;
+      margin: 0.75rem;
+      padding: 0.875rem;
+      border: 1px solid hsl(var(--border));
+      border-radius: 0.875rem;
+      background: hsl(var(--background));
+    }
+    table[class~="min-w-[760px]"] tbody td {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      gap: 0.25rem;
+      padding: 0;
+      text-align: start;
+    }
+    table[class~="min-w-[760px]"] tbody td::before,
+    div[role="dialog"][class*="max-w-2xl"] table tbody td::before,
+    table.table-fixed tbody td::before {
+      color: hsl(var(--muted-foreground));
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      line-height: 1rem;
+      text-transform: uppercase;
+    }
+    table[class~="min-w-[760px]"] tbody td:first-child {
+      grid-column: 1 / -1;
+      font-size: 0.9375rem;
+      font-weight: 600;
+    }
+    table[class~="min-w-[760px]"] tbody td:nth-child(2)::before { content: "Qty"; }
+    table[class~="min-w-[760px]"] tbody td:nth-child(3)::before { content: "Price"; }
+    table[class~="min-w-[760px]"] tbody td:nth-child(4)::before { content: "Discount"; }
+    table[class~="min-w-[760px]"] tbody td:nth-child(5)::before { content: "Total"; }
+    table[class~="min-w-[760px]"] tbody td:nth-child(n+6):not(:last-child) {
+      display: none;
+    }
+    table[class~="min-w-[760px]"] tbody td:last-child {
+      grid-column: 1 / -1;
+      align-items: flex-end;
+      border-top: 1px solid hsl(var(--border));
+      padding-top: 0.625rem;
+    }
+    table[class~="min-w-[760px]"] tbody td input {
+      min-height: 2.75rem;
+      width: 100% !important;
+      max-width: none;
+    }
+    table[class~="min-w-[760px]"] tbody td button {
+      min-width: 2.75rem !important;
+      min-height: 2.75rem !important;
+    }
+
+    /* Sales receipt and edit dialogs use cards too; no horizontal table scrolling. */
+    div[role="dialog"][class*="max-w-2xl"] table {
+      display: block;
+      width: 100%;
+      min-width: 0 !important;
+    }
+    div[role="dialog"][class*="max-w-2xl"] table thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    div[role="dialog"][class*="max-w-2xl"] table tbody {
+      display: block;
+      width: 100%;
+    }
+    div[role="dialog"][class*="max-w-2xl"] table tbody tr {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 0.75rem 1rem;
+      padding: 0.875rem 0;
+      border-bottom: 1px solid hsl(var(--border));
+    }
+    div[role="dialog"][class*="max-w-2xl"] table tbody tr:last-child {
+      border-bottom: 0;
+    }
+    div[role="dialog"][class*="max-w-2xl"] table tbody td {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      gap: 0.25rem;
+      padding: 0;
+      text-align: start;
+    }
+    div[role="dialog"][class*="max-w-2xl"] table tbody td:first-child {
+      grid-column: 1 / -1;
+      font-weight: 600;
+    }
+    div[role="dialog"][class*="max-w-2xl"] table tbody td:nth-child(2)::before { content: "Qty"; }
+    div[role="dialog"][class*="max-w-2xl"] table tbody td:nth-child(3)::before { content: "Unit price"; }
+    div[role="dialog"][class*="max-w-2xl"] table tbody td:nth-child(4)::before { content: "Discount"; }
+    div[role="dialog"][class*="max-w-2xl"] table tbody td:nth-child(5)::before { content: "Line total"; }
+    div[role="dialog"][class*="max-w-2xl"] table tbody td:nth-child(6)::before { content: "Cost"; }
+    div[role="dialog"][class*="max-w-2xl"] table tbody td:nth-child(7)::before { content: "Profit"; }
+    div[role="dialog"][class*="max-w-2xl"] table tbody input {
+      min-height: 2.75rem;
+      width: 100%;
+    }
+
+    /* Sales history rows become two-column receipt cards instead of a fixed desktop grid. */
+    [class*="grid-cols-[minmax(130px"] {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) auto !important;
+      gap: 0.75rem 1rem !important;
+      padding: 0.875rem 1rem !important;
+    }
+    [class*="grid-cols-[minmax(130px"] > div:nth-child(2) {
+      text-align: end;
+    }
+    [class*="grid-cols-[minmax(130px"] > div:nth-child(3),
+    [class*="grid-cols-[minmax(130px"] > div:nth-child(4) {
+      display: block !important;
+    }
+    [class*="grid-cols-[minmax(130px"] > div:nth-child(4) {
+      text-align: end;
+    }
+    [class*="grid-cols-[minmax(130px"] > div:nth-child(5) {
+      grid-column: 1 / -1;
+      justify-content: flex-end;
+      border-top: 1px solid hsl(var(--border));
+      padding-top: 0.625rem;
+    }
+    [class*="grid-cols-[minmax(130px"] > div:nth-child(5) button {
+      width: 2.75rem !important;
+      height: 2.75rem !important;
+    }
+
+    /* Keep checkout actions clear of iPhone home indicators. */
+    .sticky.bottom-0 {
+      padding-bottom: max(1rem, env(safe-area-inset-bottom)) !important;
+    }
+
+    /* Phase 2: Accounts ledger becomes a phone-native transaction card list. */
+    table.table-fixed {
+      display: block;
+      width: 100%;
+      table-layout: auto !important;
+    }
+    table.table-fixed thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    table.table-fixed tbody {
+      display: block;
+      width: 100%;
+      padding: 0.75rem;
+    }
+    table.table-fixed tbody tr {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 0.625rem 1rem;
+      margin-bottom: 0.75rem;
+      padding: 0.875rem;
+      border: 1px solid hsl(var(--border));
+      border-radius: 0.875rem;
+      background: hsl(var(--background));
+    }
+    table.table-fixed tbody tr:last-child {
+      margin-bottom: 0;
+    }
+    table.table-fixed tbody td {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      gap: 0.2rem;
+      padding: 0;
+      text-align: start;
+    }
+    table.table-fixed tbody td:nth-child(1),
+    table.table-fixed tbody td:nth-child(2),
+    table.table-fixed tbody td:nth-child(5),
+    table.table-fixed tbody td[colspan] {
+      grid-column: 1 / -1;
+    }
+    table.table-fixed tbody td:nth-child(1)::before { content: "Date"; }
+    table.table-fixed tbody td:nth-child(2)::before { content: "Description"; }
+    table.table-fixed tbody td:nth-child(3)::before { content: "In"; }
+    table.table-fixed tbody td:nth-child(4)::before { content: "Out"; }
+    table.table-fixed tbody td:nth-child(5)::before { content: "Balance"; }
+    table.table-fixed tbody td:nth-child(4) {
+      align-items: flex-end;
+      text-align: end;
+    }
+    table.table-fixed tbody td:nth-child(5) {
+      align-items: flex-end;
+      border-top: 1px solid hsl(var(--border));
+      padding-top: 0.625rem;
+      text-align: end;
+    }
+    table.table-fixed tbody td:nth-child(2) p {
+      overflow: visible;
+      white-space: normal;
+      text-overflow: clip;
+    }
+    table.table-fixed tbody td[colspan] {
+      display: block;
+      padding: 2rem 0;
+      text-align: center;
+    }
+
+    /* Accounts period/currency controls use the full phone width and 44px tap targets. */
+    div:has(+ div table.table-fixed) > div:first-child {
+      align-items: stretch !important;
+    }
+    div:has(+ div table.table-fixed) > div:first-child > div {
+      display: grid !important;
+      width: 100%;
+      gap: 0.25rem;
+    }
+    div:has(+ div table.table-fixed) > div:first-child > div:first-child {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    div:has(+ div table.table-fixed) > div:first-child > div:nth-child(2) {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    div:has(+ div table.table-fixed) > div:first-child > div button {
+      min-width: 0 !important;
+      min-height: 2.75rem !important;
+      padding-left: 0.35rem !important;
+      padding-right: 0.35rem !important;
+      white-space: normal;
+      line-height: 1.1;
     }
   }
 
