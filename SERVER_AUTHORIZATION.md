@@ -76,6 +76,7 @@ The feature-permission keys are `dashboard`, `members`, `plans`, `staff`, `payro
 | PATCH | `/vouchers/:id` | `vouchers` |
 | DELETE | `/vouchers/:id` | `vouchers` |
 | GET | `/ledger/balance` | `viewAccounting` |
+| GET | `/ledger/movements` | `viewAccounting` |
 | POST | `/ledger/opening-balance` | admin |
 | GET | `/ledger` | `viewAccounting` |
 | GET | `/accounts/summary` | `viewAccounting` |
