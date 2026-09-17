@@ -90,7 +90,10 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const body = asRecord(contractBody(req, ApiContracts.CreatePaymentBody.partial({ exchangeRate: true })));
+  const body = asRecord(contractBody(req, ApiContracts.CreatePaymentBody, {
+    discount: 0,
+    exchangeRate: await getExchangeRate(),
+  }));
   const paymentDirection = direction(body.direction, true)!;
   const payment = await createPayment({
     direction: paymentDirection,

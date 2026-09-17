@@ -43,8 +43,15 @@ function requireContract<T>(input: unknown, schema: ContractSchema<T>): T {
   return parsed.data;
 }
 
-export function contractBody<T>(req: Request, schema: ContractSchema<T>): T {
-  return requireContract(req.body, schema);
+export function contractBody<T>(
+  req: Request,
+  schema: ContractSchema<T>,
+  defaults?: Record<string, unknown>,
+): T {
+  const input = defaults && req.body && typeof req.body === "object" && !Array.isArray(req.body)
+    ? { ...defaults, ...req.body }
+    : req.body;
+  return requireContract(input, schema);
 }
 
 export function contractParams<T>(req: Request, schema: ContractSchema<T>): T {
