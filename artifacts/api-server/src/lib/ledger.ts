@@ -79,34 +79,49 @@ export interface CashMovement {
   party: string;
 }
 
+export interface CashMovementRange {
+  dateFrom?: Date;
+  dateTo?: Date;
+}
+
 /**
- * Canonical effective physical-cash movements. This is the only movement stream
- * that Cash Book, the Cash account statement, and the current balance should use.
- *
- * Important legacy rules:
- * - derive currency equivalents from amount + locked FX whenever possible instead
- *   of trusting stale/null/zero derived columns;
- * - legacy rows created before FX locking can contain exchange_rate=1. A DRC
- *   USD/CDF rate below 10 is not credible, so those rows use the configured gym
- *   exchange rate (or the established 2800 legacy fallback) rather than being
- *   interpreted as 1 CDF = 1 USD;
- * - only collapse a legacy member cash-receipt voucher when there is a matching
- *   completed Cash payment for the same member, amount, currency, and day;
- * - a linked payment suppresses a stock/supplier Cash row only when that payment
- *   itself was completed against Cash;
- * - after an operating-period reset, preserved stock/supplier history before the
- *   reset marker remains auditable but no longer affects the new period's cash.
+ * Canonical effective physical-cash movements used by Cash Book, the Cash account
+ * statement, and the current balance. Optional statement bounds are pushed into
+ * every source query so date-filtered statements do not reconstruct all history.
  */
-export async function getCashMovements(executor: DbExecutor = db): Promise<CashMovement[]> {
+export async function getCashMovements(
+  executor: DbExecutor = db,
+  range: CashMovementRange = {},
+): Promise<CashMovement[]> {
+  const dateFrom = range.dateFrom ?? null;
+  const dateTo = range.dateTo ?? null;
+
   const result = await executor.execute(sql`
-    WITH reset_cutoff AS (
+    WITH bounds AS (
+      SELECT ${dateFrom}::timestamptz AS date_from, ${dateTo}::timestamptz AS date_to
+    ),
+    reset_cutoff AS (
       SELECT MAX(entry_date) AS cutoff
       FROM cash_ledger
       WHERE source_type = 'period_reset'
     ),
-    payment_values AS (
+    payment_values AS NOT MATERIALIZED (
       SELECT
-        p.*,
+        p.id,
+        p.payment_number,
+        p.payment_date,
+        p.direction,
+        p.category,
+        p.amount,
+        p.currency,
+        p.exchange_rate,
+        p.amount_usd,
+        p.amount_cdf,
+        p.notes,
+        p.linked_entity_name,
+        p.member_name,
+        p.member_id,
+        p.status,
         CASE
           WHEN UPPER(COALESCE(p.currency, 'USD')) = 'USD' THEN COALESCE(p.amount, 0)
           WHEN COALESCE(p.exchange_rate, 0) > 0 THEN COALESCE(p.amount, 0) / p.exchange_rate
@@ -139,10 +154,30 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
       WHERE p.status = 'completed'
         AND p.is_cash
         AND ((SELECT cutoff FROM reset_cutoff) IS NULL OR p.payment_date >= (SELECT cutoff FROM reset_cutoff))
+        AND ((SELECT date_from FROM bounds) IS NULL OR p.payment_date >= (SELECT date_from FROM bounds))
+        AND ((SELECT date_to FROM bounds) IS NULL OR p.payment_date <= (SELECT date_to FROM bounds))
     ),
-    voucher_values AS (
+    voucher_values AS NOT MATERIALIZED (
       SELECT
-        v.*,
+        v.id,
+        v.voucher_number,
+        v.voucher_date,
+        v.direction,
+        v.amount,
+        v.currency,
+        v.exchange_rate,
+        v.amount_usd,
+        v.amount_cdf,
+        v.description,
+        v.category,
+        v.voucher_type,
+        v.paid_to,
+        v.received_from,
+        v.linked_entity_name,
+        v.linked_entity,
+        v.linked_entity_id,
+        v.status,
+        v.deleted_at,
         CASE
           WHEN UPPER(COALESCE(v.currency, 'USD')) = 'USD' THEN COALESCE(v.amount, 0)
           WHEN COALESCE(v.exchange_rate, 0) > 0 THEN COALESCE(v.amount, 0) / v.exchange_rate
@@ -176,6 +211,8 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
         AND v.deleted_at IS NULL
         AND v.is_cash
         AND ((SELECT cutoff FROM reset_cutoff) IS NULL OR v.voucher_date >= (SELECT cutoff FROM reset_cutoff))
+        AND ((SELECT date_from FROM bounds) IS NULL OR v.voucher_date >= (SELECT date_from FROM bounds))
+        AND ((SELECT date_to FROM bounds) IS NULL OR v.voucher_date <= (SELECT date_to FROM bounds))
         AND NOT (
           v.linked_entity = 'member'
           AND v.voucher_type = 'cash_receipt'
@@ -188,7 +225,8 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
               AND p2.is_cash
               AND UPPER(COALESCE(p2.currency, 'USD')) = UPPER(COALESCE(v.currency, 'USD'))
               AND ABS(COALESCE(p2.amount, 0) - COALESCE(v.amount, 0)) < 0.000001
-              AND p2.payment_date::date = v.voucher_date::date
+              AND p2.payment_date >= v.voucher_date::date
+              AND p2.payment_date < v.voucher_date::date + INTERVAL '1 day'
           )
         )
     ),
@@ -218,6 +256,8 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
       FROM stock_purchases sp
       WHERE sp.paid_from_cash = 1
         AND ((SELECT cutoff FROM reset_cutoff) IS NULL OR sp.purchase_date >= (SELECT cutoff FROM reset_cutoff))
+        AND ((SELECT date_from FROM bounds) IS NULL OR sp.purchase_date >= (SELECT date_from FROM bounds))
+        AND ((SELECT date_to FROM bounds) IS NULL OR sp.purchase_date <= (SELECT date_to FROM bounds))
         AND (
           sp.payment_id IS NULL
           OR NOT EXISTS (
@@ -255,6 +295,8 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
       FROM supplier_payments sp
       LEFT JOIN supplier_credits sc ON sc.id = sp.credit_id
       WHERE ((SELECT cutoff FROM reset_cutoff) IS NULL OR sp.payment_date >= (SELECT cutoff FROM reset_cutoff))
+        AND ((SELECT date_from FROM bounds) IS NULL OR sp.payment_date >= (SELECT date_from FROM bounds))
+        AND ((SELECT date_to FROM bounds) IS NULL OR sp.payment_date <= (SELECT date_to FROM bounds))
         AND (sp.payment_id IS NULL OR NOT EXISTS (
           SELECT 1
           FROM payment_values p4
@@ -289,6 +331,8 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
       FROM cash_ledger cl
       WHERE cl.source_type = 'opening_balance'
         AND ((SELECT cutoff FROM reset_cutoff) IS NULL OR cl.entry_date >= (SELECT cutoff FROM reset_cutoff))
+        AND ((SELECT date_from FROM bounds) IS NULL OR cl.entry_date >= (SELECT date_from FROM bounds))
+        AND ((SELECT date_to FROM bounds) IS NULL OR cl.entry_date <= (SELECT date_to FROM bounds))
     )
     SELECT * FROM payment_cash
     UNION ALL SELECT * FROM voucher_cash
@@ -348,11 +392,14 @@ export async function getCashMovements(executor: DbExecutor = db): Promise<CashM
  * Settings. Stored transaction rates stay intact for audit/accounting history;
  * these values are the current display equivalents used by Cash Book/Accounts.
  */
-export async function getCurrentCashMovements(executor: DbExecutor = db): Promise<{
+export async function getCurrentCashMovements(
+  executor: DbExecutor = db,
+  range: CashMovementRange = {},
+): Promise<{
   exchangeRate: number;
   movements: CashMovement[];
 }> {
-  const movements = await getCashMovements(executor);
+  const movements = await getCashMovements(executor, range);
   const exchangeRate = await getExchangeRate(executor);
   return {
     exchangeRate,
