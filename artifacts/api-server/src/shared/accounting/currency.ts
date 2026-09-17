@@ -7,8 +7,35 @@ export interface ConvertedMoney {
   amountCdf: number;
 }
 
+const EXCHANGE_RATE_CACHE_TTL_MS = 5_000;
+let cachedExchangeRate: { value: number; expiresAt: number } | undefined;
+let exchangeRateInflight: Promise<number> | undefined;
+
 export async function getExchangeRate(executor?: DbExecutor): Promise<number> {
-  return fxRate(await getRepositoryExchangeRate(executor));
+  // Transactional callers must read through their transaction so accounting
+  // writes keep their existing consistency semantics.
+  if (executor) return fxRate(await getRepositoryExchangeRate(executor));
+
+  const now = Date.now();
+  if (cachedExchangeRate && cachedExchangeRate.expiresAt > now) {
+    return cachedExchangeRate.value;
+  }
+
+  // Many screens request several finance-backed endpoints in parallel. Collapse
+  // their identical settings-table reads and keep the result for only a few
+  // seconds so an exchange-rate edit still becomes visible almost immediately.
+  if (exchangeRateInflight) return exchangeRateInflight;
+  exchangeRateInflight = getRepositoryExchangeRate()
+    .then((rawRate) => {
+      const value = fxRate(rawRate);
+      cachedExchangeRate = { value, expiresAt: Date.now() + EXCHANGE_RATE_CACHE_TTL_MS };
+      return value;
+    })
+    .finally(() => {
+      exchangeRateInflight = undefined;
+    });
+
+  return exchangeRateInflight;
 }
 
 export function toUsdCdf(amount: number, currency: string, rate: number): ConvertedMoney {

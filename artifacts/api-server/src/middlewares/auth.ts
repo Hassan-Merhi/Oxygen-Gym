@@ -9,6 +9,16 @@ export interface GymJwtPayload {
   username: string;
 }
 
+type GymUser = NonNullable<Request["__gymproUser"]>;
+
+// A page can start several API requests at once. Previously every request repeated
+// the exact same users-table lookup. Keep the authenticated row for a very short
+// window and collapse concurrent misses into one DB query. The five-second TTL
+// keeps permission/status changes effectively immediate while removing the burst.
+const AUTH_USER_CACHE_TTL_MS = 5_000;
+const authUserCache = new Map<number, { expiresAt: number; user: GymUser }>();
+const authUserInflight = new Map<number, Promise<GymUser | null>>();
+
 function isGymJwtPayload(value: string | JsonWebTokenPayload): value is JsonWebTokenPayload & GymJwtPayload {
   return (
     typeof value !== "string" &&
@@ -31,7 +41,33 @@ export function verifyToken(token: string): GymJwtPayload | null {
   }
 }
 
-function attachUser(req: Request, user: NonNullable<Request["__gymproUser"]>): void {
+async function loadActiveUser(userId: number): Promise<GymUser | null> {
+  const now = Date.now();
+  const cached = authUserCache.get(userId);
+  if (cached && cached.expiresAt > now) return cached.user;
+  if (cached) authUserCache.delete(userId);
+
+  const existing = authUserInflight.get(userId);
+  if (existing) return existing;
+
+  const lookup = db.query.usersTable.findFirst({
+    where: (u, { and, eq, isNull }) => and(eq(u.id, userId), isNull(u.deletedAt)),
+  }).then((user) => {
+    if (!user || user.status !== "active") {
+      authUserCache.delete(userId);
+      return null;
+    }
+    authUserCache.set(userId, { user, expiresAt: Date.now() + AUTH_USER_CACHE_TTL_MS });
+    return user;
+  }).finally(() => {
+    authUserInflight.delete(userId);
+  });
+
+  authUserInflight.set(userId, lookup);
+  return lookup;
+}
+
+function attachUser(req: Request, user: GymUser): void {
   req.__gymproUser = user;
   req.__gymproUserId = user.id;
   req.__gymproUserName = user.name;
@@ -41,7 +77,7 @@ function attachUser(req: Request, user: NonNullable<Request["__gymproUser"]>): v
  * Routes mounted behind requireAuth can use this helper to narrow the optional
  * Express request augmentation to the authenticated user invariant.
  */
-export function authenticatedUser(req: Request): NonNullable<Request["__gymproUser"]> {
+export function authenticatedUser(req: Request): GymUser {
   const user = req.__gymproUser;
   if (!user) {
     throw new Error("Authenticated user context is missing after requireAuth middleware");
@@ -74,11 +110,9 @@ export function requireAuth() {
     }
 
     try {
-      const user = await db.query.usersTable.findFirst({
-        where: (u, { and, eq, isNull }) => and(eq(u.id, payload.userId), isNull(u.deletedAt)),
-      });
+      const user = await loadActiveUser(payload.userId);
 
-      if (!user || user.status !== "active") {
+      if (!user) {
         res.status(401).json({ error: "User not found or inactive" });
         return;
       }
@@ -106,10 +140,8 @@ export function optionalAuth() {
       const payload = verifyToken(token);
       if (payload) {
         try {
-          const user = await db.query.usersTable.findFirst({
-            where: (u, { and, eq, isNull }) => and(eq(u.id, payload.userId), isNull(u.deletedAt)),
-          });
-          if (user && user.status === "active") attachUser(req, user);
+          const user = await loadActiveUser(payload.userId);
+          if (user) attachUser(req, user);
         } catch {
           // Optional authentication must never block an otherwise public request.
         }

@@ -4,7 +4,7 @@ import {
   productsTable,
   stockPurchasesTable,
 } from "@workspace/db/schema";
-import { and, asc, desc, eq, ilike, not, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, lte, not, or, sql } from "drizzle-orm";
 import { appendLedgerEntry } from "../../lib/ledger";
 import { getNextNumber } from "../../lib/numbering";
 import { ACCOUNTS, postDoubleEntry } from "../../lib/accounting";
@@ -92,25 +92,36 @@ function enrichProduct(product: typeof productsTable.$inferSelect, rate: number)
 
 export async function getInventorySummary() {
   const rate = await getExchangeRate();
-  const all = await db.select().from(productsTable).where(not(eq(productsTable.status, "deleted")));
-  const active = all.filter((product) => product.status === "active");
-  const totalValueUsd = active.reduce((sum, product) => {
-    const costUsd = convertCurrencyAmount(product.costPrice, product.currency, "USD", rate);
-    return addMoney(sum, multiplyMoney(costUsd, product.quantity));
-  }, 0);
 
+  // Keep summary work in Postgres. The previous implementation selected every
+  // product and reduced it in Node on every Stock-page visit.
+  const [row] = await db.select({
+    totalProducts: sql<number>`COUNT(*) FILTER (WHERE ${productsTable.status} <> 'deleted')`,
+    activeProducts: sql<number>`COUNT(*) FILTER (WHERE ${productsTable.status} = 'active')`,
+    lowStockCount: sql<number>`COUNT(*) FILTER (WHERE ${productsTable.status} = 'active' AND ${productsTable.quantity} <= ${productsTable.alertQuantity})`,
+    totalQuantity: sql<number>`COALESCE(SUM(${productsTable.quantity}) FILTER (WHERE ${productsTable.status} = 'active'), 0)`,
+    totalValueUsd: sql<number>`COALESCE(SUM(
+      CASE WHEN ${productsTable.status} = 'active' THEN
+        CASE WHEN ${productsTable.currency} = 'USD'
+          THEN ${productsTable.costPrice} * ${productsTable.quantity}
+          ELSE (${productsTable.costPrice} * ${productsTable.quantity}) / CAST(${rate} AS DOUBLE PRECISION)
+        END
+      ELSE 0 END
+    ), 0)`,
+  }).from(productsTable);
+
+  const totalValueUsd = money(Number(row?.totalValueUsd ?? 0));
   return {
-    totalProducts: all.length,
-    activeProducts: active.length,
-    lowStockCount: active.filter((product) => product.quantity <= product.alertQuantity).length,
-    totalQuantity: active.reduce((sum, product) => sum + product.quantity, 0),
+    totalProducts: Number(row?.totalProducts ?? 0),
+    activeProducts: Number(row?.activeProducts ?? 0),
+    lowStockCount: Number(row?.lowStockCount ?? 0),
+    totalQuantity: Number(row?.totalQuantity ?? 0),
     totalValueUsd,
     totalValueCdf: convertCurrencyAmount(totalValueUsd, "USD", "CDF", rate),
   };
 }
 
 export async function listProducts(input: InventoryListInput) {
-  const rate = await getExchangeRate();
   const conditions: ReturnType<typeof eq>[] = [];
   conditions.push(input.status
     ? eq(productsTable.status, input.status) as ReturnType<typeof eq>
@@ -126,15 +137,28 @@ export async function listProducts(input: InventoryListInput) {
     ) as ReturnType<typeof eq>);
   }
   if (input.category) conditions.push(ilike(productsTable.category, input.category) as ReturnType<typeof eq>);
+  if (input.lowStock) {
+    conditions.push(lte(productsTable.quantity, productsTable.alertQuantity) as ReturnType<typeof eq>);
+  }
 
-  const rows = await db.select().from(productsTable).where(and(...conditions)).orderBy(asc(productsTable.name));
-  const enriched = rows.map((product) => enrichProduct(product, rate));
-  const filtered = input.lowStock ? enriched.filter((product) => product.isLowStock) : enriched;
+  const where = and(...conditions);
   const offset = (input.page - 1) * input.limit;
 
+  // Pagination and low-stock filtering belong in SQL. This keeps response work
+  // proportional to the requested page instead of the total inventory size.
+  const [rate, rows, [totalRow]] = await Promise.all([
+    getExchangeRate(),
+    db.select().from(productsTable)
+      .where(where)
+      .orderBy(asc(productsTable.name))
+      .limit(input.limit)
+      .offset(offset),
+    db.select({ total: count() }).from(productsTable).where(where),
+  ]);
+
   return {
-    items: filtered.slice(offset, offset + input.limit),
-    total: filtered.length,
+    items: rows.map((product) => enrichProduct(product, rate)),
+    total: Number(totalRow?.total ?? 0),
     page: input.page,
     limit: input.limit,
   };
