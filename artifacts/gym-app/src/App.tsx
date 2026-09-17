@@ -67,16 +67,16 @@ function useHasAccess(allOf: readonly string[] = [], adminOnly = false): boolean
 
 // ── First accessible route for the current user ───────────────────────────────
 const ORDERED_ROUTES = [
-  { allOf: ["dashboard"],          href: "/dashboard"  },
-  { allOf: ["members"],            href: "/members"    },
-  { allOf: ["plans"],              href: "/plans"      },
-  { allOf: ["staff", "payroll"], href: "/staff"      },
-  { allOf: ["payments"],           href: "/payments"   },
-  { allOf: ["accounts"],           href: "/accounts"   },
-  { allOf: ["viewAccounting"],     href: "/financials" },
-  { allOf: ["stock"],              href: "/stock"      },
-  { allOf: ["sales"],              href: "/sales"      },
-  { allOf: ["manageSettings"],     href: "/settings"   },
+  { allOf: ["dashboard", "viewProfit"],                 href: "/dashboard"  },
+  { allOf: ["members"],                                  href: "/members"    },
+  { allOf: ["plans"],                                    href: "/plans"      },
+  { allOf: ["staff", "payroll"],                       href: "/staff"      },
+  { allOf: ["payments"],                                 href: "/payments"   },
+  { allOf: ["accounts", "viewAccounting"],             href: "/accounts"   },
+  { allOf: ["viewAccounting", "viewProfit", "viewCost"], href: "/financials" },
+  { allOf: ["stock"],                                    href: "/stock"      },
+  { allOf: ["sales"],                                    href: "/sales"      },
+  { allOf: ["manageSettings"],                           href: "/settings"   },
 ] as const;
 
 function useFirstAccessibleRoute(): string | null {
@@ -222,7 +222,7 @@ function AppShell() {
           <Route path="/login" component={LoginGuard} />
           <Route path="/setup" component={SetupPage} />
 
-          <Route path="/dashboard"><ProtectedRoute component={Dashboard} allOf={["dashboard"]} /></Route>
+          <Route path="/dashboard"><ProtectedRoute component={Dashboard} allOf={["dashboard", "viewProfit"]} /></Route>
           <Route path="/staff"><ProtectedRoute component={Staff} allOf={["staff", "payroll"]} /></Route>
           <Route path="/settings"><ProtectedRoute component={Settings} allOf={["manageSettings"]} /></Route>
           <Route path="/period-reset"><ProtectedRoute component={PeriodReset} adminOnly /></Route>
@@ -236,11 +236,11 @@ function AppShell() {
           <Route path="/audit"><ProtectedRoute component={AuditPage} adminOnly /></Route>
           <Route path="/payments"><ProtectedRoute component={Payments} allOf={["payments"]} /></Route>
           <Route path="/vouchers"><Redirect to="/payments" /></Route>
-          <Route path="/accounts"><ProtectedRoute component={Accounts} allOf={["accounts"]} /></Route>
-          <Route path="/financials"><ProtectedRoute component={Financials} allOf={["viewAccounting"]} /></Route>
+          <Route path="/accounts"><ProtectedRoute component={Accounts} allOf={["accounts", "viewAccounting"]} /></Route>
+          <Route path="/financials"><ProtectedRoute component={Financials} allOf={["viewAccounting", "viewProfit", "viewCost"]} /></Route>
           <Route path="/stock"><ProtectedRoute component={Stock} allOf={["stock"]} /></Route>
           <Route path="/sales"><ProtectedRoute component={Sales} allOf={["sales"]} /></Route>
-          <Route path="/supplements"><ProtectedRoute component={Supplements} allOf={["stock"]} /></Route>
+          <Route path="/supplements"><ProtectedRoute component={Supplements} allOf={["stock", "viewCost", "viewProfit"]} /></Route>
 
           <Route path="*"><NotFound /></Route>
         </Switch>
