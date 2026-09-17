@@ -1,1 +1,1 @@
-export { default } from "./payments-modern";
+export { default } from "./cash-book-canonical";
