@@ -178,14 +178,19 @@ async function countActiveMembers(): Promise<number> {
 // GET /api/dashboard/kpis
 router.get("/kpis", async (req: Request, res: Response) => {
   try {
-    const rate = await getExchangeRate();
+    // The member count is independent from the exchange rate. Start both cold
+    // reads together so the aggregates are not delayed by an avoidable serial
+    // database round trip.
+    const [rate, activeMembers] = await Promise.all([
+      getExchangeRate(),
+      countActiveMembers(),
+    ]);
 
     const day: Period = { start: lubumbashiTodayStart(), end: lubumbashiTodayEnd() };
     const month: Period = lubumbashiMonthBounds();
     const year: Period = lubumbashiYearBounds();
 
-    const [activeMembers, paymentTotals, voucherTotals] = await Promise.all([
-      countActiveMembers(),
+    const [paymentTotals, voucherTotals] = await Promise.all([
       aggregatePaymentsUsd(rate, day, month, year),
       aggregateVouchersUsd(rate, day, month, year),
     ]);
