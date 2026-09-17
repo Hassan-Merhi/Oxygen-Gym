@@ -669,7 +669,7 @@ export default function CashBookCanonical() {
         <MetricCard label={`Cash In · ${presetLabel(datePreset)}`} value={isLoading ? "—" : formatUsd(periodKpis.inUsd)} secondary={isLoading ? undefined : formatCdf(periodKpis.inCdf)} icon={ArrowDownLeft} tone="emerald" />
         <MetricCard label={`Cash Out · ${presetLabel(datePreset)}`} value={isLoading ? "—" : formatUsd(periodKpis.outUsd)} secondary={isLoading ? undefined : formatCdf(periodKpis.outCdf)} icon={ArrowUpRight} tone="rose" />
         <MetricCard label={`Net · ${presetLabel(datePreset)}`} value={isLoading ? "—" : formatUsd(periodKpis.netUsd)} secondary={isLoading ? undefined : formatCdf(periodKpis.netCdf)} icon={TrendingUp} tone="blue" />
-        <MetricCard label="Current Cash Balance" value={isLoading ? "—" : formatUsd(balance.usd)} secondary={isLoading ? undefined : formatCdf(balance.cdf)} icon={Wallet} tone="violet" hint="All time · same source as Accounts → Cash" />
+        {isAdmin && <MetricCard label="Current Cash Balance" value={isLoading ? "—" : formatUsd(balance.usd)} secondary={isLoading ? undefined : formatCdf(balance.cdf)} icon={Wallet} tone="violet" hint="All time · same source as Accounts → Cash" />}
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
