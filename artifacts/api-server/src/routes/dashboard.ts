@@ -40,6 +40,11 @@ interface Period {
   end: Date;
 }
 
+interface AggregateTotals {
+  revenue: { day: number; month: number; year: number; total: number };
+  expenses: { day: number; month: number; year: number; total: number };
+}
+
 async function getRate(): Promise<number> {
   const s = await db.query.settingsTable.findFirst();
   return s?.usdToCdfRate ?? 2800;
@@ -68,77 +73,111 @@ function usdOf(
   )`;
 }
 
-async function sumPaymentsUsd(
-  direction: "in" | "out",
-  categories: string[],
+function toNumber(value: unknown): number {
+  return Number(value ?? 0);
+}
+
+/**
+ * Aggregate every dashboard period in one scan of payments instead of issuing
+ * a separate SUM query for every direction + period combination.
+ */
+async function aggregatePaymentsUsd(
   rate: number,
-  period?: Period,
-): Promise<number> {
-  const total = sql<number>`COALESCE(SUM(${usdOf(
+  day: Period,
+  month: Period,
+  year: Period,
+): Promise<AggregateTotals> {
+  const usd = usdOf(
     paymentsTable.amount,
     paymentsTable.currency,
     paymentsTable.amountUsd,
     rate,
-  )}), 0)`;
-
-  const conditions = [
-    eq(paymentsTable.direction, direction),
+  );
+  const revenue = and(
+    eq(paymentsTable.direction, "in"),
     eq(paymentsTable.status, "completed"),
-    inArray(paymentsTable.category, categories),
-  ];
-  if (period) {
-    conditions.push(gte(paymentsTable.paymentDate, period.start));
-    conditions.push(lte(paymentsTable.paymentDate, period.end));
-  }
+    inArray(paymentsTable.category, REVENUE_CATEGORIES),
+  )!;
+  const expenses = and(
+    eq(paymentsTable.direction, "out"),
+    eq(paymentsTable.status, "completed"),
+    inArray(paymentsTable.category, EXPENSE_CATEGORIES),
+  )!;
 
-  const rows = await db
-    .select({ total })
-    .from(paymentsTable)
-    .where(and(...conditions));
+  const [row] = await db.select({
+    revenueDay: sql<number>`COALESCE(SUM(CASE WHEN ${and(revenue, gte(paymentsTable.paymentDate, day.start), lte(paymentsTable.paymentDate, day.end))!} THEN ${usd} ELSE 0 END), 0)`,
+    revenueMonth: sql<number>`COALESCE(SUM(CASE WHEN ${and(revenue, gte(paymentsTable.paymentDate, month.start), lte(paymentsTable.paymentDate, month.end))!} THEN ${usd} ELSE 0 END), 0)`,
+    revenueYear: sql<number>`COALESCE(SUM(CASE WHEN ${and(revenue, gte(paymentsTable.paymentDate, year.start), lte(paymentsTable.paymentDate, year.end))!} THEN ${usd} ELSE 0 END), 0)`,
+    revenueTotal: sql<number>`COALESCE(SUM(CASE WHEN ${revenue} THEN ${usd} ELSE 0 END), 0)`,
+    expenseDay: sql<number>`COALESCE(SUM(CASE WHEN ${and(expenses, gte(paymentsTable.paymentDate, day.start), lte(paymentsTable.paymentDate, day.end))!} THEN ${usd} ELSE 0 END), 0)`,
+    expenseMonth: sql<number>`COALESCE(SUM(CASE WHEN ${and(expenses, gte(paymentsTable.paymentDate, month.start), lte(paymentsTable.paymentDate, month.end))!} THEN ${usd} ELSE 0 END), 0)`,
+    expenseYear: sql<number>`COALESCE(SUM(CASE WHEN ${and(expenses, gte(paymentsTable.paymentDate, year.start), lte(paymentsTable.paymentDate, year.end))!} THEN ${usd} ELSE 0 END), 0)`,
+    expenseTotal: sql<number>`COALESCE(SUM(CASE WHEN ${expenses} THEN ${usd} ELSE 0 END), 0)`,
+  }).from(paymentsTable);
 
-  return Number(rows[0]?.total ?? 0);
+  return {
+    revenue: {
+      day: toNumber(row?.revenueDay),
+      month: toNumber(row?.revenueMonth),
+      year: toNumber(row?.revenueYear),
+      total: toNumber(row?.revenueTotal),
+    },
+    expenses: {
+      day: toNumber(row?.expenseDay),
+      month: toNumber(row?.expenseMonth),
+      year: toNumber(row?.expenseYear),
+      total: toNumber(row?.expenseTotal),
+    },
+  };
 }
 
-async function sumVouchersUsd(
-  direction: "in" | "out",
+/** Same single-scan aggregation for recorded vouchers. */
+async function aggregateVouchersUsd(
   rate: number,
-  period?: Period,
-): Promise<number> {
-  const total = sql<number>`COALESCE(SUM(${usdOf(
+  day: Period,
+  month: Period,
+  year: Period,
+): Promise<AggregateTotals> {
+  const usd = usdOf(
     vouchersTable.amount,
     vouchersTable.currency,
     vouchersTable.amountUsd,
     rate,
-  )}), 0)`;
-
-  const conditions = [
-    eq(vouchersTable.direction, direction),
+  );
+  const revenue = and(
+    eq(vouchersTable.direction, "in"),
     eq(vouchersTable.status, "recorded"),
-  ];
-  if (period) {
-    conditions.push(gte(vouchersTable.voucherDate, period.start));
-    conditions.push(lte(vouchersTable.voucherDate, period.end));
-  }
+  )!;
+  const expenses = and(
+    eq(vouchersTable.direction, "out"),
+    eq(vouchersTable.status, "recorded"),
+  )!;
 
-  const rows = await db.select({ total }).from(vouchersTable).where(and(...conditions));
+  const [row] = await db.select({
+    revenueDay: sql<number>`COALESCE(SUM(CASE WHEN ${and(revenue, gte(vouchersTable.voucherDate, day.start), lte(vouchersTable.voucherDate, day.end))!} THEN ${usd} ELSE 0 END), 0)`,
+    revenueMonth: sql<number>`COALESCE(SUM(CASE WHEN ${and(revenue, gte(vouchersTable.voucherDate, month.start), lte(vouchersTable.voucherDate, month.end))!} THEN ${usd} ELSE 0 END), 0)`,
+    revenueYear: sql<number>`COALESCE(SUM(CASE WHEN ${and(revenue, gte(vouchersTable.voucherDate, year.start), lte(vouchersTable.voucherDate, year.end))!} THEN ${usd} ELSE 0 END), 0)`,
+    revenueTotal: sql<number>`COALESCE(SUM(CASE WHEN ${revenue} THEN ${usd} ELSE 0 END), 0)`,
+    expenseDay: sql<number>`COALESCE(SUM(CASE WHEN ${and(expenses, gte(vouchersTable.voucherDate, day.start), lte(vouchersTable.voucherDate, day.end))!} THEN ${usd} ELSE 0 END), 0)`,
+    expenseMonth: sql<number>`COALESCE(SUM(CASE WHEN ${and(expenses, gte(vouchersTable.voucherDate, month.start), lte(vouchersTable.voucherDate, month.end))!} THEN ${usd} ELSE 0 END), 0)`,
+    expenseYear: sql<number>`COALESCE(SUM(CASE WHEN ${and(expenses, gte(vouchersTable.voucherDate, year.start), lte(vouchersTable.voucherDate, year.end))!} THEN ${usd} ELSE 0 END), 0)`,
+    expenseTotal: sql<number>`COALESCE(SUM(CASE WHEN ${expenses} THEN ${usd} ELSE 0 END), 0)`,
+  }).from(vouchersTable);
 
-  return Number(rows[0]?.total ?? 0);
-}
-
-async function revenueUsd(rate: number, period?: Period): Promise<number> {
-  const [pay, vch] = await Promise.all([
-    sumPaymentsUsd("in", REVENUE_CATEGORIES, rate, period),
-    sumVouchersUsd("in", rate, period),
-  ]);
-  return pay + vch;
-}
-
-async function expensesUsd(rate: number, period?: Period): Promise<number> {
-  const [pay, vch] = await Promise.all([
-    sumPaymentsUsd("out", EXPENSE_CATEGORIES, rate, period),
-    sumVouchersUsd("out", rate, period),
-  ]);
-  return pay + vch;
+  return {
+    revenue: {
+      day: toNumber(row?.revenueDay),
+      month: toNumber(row?.revenueMonth),
+      year: toNumber(row?.revenueYear),
+      total: toNumber(row?.revenueTotal),
+    },
+    expenses: {
+      day: toNumber(row?.expenseDay),
+      month: toNumber(row?.expenseMonth),
+      year: toNumber(row?.expenseYear),
+      total: toNumber(row?.expenseTotal),
+    },
+  };
 }
 
 /** Members whose subscription is still valid right now. */
@@ -166,16 +205,22 @@ router.get("/kpis", async (req: Request, res: Response) => {
     const month: Period = lubumbashiMonthBounds();
     const year: Period = lubumbashiYearBounds();
 
-    const [activeMembers, revByPeriod, expByPeriod, revAllTime, expAllTime] = await Promise.all([
+    // Four database round-trips total for the endpoint:
+    // settings rate, member count, one payments aggregate, one vouchers aggregate.
+    const [activeMembers, paymentTotals, voucherTotals] = await Promise.all([
       countActiveMembers(),
-      Promise.all([day, month, year].map((p) => revenueUsd(rate, p))),
-      Promise.all([day, month, year].map((p) => expensesUsd(rate, p))),
-      revenueUsd(rate),
-      expensesUsd(rate),
+      aggregatePaymentsUsd(rate, day, month, year),
+      aggregateVouchersUsd(rate, day, month, year),
     ]);
 
-    const [revDay, revMonth, revYear] = revByPeriod;
-    const [expDay, expMonth, expYear] = expByPeriod;
+    const revDay = paymentTotals.revenue.day + voucherTotals.revenue.day;
+    const revMonth = paymentTotals.revenue.month + voucherTotals.revenue.month;
+    const revYear = paymentTotals.revenue.year + voucherTotals.revenue.year;
+    const revAllTime = paymentTotals.revenue.total + voucherTotals.revenue.total;
+    const expDay = paymentTotals.expenses.day + voucherTotals.expenses.day;
+    const expMonth = paymentTotals.expenses.month + voucherTotals.expenses.month;
+    const expYear = paymentTotals.expenses.year + voucherTotals.expenses.year;
+    const expAllTime = paymentTotals.expenses.total + voucherTotals.expenses.total;
 
     res.json({
       activeMembers: { count: activeMembers },
