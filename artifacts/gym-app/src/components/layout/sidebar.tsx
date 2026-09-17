@@ -10,6 +10,10 @@ import { cn } from "@/lib/utils";
 import { useGetMe } from "@/hooks/use-me";
 import { useSidebarStore } from "@/lib/sidebar-store";
 import { directionForNavigationLanguage, navigationCopy, type NavigationLanguage } from "@/lib/mobile-navigation";
+import {
+  SIDEBAR_MOBILE_CLOSED_TRANSFORM,
+  SIDEBAR_MOBILE_OPEN_TRANSFORM,
+} from "./sidebar-visibility";
 
 const NAV_ITEMS = [
   { id: "dashboard", href: "/dashboard", icon: LayoutDashboard, labelKey: "nav.dashboard", allOf: ["dashboard", "viewProfit"] },
@@ -69,8 +73,7 @@ export function Sidebar() {
         className={cn(
           "mobile-safe-sidebar fixed top-0 z-40 flex h-full w-64 flex-col bg-sidebar border-sidebar-border transition-transform duration-300 ltr:left-0 ltr:border-r rtl:right-0 rtl:border-l",
           collapsed && "md:w-16",
-          mobileOpen ? "translate-x-0" : "ltr:-translate-x-full rtl:translate-x-full",
-          "md:translate-x-0"
+          mobileOpen ? SIDEBAR_MOBILE_OPEN_TRANSFORM : SIDEBAR_MOBILE_CLOSED_TRANSFORM
         )}
         aria-label={copy.openMenu}
       >
