@@ -69,8 +69,9 @@ export function Sidebar() {
         className={cn(
           "mobile-safe-sidebar fixed top-0 z-40 flex h-full w-64 flex-col bg-sidebar border-sidebar-border transition-transform duration-300 ltr:left-0 ltr:border-r rtl:right-0 rtl:border-l",
           collapsed && "md:w-16",
-          mobileOpen ? "translate-x-0" : "ltr:-translate-x-full rtl:translate-x-full",
-          "md:translate-x-0"
+          mobileOpen
+            ? "max-md:translate-x-0"
+            : "max-md:ltr:-translate-x-full max-md:rtl:translate-x-full"
         )}
         aria-label={copy.openMenu}
       >
