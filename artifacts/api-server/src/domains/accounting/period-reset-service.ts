@@ -33,15 +33,18 @@ type CountRow = {
  * - products, quantities, costs, and stock purchase history
  * - members (active members stay live; inactive/expired members remain available for retention history)
  * - expense/outgoing transactions and the legacy expenses table
+ * - completed membership/subscription receipts dated on or after the selected period start
  * - plans, staff/users, settings, suppliers/credits, numbering, and activity logs
  *
  * Cleared intentionally:
- * - revenue/member receipts, sales, payroll runs, commissions, attendance check-ins,
+ * - pre-period revenue/member receipts, sales, payroll runs, commissions, attendance check-ins,
  *   their accounting entries, and the current cash-ledger event stream
  *
  * The period-reset marker is used by the canonical cash movement reader so
  * preserved pre-reset expense/stock/supplier history remains auditable but no
- * longer changes the new period's opening cash balance.
+ * longer changes the new period's opening cash balance. Membership receipts on
+ * or after resetDate remain available so a backdated period start (for example,
+ * September 1) keeps subscription revenue already collected in that period.
  */
 export async function resetOperationalPeriod(input: ResetOperationalPeriodInput, actor: string) {
   if (input.confirmation !== PERIOD_RESET_CONFIRMATION) {
@@ -54,6 +57,7 @@ export async function resetOperationalPeriod(input: ResetOperationalPeriodInput,
   const openingCashUsd = money(input.openingCashUsd);
   const resetDate = input.resetDate ?? new Date();
   if (Number.isNaN(resetDate.getTime())) throw badRequest("Invalid reset date");
+  if (resetDate.getTime() > Date.now()) throw badRequest("Period start date cannot be in the future");
 
   const exchangeRate = await getExchangeRate();
   const resetNumber = `PERIOD-${Date.now()}`;
@@ -67,7 +71,15 @@ export async function resetOperationalPeriod(input: ResetOperationalPeriodInput,
     const before = await tx.execute(sql`
       SELECT
         (SELECT COUNT(*) FROM payments
-          WHERE NOT (direction = 'out' AND category <> 'payroll' AND status <> 'cancelled')) AS payments,
+          WHERE NOT (
+            (direction = 'out' AND category <> 'payroll' AND status <> 'cancelled')
+            OR (
+              direction = 'in'
+              AND category = 'membership'
+              AND status = 'completed'
+              AND payment_date >= ${resetDate}
+            )
+          )) AS payments,
         (SELECT COUNT(*) FROM vouchers
           WHERE NOT (direction = 'out' AND status = 'recorded' AND deleted_at IS NULL)) AS vouchers,
         (SELECT COUNT(*) FROM sales) AS sales,
@@ -76,7 +88,19 @@ export async function resetOperationalPeriod(input: ResetOperationalPeriodInput,
         (SELECT COUNT(*) FROM check_ins) AS check_ins,
         (SELECT COUNT(*) FROM accounting_entries ae
           WHERE NOT (
-            (ae.source_type LIKE 'payment%' AND EXISTS (SELECT 1 FROM payments p WHERE p.id = ae.source_id AND p.direction = 'out' AND p.category <> 'payroll' AND p.status <> 'cancelled'))
+            (ae.source_type LIKE 'payment%' AND EXISTS (
+              SELECT 1 FROM payments p
+              WHERE p.id = ae.source_id
+                AND (
+                  (p.direction = 'out' AND p.category <> 'payroll' AND p.status <> 'cancelled')
+                  OR (
+                    p.direction = 'in'
+                    AND p.category = 'membership'
+                    AND p.status = 'completed'
+                    AND p.payment_date >= ${resetDate}
+                  )
+                )
+            ))
             OR (ae.source_type LIKE 'voucher%' AND EXISTS (SELECT 1 FROM vouchers v WHERE v.id = ae.source_id AND v.direction = 'out' AND v.status = 'recorded' AND v.deleted_at IS NULL))
             OR ae.source_type IN ('stock_purchase', 'supplier_credit', 'supplier_payment', 'expense')
           )) AS accounting_entries,
@@ -84,7 +108,8 @@ export async function resetOperationalPeriod(input: ResetOperationalPeriodInput,
     `);
     const counts = (before.rows[0] ?? {}) as CountRow;
 
-    // Remove new-period activity while retaining expenses and inventory history.
+    // Remove resettable activity while retaining expenses, inventory history,
+    // and membership revenue that belongs to the selected new period.
     await tx.execute(sql`DELETE FROM commissions`);
     await tx.execute(sql`DELETE FROM payroll`);
     await tx.execute(sql`DELETE FROM sales`);
@@ -94,7 +119,15 @@ export async function resetOperationalPeriod(input: ResetOperationalPeriodInput,
     `);
     await tx.execute(sql`
       DELETE FROM payments
-      WHERE NOT (direction = 'out' AND category <> 'payroll' AND status <> 'cancelled')
+      WHERE NOT (
+        (direction = 'out' AND category <> 'payroll' AND status <> 'cancelled')
+        OR (
+          direction = 'in'
+          AND category = 'membership'
+          AND status = 'completed'
+          AND payment_date >= ${resetDate}
+        )
+      )
     `);
     await tx.execute(sql`DELETE FROM check_ins`);
     await tx.execute(sql`
@@ -108,7 +141,8 @@ export async function resetOperationalPeriod(input: ResetOperationalPeriodInput,
     await tx.execute(sql`DELETE FROM cash_ledger`);
 
     // A zero-value marker is kept even when opening cash is $0. The cash reader
-    // uses this timestamp as the cutover for preserved expense/stock/supplier history.
+    // uses this timestamp as the cutover for preserved expense/stock/supplier history
+    // and for the membership receipts preserved from the selected period start.
     await tx.execute(sql`
       INSERT INTO cash_ledger (
         entry_date, source_type, source_number, direction, amount, currency,
@@ -163,7 +197,15 @@ export async function resetOperationalPeriod(input: ResetOperationalPeriodInput,
           'resetNumber', ${resetNumber},
           'resetDate', ${resetDate.toISOString()},
           'openingCashUsd', ${openingCashUsd},
-          'preserved', jsonb_build_array('stock', 'stock_purchase_history', 'members', 'expenses', 'master_data'),
+          'exchangeRate', ${exchangeRate},
+          'preserved', jsonb_build_array(
+            'stock',
+            'stock_purchase_history',
+            'members',
+            'expenses',
+            'membership_revenue_from_period_start',
+            'master_data'
+          ),
           'cleared', jsonb_build_object(
             'payments', ${Number(counts.payments ?? 0)},
             'vouchers', ${Number(counts.vouchers ?? 0)},
@@ -198,6 +240,7 @@ export async function resetOperationalPeriod(input: ResetOperationalPeriodInput,
         stockPurchaseHistory: true,
         members: true,
         expenses: true,
+        membershipRevenueFromPeriodStart: true,
         masterData: true,
       },
     };

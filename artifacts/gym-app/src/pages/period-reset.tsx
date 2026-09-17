@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useGetSettings } from "@workspace/api-client-react";
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCcw, ShieldAlert } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +16,17 @@ const CONFIRMATION = "RESET OXYGEN GYM";
 
 function apiBaseUrl() {
   return (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
+}
+
+function firstDayOfCurrentMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function gymPeriodStartIso(date: string): string {
+  // Oxygen Gym operates on Central Africa Time (UTC+02:00). Using an explicit
+  // offset keeps a date such as September 1 from shifting to the prior UTC day.
+  return `${date}T00:00:00+02:00`;
 }
 
 type ResetResult = {
@@ -39,14 +51,15 @@ type ResetResult = {
 const preserved = [
   "Current stock quantities, costs, products, and stock purchase history",
   "Active members and member records used for retention/history",
+  "Membership/subscription revenue on or after the selected period start date",
   "Expense payments, outgoing expense vouchers, and expense records",
   "Plans, users, staff, gym settings, and system numbering",
   "Supplier / inventory master data",
 ];
 
 const cleared = [
-  "Membership/revenue payments and incoming cash receipts",
-  "Incoming/receipt vouchers (outgoing expense vouchers are preserved)",
+  "Membership/subscription revenue before the selected period start date",
+  "Other incoming/receipt vouchers (outgoing expense vouchers are preserved)",
   "Sales transaction history for the current operating period",
   "Payroll runs and commissions",
   "Attendance / check-in history",
@@ -55,18 +68,40 @@ const cleared = [
 
 export default function PeriodReset() {
   const me = useGetMe();
+  const { data: settings } = useGetSettings();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [periodStartDate, setPeriodStartDate] = useState(firstDayOfCurrentMonth);
   const [openingCashUsd, setOpeningCashUsd] = useState("0");
+  const [openingCashCdf, setOpeningCashCdf] = useState("0");
   const [notes, setNotes] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ResetResult | null>(null);
 
   const isAdmin = me?.role === "admin";
-  const amount = Number(openingCashUsd);
-  const amountValid = Number.isFinite(amount) && amount >= 0;
-  const canReset = isAdmin && amountValid && confirmation === CONFIRMATION && !submitting;
+  const usdAmount = Number(openingCashUsd);
+  const cdfAmount = Number(openingCashCdf);
+  const exchangeRate = Number(settings?.usdToCdfRate ?? 0);
+  const rateValid = Number.isFinite(exchangeRate) && exchangeRate > 0;
+  const usdValid = Number.isFinite(usdAmount) && usdAmount >= 0;
+  const cdfValid = Number.isFinite(cdfAmount) && cdfAmount >= 0;
+  const amountValid = usdValid && cdfValid && (cdfAmount === 0 || rateValid);
+  const totalOpeningUsd = amountValid
+    ? usdAmount + (cdfAmount > 0 ? cdfAmount / exchangeRate : 0)
+    : 0;
+  const totalOpeningCdf = rateValid ? totalOpeningUsd * exchangeRate : 0;
+
+  const periodStartInstant = new Date(gymPeriodStartIso(periodStartDate));
+  const periodStartValid = /^\d{4}-\d{2}-\d{2}$/.test(periodStartDate)
+    && !Number.isNaN(periodStartInstant.getTime())
+    && periodStartInstant.getTime() <= Date.now();
+
+  const canReset = isAdmin
+    && amountValid
+    && periodStartValid
+    && confirmation === CONFIRMATION
+    && !submitting;
 
   const resetPeriod = async () => {
     if (!canReset) return;
@@ -74,6 +109,11 @@ export default function PeriodReset() {
     setResult(null);
     try {
       const token = localStorage.getItem("gym_token");
+      const openingBreakdown = rateValid
+        ? `Opening cash input: USD ${usdAmount.toFixed(2)} + CDF ${cdfAmount.toFixed(2)} at ${exchangeRate} CDF/USD`
+        : `Opening cash input: USD ${usdAmount.toFixed(2)}`;
+      const resetNotes = [notes.trim(), openingBreakdown].filter(Boolean).join(" | ");
+
       const response = await fetch(`${apiBaseUrl()}/api/ledger/opening-balance`, {
         method: "POST",
         credentials: "include",
@@ -83,8 +123,9 @@ export default function PeriodReset() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          targetAmountUsd: amount,
-          notes: notes.trim() || "New operating period opening balance",
+          targetAmountUsd: Number(totalOpeningUsd.toFixed(6)),
+          date: gymPeriodStartIso(periodStartDate),
+          notes: resetNotes || "New operating period opening balance",
         }),
       });
 
@@ -136,7 +177,7 @@ export default function PeriodReset() {
         icon={RefreshCcw}
         iconClass="bg-amber-500/10 text-amber-600"
         title="New Period / Reset"
-        subtitle="Start fresh financial activity while preserving stock, members, and expenses"
+        subtitle="Start fresh financial activity while preserving stock, members, expenses, and in-period subscription revenue"
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -164,7 +205,7 @@ export default function PeriodReset() {
               <AlertTriangle className="h-5 w-5 text-amber-600" />
               <CardTitle className="text-base">Reset for the new period</CardTitle>
             </div>
-            <CardDescription>The following current-period activity is cleared together in one transaction.</CardDescription>
+            <CardDescription>The following non-preserved activity is cleared together in one transaction.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {cleared.map((item) => (
@@ -179,24 +220,73 @@ export default function PeriodReset() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Opening balance</CardTitle>
+          <CardTitle>Period start & opening balance</CardTitle>
           <CardDescription>
-            Enter the physical cash you want Oxygen Gym to start the new period with. The CDF equivalent uses the gym's current exchange rate.
+            Choose the date the new reporting period begins, then enter the physical USD and/or CDF cash on hand at that starting point. CDF is converted using the gym's configured exchange rate.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="grid gap-2 max-w-sm">
-            <Label htmlFor="opening-cash">Opening cash — USD equivalent</Label>
-            <Input
-              id="opening-cash"
-              type="number"
-              min="0"
-              step="0.01"
-              value={openingCashUsd}
-              onChange={(event) => setOpeningCashUsd(event.target.value)}
-              className="text-lg font-semibold"
-            />
-            {!amountValid && <p className="text-xs text-destructive">Enter zero or a positive amount.</p>}
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-2">
+              <Label htmlFor="period-start">Subscription revenue start date</Label>
+              <Input
+                id="period-start"
+                type="date"
+                value={periodStartDate}
+                onChange={(event) => setPeriodStartDate(event.target.value)}
+                className="font-semibold"
+              />
+              <p className="text-xs text-muted-foreground">
+                Membership receipts on or after this date are kept. For the current September period, leave this at 01/09/2026.
+              </p>
+              {!periodStartValid && <p className="text-xs text-destructive">Choose today or an earlier valid date.</p>}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="opening-cash-usd">Opening cash — USD</Label>
+              <Input
+                id="opening-cash-usd"
+                type="number"
+                min="0"
+                step="0.01"
+                value={openingCashUsd}
+                onChange={(event) => setOpeningCashUsd(event.target.value)}
+                className="text-lg font-semibold"
+              />
+              {!usdValid && <p className="text-xs text-destructive">Enter zero or a positive USD amount.</p>}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="opening-cash-cdf">Opening cash — CDF</Label>
+              <Input
+                id="opening-cash-cdf"
+                type="number"
+                min="0"
+                step="1"
+                value={openingCashCdf}
+                onChange={(event) => setOpeningCashCdf(event.target.value)}
+                className="text-lg font-semibold"
+              />
+              {!cdfValid && <p className="text-xs text-destructive">Enter zero or a positive CDF amount.</p>}
+              {cdfAmount > 0 && !rateValid && <p className="text-xs text-destructive">The USD/CDF exchange rate is not available yet.</p>}
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-muted/25 p-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Gym exchange rate</p>
+                <p className="font-semibold">{rateValid ? `1 USD = ${exchangeRate.toLocaleString()} CDF` : "Loading rate…"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Combined opening balance</p>
+                <p className="font-semibold">${totalOpeningUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">CDF equivalent</p>
+                <p className="font-semibold">{rateValid ? `${totalOpeningCdf.toLocaleString(undefined, { maximumFractionDigits: 0 })} CDF` : "—"}</p>
+              </div>
+            </div>
           </div>
 
           <div className="grid gap-2 max-w-2xl">
@@ -256,16 +346,19 @@ export default function PeriodReset() {
               <CheckCircle2 className="h-5 w-5 text-emerald-600" />
               <CardTitle className="text-base">Reset completed</CardTitle>
             </div>
-            <CardDescription>{result.resetNumber} · {new Date(result.resetDate).toLocaleString()}</CardDescription>
+            <CardDescription>{result.resetNumber} · period starts {new Date(result.resetDate).toLocaleDateString()}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Opening cash</p><p className="font-semibold">${result.balance.balanceUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p></div>
-              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Revenue payments cleared</p><p className="font-semibold">{result.cleared.payments}</p></div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Opening cash (USD eq.)</p><p className="font-semibold">${result.openingCashUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Opening cash (CDF eq.)</p><p className="font-semibold">{(result.openingCashUsd * result.exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })} CDF</p></div>
+              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Current cash after preserved activity</p><p className="font-semibold">${result.balance.balanceUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Old revenue payments cleared</p><p className="font-semibold">{result.cleared.payments}</p></div>
               <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Sales cleared</p><p className="font-semibold">{result.cleared.sales}</p></div>
-              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Check-ins cleared</p><p className="font-semibold">{result.cleared.checkIns}</p></div>
             </div>
-            <p className="text-sm text-muted-foreground">Stock, stock purchase history, member records, and expenses were preserved.</p>
+            <p className="text-sm text-muted-foreground">
+              Subscription revenue dated on or after the selected period start was preserved. Stock, stock purchase history, member records, and expenses were also preserved.
+            </p>
           </CardContent>
         </Card>
       )}
