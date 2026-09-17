@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   generate-contract:
-    if: ${{ github.event.head_commit.message != 'fix: add ledger movements API contract' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
