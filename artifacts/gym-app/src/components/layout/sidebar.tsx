@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   Users,
   Dumbbell,
-  UserCog,
   CreditCard,
   Package,
   FlaskConical,
@@ -32,8 +31,8 @@ const NAV_ITEMS = [
   { id: "stock",            href: "/stock",            icon: Package,         labelKey: "nav.stock",      permKey: "stock"          },
   { id: "supplements",      href: "/supplements",      icon: FlaskConical,    labelKey: "nav.supplements",permKey: "stock"          },
   { id: "sales",            href: "/sales",            icon: TrendingUp,      labelKey: "nav.sales",      permKey: "sales"          },
-  { id: "settings",         href: "/settings",         icon: Settings,        labelKey: "nav.settings",   permKey: "settings"       },
-  { id: "period-reset",     href: "/period-reset",     icon: RefreshCcw,      labelOverride: "New Period / Reset", permKey: "settings", adminOnly: true },
+  { id: "settings",         href: "/settings",         icon: Settings,        labelKey: "nav.settings",   permKey: "manageSettings" },
+  { id: "period-reset",     href: "/period-reset",     icon: RefreshCcw,      labelOverride: "New Period / Reset", permKey: "manageSettings", adminOnly: true },
 ] as const;
 
 export function Sidebar() {
@@ -42,14 +41,14 @@ export function Sidebar() {
   const me = useGetMe();
   const { collapsed, toggle, mobileOpen, closeMobile } = useSidebarStore();
 
-  const isAdminOrManager = me?.role === "admin" || me?.role === "manager";
+  const isAdmin = me?.role === "admin";
   const perms = me?.permissions as Record<string, boolean> | undefined;
 
   const visibleItems = NAV_ITEMS.filter((item) => {
     if (!me) return false;
-    if ("adminOnly" in item && item.adminOnly) return me.role === "admin";
-    if (isAdminOrManager) return true;
-    return !!perms?.[item.permKey];
+    if ("adminOnly" in item && item.adminOnly) return isAdmin;
+    if (isAdmin) return true;
+    return perms?.[item.permKey] === true;
   });
 
   const getLabel = (item: (typeof NAV_ITEMS)[number]) =>
