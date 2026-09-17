@@ -51,7 +51,6 @@ router.post("/", async (req, res) => {
     bonus: body.bonus === undefined ? undefined : nonNegativeNumber(body.bonus, "bonus"),
     deduction: body.deduction === undefined ? undefined : nonNegativeNumber(body.deduction, "deduction"),
     currency: optionalString(body.currency),
-    exchangeRate: body.exchangeRate === undefined ? undefined : nonNegativeNumber(body.exchangeRate, "exchangeRate"),
     notes: optionalString(body.notes),
   }, actor);
 

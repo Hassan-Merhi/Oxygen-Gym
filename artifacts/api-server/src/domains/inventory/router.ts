@@ -123,7 +123,6 @@ router.post("/:id/purchases", async (req, res) => {
     costPerUnit: nonNegativeNumber(body.costPerUnit, "costPerUnit"),
     totalCost: body.totalCost === undefined ? undefined : nonNegativeNumber(body.totalCost, "totalCost"),
     currency: optionalString(body.currency),
-    exchangeRate: body.exchangeRate === undefined ? undefined : nonNegativeNumber(body.exchangeRate, "exchangeRate"),
     supplier: optionalString(body.supplier),
     notes: optionalString(body.notes),
     paidFromCash: asBoolean(body.paidFromCash),

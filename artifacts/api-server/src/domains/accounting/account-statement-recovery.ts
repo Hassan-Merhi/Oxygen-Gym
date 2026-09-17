@@ -1,8 +1,7 @@
 import { db } from "@workspace/db";
-import { cashLedgerTable, chartOfAccountsTable } from "@workspace/db/schema";
-import { and, asc, eq, gte, lte } from "drizzle-orm";
-import { fxRate, money } from "../../shared/accounting/decimal";
-import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
+import { chartOfAccountsTable } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
+import { getCurrentCashMovements } from "../../lib/ledger";
 import { getAccountStatement } from "./accounts-service";
 import { canonicalAccountType } from "./chart-service";
 
@@ -17,44 +16,46 @@ async function getAccount(id: number) {
   return account;
 }
 
-async function getCashLedgerFallback(account: NonNullable<Awaited<ReturnType<typeof getAccount>>>, dateFrom?: Date, dateTo?: Date) {
-  const conditions = [];
-  if (dateFrom) conditions.push(gte(cashLedgerTable.entryDate, dateFrom));
-  if (dateTo) conditions.push(lte(cashLedgerTable.entryDate, dateTo));
-
-  const ledgerRows = await db.select().from(cashLedgerTable)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(asc(cashLedgerTable.entryDate), asc(cashLedgerTable.id));
-  const configuredRate = await getExchangeRate();
-  const fallbackRate = configuredRate >= 10 ? configuredRate : 2800;
+/**
+ * Cash is special: the account statement must be the exact same canonical
+ * physical-cash stream as Cash Book/current balance. An empty canonical stream
+ * is a valid $0 balance (especially after a period reset), so never replace it
+ * with old append-only cash_ledger history.
+ */
+async function getCanonicalCashStatement(
+  account: NonNullable<Awaited<ReturnType<typeof getAccount>>>,
+  dateFrom?: Date,
+  dateTo?: Date,
+) {
+  const { movements } = await getCurrentCashMovements();
+  const filtered = movements.filter((movement) => {
+    if (dateFrom && movement.date < dateFrom) return false;
+    if (dateTo && movement.date > dateTo) return false;
+    return true;
+  });
 
   let runningBalance = 0;
-  const rows = ledgerRows.map((row) => {
-    const amount = money(Number(row.amount ?? 0));
-    const nativeCurrency = (row.currency ?? "USD").toUpperCase();
-    const currency = nativeCurrency === "USD" ? "USD" : "CDF";
-    const storedRate = Number(row.exchangeRate ?? 0);
-    const rate = storedRate >= 10 ? fxRate(storedRate) : fallbackRate;
-    const converted = toUsdCdf(amount, currency, rate);
-    const amountUsd = converted.amountUsd;
-    const amountCdf = converted.amountCdf;
-    if (row.direction === "out") runningBalance -= amountUsd;
-    else runningBalance += amountUsd;
+  const rows = filtered.map((movement, index) => {
+    const amountUsd = movement.amountUsd;
+    const amountCdf = movement.amountCdf;
+    runningBalance += movement.direction === "in" ? amountUsd : -amountUsd;
 
     return {
-      id: row.id,
-      date: row.entryDate,
-      description: row.description ?? row.sourceType,
-      party: row.sourceNumber ?? "",
-      sourceType: row.sourceType,
-      sourceId: row.sourceId,
-      amount,
-      currency,
-      debitUsd: row.direction === "out" ? 0 : amountUsd,
-      creditUsd: row.direction === "out" ? amountUsd : 0,
-      debitCdf: row.direction === "out" ? 0 : amountCdf,
-      creditCdf: row.direction === "out" ? amountCdf : 0,
-      exchangeRate: rate,
+      // Use a statement-local unique id. Source ids can collide across payments,
+      // vouchers, stock purchases, and supplier payments.
+      id: index + 1,
+      date: movement.date,
+      description: movement.description,
+      party: movement.party || movement.sourceNumber || "",
+      sourceType: movement.sourceType,
+      sourceId: movement.sourceId,
+      amount: movement.amount,
+      currency: movement.currency,
+      debitUsd: movement.direction === "in" ? amountUsd : 0,
+      creditUsd: movement.direction === "out" ? amountUsd : 0,
+      debitCdf: movement.direction === "in" ? amountCdf : 0,
+      creditCdf: movement.direction === "out" ? amountCdf : 0,
+      exchangeRate: movement.exchangeRate,
       runningBalance,
     };
   });
@@ -66,26 +67,11 @@ async function getCashLedgerFallback(account: NonNullable<Awaited<ReturnType<typ
   };
 }
 
-/**
- * Cash normally comes from the reconciled business-record stream in
- * accounts-service. If a legacy production schema/source makes that composite
- * query fail, or the reconstruction unexpectedly comes back empty while the
- * append-only cash ledger has history, recover from cash_ledger instead of
- * rendering false $0 totals. Non-cash account failures are never hidden.
- */
 export async function getAccountStatementWithRecovery(id: number, dateFrom?: Date, dateTo?: Date) {
-  try {
-    const primary = await getAccountStatement(id, dateFrom, dateTo);
-    if (!isCashName(primary.account.name) || primary.rows.length > 0) return primary;
-
-    const fallback = await getCashLedgerFallback(primary.account, dateFrom, dateTo);
-    return fallback.rows.length > 0 ? fallback : primary;
-  } catch (error) {
-    const account = await getAccount(id);
-    if (!account || !isCashName(account.name)) throw error;
-
-    const fallback = await getCashLedgerFallback(account, dateFrom, dateTo);
-    if (fallback.rows.length > 0) return fallback;
-    throw error;
+  const account = await getAccount(id);
+  if (!account) return getAccountStatement(id, dateFrom, dateTo);
+  if (isCashName(account.name)) {
+    return getCanonicalCashStatement(account, dateFrom, dateTo);
   }
+  return getAccountStatement(id, dateFrom, dateTo);
 }

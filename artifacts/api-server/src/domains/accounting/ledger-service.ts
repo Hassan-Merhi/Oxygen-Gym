@@ -1,7 +1,7 @@
 import { db } from "@workspace/db";
 import { cashLedgerTable } from "@workspace/db/schema";
 import { and, count, desc, eq, gte, lte } from "drizzle-orm";
-import { appendLedgerEntry, getCurrentBalance } from "../../lib/ledger";
+import { appendLedgerEntry, getCurrentBalance, getCurrentCashMovements } from "../../lib/ledger";
 import { postDoubleEntry } from "../../lib/accounting";
 import { getExchangeRate } from "../../shared/accounting/currency";
 import { withTransaction } from "../../shared/db/transaction";
@@ -11,12 +11,18 @@ export async function getLedgerBalance() {
   return getCurrentBalance();
 }
 
+export async function listCurrentCashMovements() {
+  const { exchangeRate, movements } = await getCurrentCashMovements();
+  return { exchangeRate, items: movements };
+}
+
 export async function setOpeningBalance(input: { targetAmountUsd: number; date?: Date; notes?: string }, actor: string) {
   if (!Number.isFinite(input.targetAmountUsd) || input.targetAmountUsd < 0) throw badRequest("targetAmountUsd must be a non-negative number");
   const exchangeRate = await getExchangeRate();
 
   const result = await withTransaction(async (tx) => {
-    // Calculate the delta only after the financial transaction lock is held.
+    // Calculate the delta from the same canonical current-rate cash stream used by
+    // Cash Book and the Cash account statement.
     const currentBalance = await getCurrentBalance(tx);
     const delta = input.targetAmountUsd - currentBalance.balanceUsd;
     if (Math.abs(delta) < 0.001) return { skipped: true };
@@ -56,7 +62,7 @@ export async function setOpeningBalance(input: { targetAmountUsd: number; date?:
     return { skipped: false };
   });
 
-  return { ok: true, ...result, balance: await getCurrentBalance() };
+  return { ok: true, ...result, balance: await getLedgerBalance() };
 }
 
 export async function listLedger(input: {

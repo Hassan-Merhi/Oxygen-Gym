@@ -10,6 +10,7 @@ import {
   lubumbashiMonthBounds,
   lubumbashiYearBounds,
 } from "../lib/timezone";
+import { getExchangeRate } from "../shared/accounting/currency";
 
 const router = Router();
 router.use(requireAuth());
@@ -22,12 +23,8 @@ router.use(requireAuth());
  *   4. total profit   — today / this month / this year / all time
  *
  * Revenue and expenses use the same money-in / money-out definitions as
- * GET /accounts/summary (the cash page), so the two pages always agree:
- *   revenue  = completed payments (direction 'in')  + recorded vouchers (direction 'in')
- *   expenses = completed payments (direction 'out') + recorded vouchers (direction 'out')
- *   profit   = revenue - expenses
- *
- * All amounts are normalized to USD.
+ * GET /accounts/summary (the cash page), so the two pages always agree.
+ * All display conversion uses the current USD/CDF rate from Settings.
  */
 
 /** Money-in categories (matches GET /accounts/summary). */
@@ -45,32 +42,24 @@ interface AggregateTotals {
   expenses: { day: number; month: number; year: number; total: number };
 }
 
-async function getRate(): Promise<number> {
-  const s = await db.query.settingsTable.findFirst();
-  return s?.usdToCdfRate ?? 2800;
-}
-
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
 /**
- * USD value of a row: prefer the stored amount_usd, otherwise convert the raw
- * amount with the configured CDF rate (legacy rows have no amount_usd).
+ * Revalue each row from its native amount using the current Settings rate.
+ * Stored converted columns are deliberately not used for dashboard display,
+ * otherwise changing Settings leaves old KPI rows on stale FX rates.
  */
 function usdOf(
   amount: AnyPgColumn,
   currency: AnyPgColumn,
-  amountUsd: AnyPgColumn,
   rate: number,
 ) {
-  return sql<number>`COALESCE(
-    ${amountUsd},
-    CASE WHEN ${currency} = 'USD'
-      THEN ${amount}
-      ELSE ${amount} / CAST(${rate} AS DOUBLE PRECISION)
-    END
-  )`;
+  return sql<number>`CASE WHEN UPPER(COALESCE(${currency}, 'USD')) = 'USD'
+    THEN COALESCE(${amount}, 0)
+    ELSE COALESCE(${amount}, 0) / CAST(${rate} AS DOUBLE PRECISION)
+  END`;
 }
 
 function toNumber(value: unknown): number {
@@ -87,12 +76,7 @@ async function aggregatePaymentsUsd(
   month: Period,
   year: Period,
 ): Promise<AggregateTotals> {
-  const usd = usdOf(
-    paymentsTable.amount,
-    paymentsTable.currency,
-    paymentsTable.amountUsd,
-    rate,
-  );
+  const usd = usdOf(paymentsTable.amount, paymentsTable.currency, rate);
   const revenue = and(
     eq(paymentsTable.direction, "in"),
     eq(paymentsTable.status, "completed"),
@@ -138,12 +122,7 @@ async function aggregateVouchersUsd(
   month: Period,
   year: Period,
 ): Promise<AggregateTotals> {
-  const usd = usdOf(
-    vouchersTable.amount,
-    vouchersTable.currency,
-    vouchersTable.amountUsd,
-    rate,
-  );
+  const usd = usdOf(vouchersTable.amount, vouchersTable.currency, rate);
   const revenue = and(
     eq(vouchersTable.direction, "in"),
     eq(vouchersTable.status, "recorded"),
@@ -199,14 +178,12 @@ async function countActiveMembers(): Promise<number> {
 // GET /api/dashboard/kpis
 router.get("/kpis", async (req: Request, res: Response) => {
   try {
-    const rate = await getRate();
+    const rate = await getExchangeRate();
 
     const day: Period = { start: lubumbashiTodayStart(), end: lubumbashiTodayEnd() };
     const month: Period = lubumbashiMonthBounds();
     const year: Period = lubumbashiYearBounds();
 
-    // Four database round-trips total for the endpoint:
-    // settings rate, member count, one payments aggregate, one vouchers aggregate.
     const [activeMembers, paymentTotals, voucherTotals] = await Promise.all([
       countActiveMembers(),
       aggregatePaymentsUsd(rate, day, month, year),
@@ -241,6 +218,7 @@ router.get("/kpis", async (req: Request, res: Response) => {
         total: round2(revAllTime - expAllTime),
       },
       currency: "USD",
+      rate,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to get dashboard KPIs");
