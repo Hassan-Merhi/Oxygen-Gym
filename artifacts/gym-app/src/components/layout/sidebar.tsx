@@ -21,18 +21,18 @@ import { useGetMe } from "@/hooks/use-me";
 import { useSidebarStore } from "@/lib/sidebar-store";
 
 const NAV_ITEMS = [
-  { id: "dashboard",        href: "/dashboard",        icon: LayoutDashboard, labelKey: "nav.dashboard",  permKey: "dashboard"      },
-  { id: "members",          href: "/members",          icon: Users,           labelKey: "nav.members",    permKey: "members"        },
-  { id: "members-overview", href: "/members-overview", icon: BarChart3,       labelOverride: "Member Overview", permKey: "members"    },
-  { id: "plans",            href: "/plans",            icon: Dumbbell,        labelKey: "nav.plans",      permKey: "plans"          },
-  { id: "payments",         href: "/payments",         icon: CreditCard,      labelKey: "nav.cashbook",   permKey: "payments"       },
-  { id: "accounts",         href: "/accounts",         icon: BookOpen,        labelKey: "nav.accounts",   permKey: "accounts"       },
-  { id: "financials",       href: "/financials",       icon: BarChart3,       labelKey: "nav.financials", permKey: "viewAccounting" },
-  { id: "stock",            href: "/stock",            icon: Package,         labelKey: "nav.stock",      permKey: "stock"          },
-  { id: "supplements",      href: "/supplements",      icon: FlaskConical,    labelKey: "nav.supplements",permKey: "stock"          },
-  { id: "sales",            href: "/sales",            icon: TrendingUp,      labelKey: "nav.sales",      permKey: "sales"          },
-  { id: "settings",         href: "/settings",         icon: Settings,        labelKey: "nav.settings",   permKey: "manageSettings" },
-  { id: "period-reset",     href: "/period-reset",     icon: RefreshCcw,      labelOverride: "New Period / Reset", permKey: "manageSettings", adminOnly: true },
+  { id: "dashboard",        href: "/dashboard",        icon: LayoutDashboard, labelKey: "nav.dashboard",  allOf: ["dashboard", "viewProfit"] },
+  { id: "members",          href: "/members",          icon: Users,           labelKey: "nav.members",    allOf: ["members"] },
+  { id: "members-overview", href: "/members-overview", icon: BarChart3,       labelOverride: "Member Overview", allOf: ["members"] },
+  { id: "plans",            href: "/plans",            icon: Dumbbell,        labelKey: "nav.plans",      allOf: ["plans"] },
+  { id: "payments",         href: "/payments",         icon: CreditCard,      labelKey: "nav.cashbook",   allOf: ["payments"] },
+  { id: "accounts",         href: "/accounts",         icon: BookOpen,        labelKey: "nav.accounts",   allOf: ["accounts", "viewAccounting"] },
+  { id: "financials",       href: "/financials",       icon: BarChart3,       labelKey: "nav.financials", allOf: ["viewAccounting", "viewProfit", "viewCost"] },
+  { id: "stock",            href: "/stock",            icon: Package,         labelKey: "nav.stock",      allOf: ["stock"] },
+  { id: "supplements",      href: "/supplements",      icon: FlaskConical,    labelKey: "nav.supplements",allOf: ["stock", "viewCost", "viewProfit"] },
+  { id: "sales",            href: "/sales",            icon: TrendingUp,      labelKey: "nav.sales",      allOf: ["sales"] },
+  { id: "settings",         href: "/settings",         icon: Settings,        labelKey: "nav.settings",   allOf: ["manageSettings"] },
+  { id: "period-reset",     href: "/period-reset",     icon: RefreshCcw,      labelOverride: "New Period / Reset", allOf: ["manageSettings"], adminOnly: true },
 ] as const;
 
 export function Sidebar() {
@@ -48,7 +48,7 @@ export function Sidebar() {
     if (!me) return false;
     if ("adminOnly" in item && item.adminOnly) return isAdmin;
     if (isAdmin) return true;
-    return perms?.[item.permKey] === true;
+    return item.allOf.every((permission) => perms?.[permission] === true);
   });
 
   const getLabel = (item: (typeof NAV_ITEMS)[number]) =>
