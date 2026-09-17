@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useI18n } from "@/lib/i18n";
 import { Link, useLocation } from "wouter";
 import {
@@ -14,16 +15,23 @@ import {
   RefreshCcw,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGetMe } from "@/hooks/use-me";
 import { useSidebarStore } from "@/lib/sidebar-store";
+import {
+  directionForNavigationLanguage,
+  navigationCopy,
+  type NavigationLanguage,
+} from "@/lib/mobile-navigation";
 
 const NAV_ITEMS = [
   { id: "dashboard",        href: "/dashboard",        icon: LayoutDashboard, labelKey: "nav.dashboard",  allOf: ["dashboard", "viewProfit"] },
   { id: "members",          href: "/members",          icon: Users,           labelKey: "nav.members",    allOf: ["members"] },
-  { id: "members-overview", href: "/members-overview", icon: BarChart3,       labelOverride: "Member Overview", allOf: ["members"] },
+  { id: "members-overview", href: "/members-overview", icon: BarChart3,       labelOverride: "memberOverview", allOf: ["members"] },
   { id: "plans",            href: "/plans",            icon: Dumbbell,        labelKey: "nav.plans",      allOf: ["plans"] },
   { id: "payments",         href: "/payments",         icon: CreditCard,      labelKey: "nav.cashbook",   allOf: ["payments"] },
   { id: "accounts",         href: "/accounts",         icon: BookOpen,        labelKey: "nav.accounts",   allOf: ["accounts", "viewAccounting"] },
@@ -32,14 +40,17 @@ const NAV_ITEMS = [
   { id: "supplements",      href: "/supplements",      icon: FlaskConical,    labelKey: "nav.supplements",allOf: ["stock", "viewCost", "viewProfit"] },
   { id: "sales",            href: "/sales",            icon: TrendingUp,      labelKey: "nav.sales",      allOf: ["sales"] },
   { id: "settings",         href: "/settings",         icon: Settings,        labelKey: "nav.settings",   allOf: ["manageSettings"] },
-  { id: "period-reset",     href: "/period-reset",     icon: RefreshCcw,      labelOverride: "New Period / Reset", allOf: ["manageSettings"], adminOnly: true },
+  { id: "period-reset",     href: "/period-reset",     icon: RefreshCcw,      labelOverride: "periodReset", allOf: ["manageSettings"], adminOnly: true },
 ] as const;
 
 export function Sidebar() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [location] = useLocation();
   const me = useGetMe();
   const { collapsed, toggle, mobileOpen, closeMobile } = useSidebarStore();
+  const navLanguage = language as NavigationLanguage;
+  const copy = navigationCopy(navLanguage);
+  const isRtl = directionForNavigationLanguage(navLanguage) === "rtl";
 
   const isAdmin = me?.role === "admin";
   const perms = me?.permissions as Record<string, boolean> | undefined;
@@ -52,29 +63,54 @@ export function Sidebar() {
   });
 
   const getLabel = (item: (typeof NAV_ITEMS)[number]) =>
-    "labelOverride" in item ? item.labelOverride : t(item.labelKey);
+    "labelOverride" in item ? copy[item.labelOverride] : t(item.labelKey);
+
+  useEffect(() => {
+    closeMobile();
+  }, [location, closeMobile]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const lockBody = window.matchMedia("(max-width: 767px)").matches;
+    if (lockBody) document.body.style.overflow = "hidden";
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMobile();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (lockBody) document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileOpen, closeMobile]);
 
   return (
     <>
       {/* Mobile backdrop */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 md:hidden"
+          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm md:hidden"
           onClick={closeMobile}
+          aria-hidden="true"
         />
       )}
 
       <aside
         className={cn(
-          "mobile-safe-sidebar bg-sidebar border-r border-sidebar-border h-full flex flex-col fixed left-0 top-0 z-40 transition-all duration-300",
-          "w-64",
+          "mobile-safe-sidebar fixed top-0 z-40 flex h-full w-64 flex-col bg-sidebar border-sidebar-border transition-transform duration-300 ltr:left-0 ltr:border-r rtl:right-0 rtl:border-l",
           collapsed && "md:w-16",
-          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+          mobileOpen
+            ? "translate-x-0"
+            : "ltr:-translate-x-full rtl:translate-x-full md:translate-x-0"
         )}
+        aria-label={copy.openMenu}
       >
         {/* Logo header */}
-        <div className="h-16 flex items-center border-b border-sidebar-border overflow-hidden px-3 gap-3">
-          <div className="shrink-0 h-8 w-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
+        <div className="flex h-16 items-center gap-3 overflow-hidden border-b border-sidebar-border px-3">
+          <div className="h-8 w-8 shrink-0 rounded-lg bg-primary flex items-center justify-center shadow-sm">
             <img
               src="/gym-logo.jpg"
               alt="Oxygen Fitness Gym"
@@ -85,17 +121,18 @@ export function Sidebar() {
             />
           </div>
           <span className={cn(
-            "font-bold text-base text-white tracking-tight truncate flex-1",
+            "flex-1 truncate text-start text-base font-bold tracking-tight text-white",
             collapsed && "md:hidden"
           )}>
             OXYGEN GYM
           </span>
           <button
+            type="button"
             onClick={closeMobile}
-            className="md:hidden flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:text-white"
-            aria-label="Close menu"
+            className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary md:hidden"
+            aria-label={copy.closeMenu}
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
@@ -114,24 +151,24 @@ export function Sidebar() {
                   title={collapsed ? label : undefined}
                   onClick={closeMobile}
                   className={cn(
-                    "relative flex min-h-11 touch-manipulation items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group md:min-h-0",
+                    "group relative flex min-h-11 touch-manipulation items-center gap-3 rounded-lg px-3 py-2.5 text-start text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary md:min-h-0",
                     collapsed && "md:justify-center md:px-2",
                     isActive
                       ? "bg-primary/20 text-white"
-                      : "text-sidebar-foreground hover:bg-white/5 hover:text-white"
+                      : "text-sidebar-foreground hover:bg-white/5 hover:text-white focus-visible:bg-white/5 focus-visible:text-white"
                   )}
                   data-testid={`nav-${item.id}`}
                 >
-                  {/* Left accent bar for active item */}
+                  {/* Logical-edge accent bar for the active item */}
                   {isActive && (
                     <span className={cn(
-                      "absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-primary",
+                      "absolute top-1/2 h-6 w-[3px] -translate-y-1/2 bg-primary ltr:left-0 ltr:rounded-r-full rtl:right-0 rtl:rounded-l-full",
                       collapsed && "md:hidden"
                     )} />
                   )}
                   <item.icon className={cn(
-                    "w-4 h-4 shrink-0 transition-colors",
-                    isActive ? "text-primary" : "text-sidebar-foreground group-hover:text-white"
+                    "h-4 w-4 shrink-0 transition-colors",
+                    isActive ? "text-primary" : "text-sidebar-foreground group-hover:text-white group-focus-visible:text-white"
                   )} />
                   <span className={cn(
                     "transition-colors",
@@ -146,21 +183,23 @@ export function Sidebar() {
         </div>
 
         {/* Collapse toggle — desktop only */}
-        <div className="border-t border-sidebar-border p-2 hidden md:block">
+        <div className="hidden border-t border-sidebar-border p-2 md:block">
           <button
+            type="button"
             onClick={toggle}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? copy.expand : copy.collapse}
+            aria-label={collapsed ? copy.expand : copy.collapse}
             className={cn(
-              "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-sidebar-foreground hover:bg-white/5 hover:text-white transition-all",
+              "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-all hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
               collapsed && "justify-center px-2"
             )}
           >
             {collapsed ? (
-              <PanelLeftOpen className="w-4 h-4 shrink-0" />
+              isRtl ? <PanelRightOpen className="h-4 w-4 shrink-0" /> : <PanelLeftOpen className="h-4 w-4 shrink-0" />
             ) : (
               <>
-                <PanelLeftClose className="w-4 h-4 shrink-0" />
-                <span>Collapse</span>
+                {isRtl ? <PanelRightClose className="h-4 w-4 shrink-0" /> : <PanelLeftClose className="h-4 w-4 shrink-0" />}
+                <span>{copy.collapse}</span>
               </>
             )}
           </button>

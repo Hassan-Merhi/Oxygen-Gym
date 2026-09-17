@@ -8,7 +8,7 @@
     "architecture:audit": "tsx ./src/architecture-audit.ts && tsx ./src/request-boundary-audit.ts && tsx ./src/authorization-audit.ts",
     "authorization:audit": "tsx ./src/authorization-audit.ts",
     "contracts:check": "tsx ./src/check-contract-drift.ts",
-    "test:critical": "tsx --test ../tests/critical-behavior.test.ts",
+    "test:critical": "tsx --test ../tests/critical-behavior.test.ts ../tests/mobile-navigation-i18n.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
