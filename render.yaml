@@ -4,8 +4,9 @@ services:
     runtime: node
     plan: free
     buildCommand: pnpm install --frozen-lockfile && pnpm run db:migrate && pnpm run build:render
-    startCommand: node artifacts/api-server/dist/index.mjs
+    startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
     healthCheckPath: /api/healthz
+    maxShutdownDelaySeconds: 30
     envVars:
       - key: NODE_ENV
         value: production
