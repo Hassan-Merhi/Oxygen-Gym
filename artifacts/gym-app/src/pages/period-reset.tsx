@@ -350,11 +350,11 @@ export default function PeriodReset() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Opening cash (USD eq.)</p><p className="font-semibold">${result.balance.balanceUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p></div>
-              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Opening cash (CDF eq.)</p><p className="font-semibold">{result.balance.balanceCdf.toLocaleString(undefined, { maximumFractionDigits: 0 })} CDF</p></div>
+              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Opening cash (USD eq.)</p><p className="font-semibold">${result.openingCashUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Opening cash (CDF eq.)</p><p className="font-semibold">{(result.openingCashUsd * result.exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 0 })} CDF</p></div>
+              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Current cash after preserved activity</p><p className="font-semibold">${result.balance.balanceUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p></div>
               <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Old revenue payments cleared</p><p className="font-semibold">{result.cleared.payments}</p></div>
               <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Sales cleared</p><p className="font-semibold">{result.cleared.sales}</p></div>
-              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Check-ins cleared</p><p className="font-semibold">{result.cleared.checkIns}</p></div>
             </div>
             <p className="text-sm text-muted-foreground">
               Subscription revenue dated on or after the selected period start was preserved. Stock, stock purchase history, member records, and expenses were also preserved.
