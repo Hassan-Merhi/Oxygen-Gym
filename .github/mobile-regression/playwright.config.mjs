@@ -1,7 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
-  testDir: ".github/mobile-regression",
+  // This config already lives beside the Phase 5 regression spec. Resolve the
+  // test directory relative to the config instead of duplicating the path.
+  testDir: ".",
   testMatch: "mobile.spec.mjs",
   timeout: 30_000,
   expect: { timeout: 7_500 },
