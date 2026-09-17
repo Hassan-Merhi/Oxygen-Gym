@@ -30,7 +30,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/oxygen_gym_test
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.12.1
           run_install: false
