@@ -27,15 +27,13 @@ async function getCanonicalCashStatement(
   dateFrom?: Date,
   dateTo?: Date,
 ) {
-  const { movements } = await getCurrentCashMovements();
-  const filtered = movements.filter((movement) => {
-    if (dateFrom && movement.date < dateFrom) return false;
-    if (dateTo && movement.date > dateTo) return false;
-    return true;
-  });
+  // Push date bounds down into each canonical source query. Previously the full
+  // all-time cash stream was materialized and only then filtered in Node, which
+  // made date-scoped account statements needlessly expensive as history grew.
+  const { movements } = await getCurrentCashMovements(db, { dateFrom, dateTo });
 
   let runningBalance = 0;
-  const rows = filtered.map((movement, index) => {
+  const rows = movements.map((movement, index) => {
     const amountUsd = movement.amountUsd;
     const amountCdf = movement.amountCdf;
     runningBalance += movement.direction === "in" ? amountUsd : -amountUsd;
