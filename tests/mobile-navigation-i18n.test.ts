@@ -29,6 +29,7 @@ test("navigation chrome has localized copy for English, French and Arabic", () =
     assert.ok(copy.openMenu.length > 0);
     assert.ok(copy.closeMenu.length > 0);
     assert.ok(copy.moreActions.length > 0);
+    assert.ok(copy.languageLabel.length > 0);
     assert.ok(copy.memberOverview.length > 0);
     assert.ok(copy.periodReset.length > 0);
     assert.ok(copy.collapse.length > 0);
@@ -36,4 +37,8 @@ test("navigation chrome has localized copy for English, French and Arabic", () =
     assert.ok(copy.lightMode.length > 0);
     assert.ok(copy.darkMode.length > 0);
   }
+
+  assert.equal(NAVIGATION_COPY.en.languageLabel, "Language");
+  assert.equal(NAVIGATION_COPY.fr.languageLabel, "Langue");
+  assert.equal(NAVIGATION_COPY.ar.languageLabel, "اللغة");
 });
