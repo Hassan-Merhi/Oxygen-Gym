@@ -9,7 +9,7 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const collapsed = useSidebarStore((s) => s.collapsed);
   return (
-    <div className="min-h-[100dvh] flex w-full bg-muted/20">
+    <div className="min-h-[100dvh] flex w-full overflow-x-clip bg-muted/20">
       <Sidebar />
       <div
         className={`flex-1 min-w-0 flex flex-col transition-all duration-300 ${
@@ -17,7 +17,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         }`}
       >
         <Topbar />
-        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+        <main className="mobile-safe-x flex-1 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
           {children}
         </main>
       </div>
