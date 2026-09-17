@@ -11,7 +11,7 @@ import {
   parseLimit,
   parsePage,
 } from "../../shared/http/validation";
-import { getLedgerBalance, listLedger, setOpeningBalance } from "./ledger-service";
+import { getLedgerBalance, listCurrentCashMovements, listLedger, setOpeningBalance } from "./ledger-service";
 import { resetOperationalPeriod } from "./period-reset-service";
 
 const router = Router();
@@ -19,6 +19,10 @@ router.use(requireAuth());
 
 router.get("/balance", async (_req, res) => {
   res.json(await getLedgerBalance());
+});
+
+router.get("/movements", async (_req, res) => {
+  res.json(await listCurrentCashMovements());
 });
 
 router.post("/opening-balance", async (req, res) => {
