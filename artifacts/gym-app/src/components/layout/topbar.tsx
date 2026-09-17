@@ -252,7 +252,7 @@ export function Topbar() {
         <div className="hidden md:block">
           <Select value={language} onValueChange={(val) => setLanguage(val as NavigationLanguage)}>
             <SelectTrigger className="h-8 w-28 border-border/60 bg-muted/50 text-xs" data-testid="select-language">
-              <SelectValue placeholder="Language" />
+              <SelectValue placeholder={copy.languageLabel} />
             </SelectTrigger>
             <SelectContent>
               {NAVIGATION_LANGUAGE_OPTIONS.map((option) => (
@@ -324,7 +324,7 @@ export function Topbar() {
             </div>
             <DropdownMenuSeparator />
             <div className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5"><Languages className="h-3.5 w-3.5" />Language</span>
+              <span className="inline-flex items-center gap-1.5"><Languages className="h-3.5 w-3.5" />{copy.languageLabel}</span>
             </div>
             {NAVIGATION_LANGUAGE_OPTIONS.map((option) => (
               <DropdownMenuItem
