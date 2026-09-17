@@ -55,6 +55,13 @@ function shutdown(server: Server, signal: NodeJS.Signals): Promise<void> {
 }
 
 async function startServer(): Promise<void> {
+  // pg emits an `error` event when an idle pooled client loses its connection.
+  // Without a listener, Node treats that event as uncaught and terminates the
+  // process. Log it and let the pool discard/recreate the affected client.
+  pool.on("error", (err) => {
+    logger.error({ err }, "Unexpected idle PostgreSQL client error");
+  });
+
   // Financial mutation routes use the idempotency table before their domain
   // writes run. Repair legacy production databases before accepting traffic.
   await ensureFinancialIdempotencyInfrastructure();
