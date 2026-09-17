@@ -1,0 +1,330 @@
+/* Phase 3 mobile page cleanup.
+ * Keep this layer presentation-only: no business logic or data flow belongs here.
+ */
+
+@media (max-width: 767px) {
+  /* Forms authored as one column on mobile must not let base col-span-2
+     implicitly create a second track before the sm breakpoint. */
+  .grid.grid-cols-1[class*="sm:grid-cols-2"] > .col-span-2 {
+    grid-column: span 1 / span 1 !important;
+  }
+
+  /* Vouchers page: remove the second layer of desktop page padding and let every
+     filter consume a full line on a phone. */
+  .p-6.space-y-6.max-w-7xl.mx-auto:has(.min-w-\[200px\]) {
+    padding: 0 !important;
+  }
+
+  .p-6.space-y-6.max-w-7xl.mx-auto:has(.min-w-\[200px\])
+    > .flex.flex-wrap.gap-3
+    > * {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  /* Stock filters: the fixed 132px status selector and low-stock toggle can wrap
+     instead of squeezing translated labels offscreen. */
+  .flex.gap-2:has(> [class~="w-[132px]"]) {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .flex.gap-2:has(> [class~="w-[132px]"]) > * {
+    flex: 1 1 12rem;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .flex.gap-2:has(> [class~="w-[132px]"]) [class~="w-[132px]"] {
+    width: 100% !important;
+  }
+
+  /* Staff search/add toolbar: keep both controls reachable without crushing the
+     input or relying on a tiny icon-only action. */
+  .space-y-4 > .flex.items-center.gap-3:has(> input.max-w-sm) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .space-y-4 > .flex.items-center.gap-3:has(> input.max-w-sm) > input {
+    max-width: none !important;
+    width: 100%;
+  }
+
+  .space-y-4 > .flex.items-center.gap-3:has(> input.max-w-sm) > button {
+    width: 100%;
+    margin-left: 0 !important;
+  }
+
+  /* Existing mobile list cards are allowed to wrap status/action groups instead
+     of forcing them beyond the viewport when labels are long. */
+  div[class~="md:hidden"][class~="divide-y"] > .flex.items-center.gap-3 {
+    flex-wrap: wrap;
+  }
+
+  /* Members and other simple pagers: prevent long translated Previous/Next text
+     from colliding with page counts. */
+  .flex.items-center.justify-between.text-sm.text-muted-foreground:has(> .flex.gap-2) {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  /* Plans: convert the remaining 620px desktop-only table into compact card rows
+     while keeping the same DOM/data and all desktop table behavior at md+. */
+  table[class~="min-w-[620px]"] {
+    display: block;
+    min-width: 0 !important;
+    width: 100%;
+    background: transparent;
+  }
+
+  table[class~="min-w-[620px]"] thead {
+    display: none;
+  }
+
+  table[class~="min-w-[620px]"] tbody {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  table[class~="min-w-[620px]"] tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.55rem 0.75rem;
+    margin: 0;
+    padding: 0.85rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.75rem;
+    background: hsl(var(--card));
+  }
+
+  table[class~="min-w-[620px]"] tbody td {
+    display: block;
+    width: auto !important;
+    min-width: 0;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
+  table[class~="min-w-[620px]"] tbody td:first-child {
+    grid-column: 1 / -1;
+  }
+
+  table[class~="min-w-[620px]"] tbody td:nth-child(2) {
+    grid-column: 1;
+  }
+
+  table[class~="min-w-[620px]"] tbody td:nth-child(3) {
+    grid-column: 2;
+    text-align: right;
+  }
+
+  table[class~="min-w-[620px]"] tbody td:last-child {
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  table[class~="min-w-[620px]"] tbody td[colspan] {
+    grid-column: 1 / -1;
+    padding: 2.5rem 1rem !important;
+    text-align: center;
+  }
+
+  /* Plans loading skeleton used the same four-column desktop template. */
+  [class~="grid-cols-[minmax(240px,2fr)_1fr_1fr_48px]"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  [class~="grid-cols-[minmax(240px,2fr)_1fr_1fr_48px]"] > *:not(:first-child) {
+    display: none;
+  }
+
+  /* Vouchers: their legacy table has no separate mobile renderer. Reflow each
+     transaction into a two-column card so the whole page never scrolls sideways. */
+  .p-6.space-y-6.max-w-7xl.mx-auto:has(.min-w-\[200px\])
+    .rounded-xl.border.border-border.overflow-hidden.bg-card
+    > .overflow-x-auto {
+    overflow: visible;
+  }
+
+  .p-6.space-y-6.max-w-7xl.mx-auto:has(.min-w-\[200px\])
+    .rounded-xl.border.border-border.overflow-hidden.bg-card
+    table {
+    display: block;
+    width: 100%;
+  }
+
+  .p-6.space-y-6.max-w-7xl.mx-auto:has(.min-w-\[200px\])
+    .rounded-xl.border.border-border.overflow-hidden.bg-card
+    thead {
+    display: none;
+  }
+
+  .p-6.space-y-6.max-w-7xl.mx-auto:has(.min-w-\[200px\])
+    .rounded-xl.border.border-border.overflow-hidden.bg-card
+    tbody {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .p-6.space-y-6.max-w-7xl.mx-auto:has(.min-w-\[200px\])
+    .rounded-xl.border.border-border.overflow-hidden.bg-card
+    tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.4rem 0.75rem;
+    padding: 0.8rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.75rem;
+    background: hsl(var(--card));
+  }
+
+  .p-6.space-y-6.max-w-7xl.mx-auto:has(.min-w-\[200px\])
+    .rounded-xl.border.border-border.overflow-hidden.bg-card
+    tbody td {
+    display: block;
+    min-width: 0;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
+  .p-6.space-y-6.max-w-7xl.mx-auto:has(.min-w-\[200px\])
+    .rounded-xl.border.border-border.overflow-hidden.bg-card
+    tbody td:nth-child(1) {
+    grid-column: 1;
+  }
+
+  .p-6.space-y-6.max-w-7xl.mx-auto:has(.min-w-\[200px\])
+    .rounded-xl.border.border-border.overflow-hidden.bg-card
+    tbody td:nth-child(2) {
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  .p-6.space-y-6.max-w-7xl.mx-auto:has(.min-w-\[200px\])
+    .rounded-xl.border.border-border.overflow-hidden.bg-card
+    tbody td:nth-child(3) {
+    grid-column: 1;
+    overflow-wrap: anywhere;
+  }
+
+  .p-6.space-y-6.max-w-7xl.mx-auto:has(.min-w-\[200px\])
+    .rounded-xl.border.border-border.overflow-hidden.bg-card
+    tbody td:nth-child(4) {
+    grid-column: 2;
+    text-align: right;
+  }
+
+  .p-6.space-y-6.max-w-7xl.mx-auto:has(.min-w-\[200px\])
+    .rounded-xl.border.border-border.overflow-hidden.bg-card
+    tbody td:last-child:has(button) {
+    grid-column: 1 / -1;
+    padding-top: 0.5rem !important;
+    border-top: 1px solid hsl(var(--border)) !important;
+  }
+
+  .p-6.space-y-6.max-w-7xl.mx-auto:has(.min-w-\[200px\])
+    .rounded-xl.border.border-border.overflow-hidden.bg-card
+    tbody td[colspan] {
+    grid-column: 1 / -1;
+    padding: 2.5rem 1rem !important;
+    text-align: center;
+  }
+
+  /* Financials custom date range: fixed 150px controls become full-width rows. */
+  .flex.items-center.gap-2:has(> input[class~="w-[150px]"]) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .flex.items-center.gap-2:has(> input[class~="w-[150px]"]) > input {
+    width: 100% !important;
+  }
+
+  .flex.items-center.gap-2:has(> input[class~="w-[150px]"]) > span {
+    text-align: center;
+  }
+
+  /* Settings/utility action groups may have long translated labels. */
+  .flex.flex-wrap.items-center.gap-2 > button {
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  /* Long values and descriptions should wrap inside mobile cards/dialogs rather
+     than creating document-level overflow. */
+  [role="dialog"] p,
+  [role="dialog"] span,
+  [role="dialog"] label,
+  .rounded-xl p,
+  .rounded-2xl p {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 479px) {
+  /* Dialog amount/currency and similar paired fields become one column on very
+     narrow phones while two-column KPI dashboards remain untouched. */
+  [role="dialog"] .grid.grid-cols-2,
+  [role="dialog"] .grid.grid-cols-3 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  /* Stock filter controls stack fully below ~480px. */
+  .flex.gap-2:has(> [class~="w-[132px]"]) {
+    flex-direction: column;
+  }
+
+  .flex.gap-2:has(> [class~="w-[132px]"]) > * {
+    width: 100%;
+    flex-basis: auto;
+  }
+
+  /* Compact pagination without sacrificing 44px touch targets. */
+  .flex.items-center.justify-between.text-sm.text-muted-foreground:has(> .flex.gap-2)
+    > .flex.gap-2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .flex.items-center.justify-between.text-sm.text-muted-foreground:has(> .flex.gap-2)
+    > .flex.gap-2
+    > button {
+    width: 100%;
+  }
+
+  /* Supplements credit-card action groups get a full row instead of squeezing
+     the supplier/status content. */
+  .p-4.flex.flex-wrap.gap-3.items-start.justify-between:has(> .min-w-0.flex-1)
+    > .flex.items-center {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .p-4.flex.flex-wrap.gap-3.items-start.justify-between:has(> .min-w-0.flex-1)
+    > .flex.items-center
+    > button:first-child:not(:only-child) {
+    flex: 1 1 auto;
+  }
+
+  /* Period Reset completion metrics become a single readable column. */
+  .grid.grid-cols-2[class*="md:grid-cols-5"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  /* Mobile cards can use slightly tighter horizontal padding without shrinking
+     controls or text. */
+  .md\:hidden.rounded-xl > .p-4,
+  .md\:hidden.rounded-2xl > .p-4 {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}
