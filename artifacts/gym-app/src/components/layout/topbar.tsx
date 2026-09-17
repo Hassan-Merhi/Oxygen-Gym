@@ -136,7 +136,7 @@ function NotificationBell() {
             )}
           </div>
 
-          <div className="max-h-[min(20rem,calc(100dvh-12rem))] overflow-y-auto overscroll-contain">
+          <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto overscroll-contain sm:max-h-80">
             {recent.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
                 <Bell className="w-7 h-7 opacity-20" />
@@ -264,7 +264,7 @@ export function Topbar() {
 
         {/* User area */}
         <div className="flex min-w-0 items-center gap-0.5 sm:gap-2 md:gap-2.5">
-          <Avatar className="hidden h-8 w-8 rounded-lg border border-primary/20 shadow-sm xs:block sm:block">
+          <Avatar className="hidden h-8 w-8 rounded-lg border border-primary/20 shadow-sm sm:block">
             <AvatarFallback className="rounded-lg text-xs font-bold bg-primary/10 text-primary">
               {initials}
             </AvatarFallback>
