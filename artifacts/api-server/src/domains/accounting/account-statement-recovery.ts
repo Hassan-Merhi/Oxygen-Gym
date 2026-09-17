@@ -1,7 +1,7 @@
 import { db } from "@workspace/db";
 import { cashLedgerTable, chartOfAccountsTable } from "@workspace/db/schema";
 import { and, asc, eq, gte, lte } from "drizzle-orm";
-import { fxRate, money } from "../../shared/accounting/decimal";
+import { money } from "../../shared/accounting/decimal";
 import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
 import { getAccountStatement } from "./accounts-service";
 import { canonicalAccountType } from "./chart-service";
@@ -25,16 +25,13 @@ async function getCashLedgerFallback(account: NonNullable<Awaited<ReturnType<typ
   const ledgerRows = await db.select().from(cashLedgerTable)
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(asc(cashLedgerTable.entryDate), asc(cashLedgerTable.id));
-  const configuredRate = await getExchangeRate();
-  const fallbackRate = configuredRate >= 10 ? configuredRate : 2800;
+  const rate = await getExchangeRate();
 
   let runningBalance = 0;
   const rows = ledgerRows.map((row) => {
     const amount = money(Number(row.amount ?? 0));
     const nativeCurrency = (row.currency ?? "USD").toUpperCase();
     const currency = nativeCurrency === "USD" ? "USD" : "CDF";
-    const storedRate = Number(row.exchangeRate ?? 0);
-    const rate = storedRate >= 10 ? fxRate(storedRate) : fallbackRate;
     const converted = toUsdCdf(amount, currency, rate);
     const amountUsd = converted.amountUsd;
     const amountCdf = converted.amountCdf;

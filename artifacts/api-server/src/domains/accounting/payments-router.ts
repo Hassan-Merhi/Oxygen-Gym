@@ -4,6 +4,7 @@ import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { logActivity } from "../../lib/activity";
 import { getCurrentUser, requireAdmin } from "../../shared/auth/permissions";
+import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
 import { badRequest } from "../../shared/http/errors";
 import {
   asRecord,
@@ -48,24 +49,44 @@ function direction(value: unknown, required = false): "in" | "out" | undefined {
 }
 
 router.get("/summary", async (_req, res) => {
-  res.json(await getPaymentSummary());
+  const [summary, rate] = await Promise.all([getPaymentSummary(), getExchangeRate()]);
+  const toCdf = (usd: number) => toUsdCdf(Number(usd ?? 0), "USD", rate).amountCdf;
+  res.json({
+    ...summary,
+    cashInTodayCdf: toCdf(summary.cashInToday),
+    cashOutTodayCdf: toCdf(summary.cashOutToday),
+    netCashTodayCdf: toCdf(summary.netCashToday),
+    balanceCdf: toCdf(summary.balanceUsd),
+    rate,
+  });
 });
 
 router.get("/", async (req, res) => {
   const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListPaymentsQueryParams);
   const dateTo = optionalDate(query.dateTo, "dateTo");
   if (dateTo) dateTo.setHours(23, 59, 59, 999);
-  res.json(await listPayments({
-    page: parsePage(query.page),
-    limit: parseLimit(query.limit),
-    search: optionalString(query.search),
-    direction: optionalString(query.direction),
-    category: optionalString(query.category),
-    currency: optionalString(query.currency),
-    dateFrom: optionalDate(query.dateFrom, "dateFrom"),
-    dateTo,
-    sortOrder: query.sortOrder === "asc" ? "asc" : "desc",
-  }));
+  const [result, rate] = await Promise.all([
+    listPayments({
+      page: parsePage(query.page),
+      limit: parseLimit(query.limit),
+      search: optionalString(query.search),
+      direction: optionalString(query.direction),
+      category: optionalString(query.category),
+      currency: optionalString(query.currency),
+      dateFrom: optionalDate(query.dateFrom, "dateFrom"),
+      dateTo,
+      sortOrder: query.sortOrder === "asc" ? "asc" : "desc",
+    }),
+    getExchangeRate(),
+  ]);
+  res.json({
+    ...result,
+    items: result.items.map((payment) => ({
+      ...payment,
+      exchangeRate: rate,
+      ...toUsdCdf(Number(payment.amount ?? 0), payment.currency, rate),
+    })),
+  });
 });
 
 router.post("/", async (req, res) => {
@@ -84,7 +105,6 @@ router.post("/", async (req, res) => {
     amount: nonNegativeNumber(body.amount, "amount"),
     discount: body.discount === undefined ? undefined : nonNegativeNumber(body.discount, "discount"),
     currency: requiredString(body.currency, "currency"),
-    exchangeRate: body.exchangeRate === undefined ? undefined : nonNegativeNumber(body.exchangeRate, "exchangeRate"),
     account: optionalString(body.account),
     notes: optionalString(body.notes),
     paymentDate: optionalDate(body.paymentDate, "paymentDate"),
@@ -133,7 +153,6 @@ router.patch("/:id", async (req, res) => {
     amount: body.amount === undefined ? undefined : nonNegativeNumber(body.amount, "amount"),
     discount: body.discount === undefined ? undefined : nonNegativeNumber(body.discount, "discount"),
     currency: optionalString(body.currency),
-    exchangeRate: body.exchangeRate === undefined ? undefined : nonNegativeNumber(body.exchangeRate, "exchangeRate"),
     account: optionalString(body.account),
     notes: nullableString(body.notes),
     paymentDate: optionalDate(body.paymentDate, "paymentDate"),

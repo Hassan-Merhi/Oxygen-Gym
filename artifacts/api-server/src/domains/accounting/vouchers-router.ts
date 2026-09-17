@@ -4,6 +4,7 @@ import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { logActivity } from "../../lib/activity";
 import { getCurrentUser } from "../../shared/auth/permissions";
+import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
 import {
   asRecord,
   nonNegativeNumber,
@@ -36,15 +37,26 @@ router.get("/", async (req, res) => {
   const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListVouchersQueryParams);
   const dateTo = optionalDate(query.dateTo, "dateTo");
   if (dateTo) dateTo.setHours(23, 59, 59, 999);
-  res.json(await listVouchers({
-    page: parsePage(query.page),
-    limit: parseLimit(query.limit),
-    search: optionalString(query.search),
-    voucherType: optionalString(query.voucherType),
-    currency: optionalString(query.currency),
-    dateFrom: optionalDate(query.dateFrom, "dateFrom"),
-    dateTo,
-  }));
+  const [result, rate] = await Promise.all([
+    listVouchers({
+      page: parsePage(query.page),
+      limit: parseLimit(query.limit),
+      search: optionalString(query.search),
+      voucherType: optionalString(query.voucherType),
+      currency: optionalString(query.currency),
+      dateFrom: optionalDate(query.dateFrom, "dateFrom"),
+      dateTo,
+    }),
+    getExchangeRate(),
+  ]);
+  res.json({
+    ...result,
+    items: result.items.map((voucher) => ({
+      ...voucher,
+      exchangeRate: rate,
+      ...toUsdCdf(Number(voucher.amount ?? 0), voucher.currency, rate),
+    })),
+  });
 });
 
 router.post("/", async (req, res) => {
@@ -60,7 +72,6 @@ router.post("/", async (req, res) => {
     linkedEntityName: optionalString(body.linkedEntityName),
     amount: nonNegativeNumber(body.amount, "amount"),
     currency: requiredString(body.currency, "currency"),
-    exchangeRate: body.exchangeRate === undefined ? undefined : nonNegativeNumber(body.exchangeRate, "exchangeRate"),
     account: optionalString(body.account),
     category: optionalString(body.category),
     description: requiredString(body.description, "description"),
@@ -75,7 +86,15 @@ router.post("/", async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  res.json(await getVoucher(parseId(contractParams(req, ApiContracts.GetVoucherParams).id, "voucher id")));
+  const [voucher, rate] = await Promise.all([
+    getVoucher(parseId(contractParams(req, ApiContracts.GetVoucherParams).id, "voucher id")),
+    getExchangeRate(),
+  ]);
+  res.json({
+    ...voucher,
+    exchangeRate: rate,
+    ...toUsdCdf(Number(voucher.amount ?? 0), voucher.currency, rate),
+  });
 });
 
 router.patch("/:id", async (req, res) => {
@@ -91,7 +110,6 @@ router.patch("/:id", async (req, res) => {
     linkedEntityName: nullableString(body.linkedEntityName),
     amount: body.amount === undefined ? undefined : nonNegativeNumber(body.amount, "amount"),
     currency: optionalString(body.currency),
-    exchangeRate: body.exchangeRate === undefined ? undefined : nonNegativeNumber(body.exchangeRate, "exchangeRate"),
     account: optionalString(body.account),
     category: nullableString(body.category),
     description: optionalString(body.description),
