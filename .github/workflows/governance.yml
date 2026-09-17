@@ -1,0 +1,49 @@
+name: Governance
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repository-controls:
+    name: repository-controls
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify required governance and CI files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required_files=(
+            ".github/CODEOWNERS"
+            ".github/SECURITY.md"
+            ".github/dependabot.yml"
+            ".github/workflows/architecture.yml"
+            ".github/workflows/backend-architecture.yml"
+            ".github/workflows/tests.yml"
+            ".github/workflows/codeql.yml"
+            ".github/workflows/governance.yml"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [[ ! -s "$file" ]]; then
+              echo "Required repository control is missing or empty: $file" >&2
+              exit 1
+            fi
+          done
+
+          grep -Fq '@Hassan-Merhi' .github/CODEOWNERS || {
+            echo "CODEOWNERS must retain the repository owner." >&2
+            exit 1
+          }
+
+          echo "Repository governance controls are present."

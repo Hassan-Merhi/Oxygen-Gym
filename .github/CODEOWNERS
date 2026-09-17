@@ -1,0 +1,8 @@
+# Default ownership for all repository changes.
+* @Hassan-Merhi
+
+# Critical governance, API, backend, and test surfaces.
+/.github/ @Hassan-Merhi
+/artifacts/api-server/ @Hassan-Merhi
+/lib/api-spec/ @Hassan-Merhi
+/tests/ @Hassan-Merhi
