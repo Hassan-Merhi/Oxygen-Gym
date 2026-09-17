@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from 'wouter';
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@workspace/api-client-react";
@@ -8,33 +8,40 @@ import { useI18nDirection } from "@/lib/i18n";
 import { AuthProvider } from "@/lib/auth";
 import { useAuth } from "@/lib/auth-context";
 import { useGetMe } from "@/hooks/use-me";
-
-// Pages
-import Dashboard from "@/pages/dashboard";
-import Staff from "@/pages/staff";
-import Settings from "@/pages/settings";
-import PeriodReset from "@/pages/period-reset";
-import Members from "@/pages/members";
-import MembersOverview from "@/pages/members-overview";
-import MemberProfile from "@/pages/member-profile";
-import Payments from "@/pages/payments";
-import Accounts from "@/pages/accounts";
-import Financials from "@/pages/financials";
-import Stock from "@/pages/stock";
-import Sales from "@/pages/sales";
-import Supplements from "@/pages/supplements";
-import Plans from "@/pages/plans";
-import Attendance from "@/pages/attendance";
-import NotificationsPage from "@/pages/notifications";
-import AuditPage from "@/pages/audit";
-import NotFound from "@/pages/not-found";
-import LoginPage from "@/pages/login";
-import SetupPage from "@/pages/setup";
 import { AppLayout } from "@/components/layout/app-layout";
+
+// Route-level code splitting keeps large feature pages out of the initial bundle.
+// Only the page the user actually opens is downloaded and evaluated.
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const Staff = lazy(() => import("@/pages/staff"));
+const Settings = lazy(() => import("@/pages/settings"));
+const PeriodReset = lazy(() => import("@/pages/period-reset"));
+const Members = lazy(() => import("@/pages/members"));
+const MembersOverview = lazy(() => import("@/pages/members-overview"));
+const MemberProfile = lazy(() => import("@/pages/member-profile"));
+const Payments = lazy(() => import("@/pages/payments"));
+const Accounts = lazy(() => import("@/pages/accounts"));
+const Financials = lazy(() => import("@/pages/financials"));
+const Stock = lazy(() => import("@/pages/stock"));
+const Sales = lazy(() => import("@/pages/sales"));
+const Supplements = lazy(() => import("@/pages/supplements"));
+const Plans = lazy(() => import("@/pages/plans"));
+const Attendance = lazy(() => import("@/pages/attendance"));
+const NotificationsPage = lazy(() => import("@/pages/notifications"));
+const AuditPage = lazy(() => import("@/pages/audit"));
+const NotFound = lazy(() => import("@/pages/not-found"));
+const LoginPage = lazy(() => import("@/pages/login"));
+const SetupPage = lazy(() => import("@/pages/setup"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      // Most screen data is safe to reuse briefly. This stops duplicate requests
+      // while navigating between pages or while multiple components ask for /me.
+      staleTime: 30_000,
+      gcTime: 10 * 60_000,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
       retry: (failureCount, error) => {
         if (error instanceof ApiError && error.status === 401) return false;
         return failureCount < 2;
@@ -195,33 +202,35 @@ function AppShell() {
 
   return (
     <>
-      <Switch>
-        <Route path="/" component={RootRedirect} />
-        <Route path="/login" component={LoginGuard} />
-        <Route path="/setup" component={SetupPage} />
+      <Suspense fallback={<LoadingScreen />}>
+        <Switch>
+          <Route path="/" component={RootRedirect} />
+          <Route path="/login" component={LoginGuard} />
+          <Route path="/setup" component={SetupPage} />
 
-        <Route path="/dashboard"><ProtectedRoute component={Dashboard} permKey="dashboard" /></Route>
-        <Route path="/staff"><ProtectedRoute component={Staff} permKey="staff" /></Route>
-        <Route path="/settings"><ProtectedRoute component={Settings} permKey="settings" /></Route>
-        <Route path="/period-reset"><ProtectedRoute component={PeriodReset} permKey="settings" /></Route>
-        <Route path="/members"><ProtectedRoute component={Members} permKey="members" /></Route>
-        <Route path="/members-overview"><ProtectedRoute component={MembersOverview} permKey="members" /></Route>
-        <Route path="/members/:id">{(params) => <ProtectedMemberProfile id={Number(params.id)} />}</Route>
-        <Route path="/plans"><ProtectedRoute component={Plans} permKey="plans" /></Route>
-        <Route path="/payroll"><Redirect to="/staff" /></Route>
-        <Route path="/attendance"><ProtectedRoute component={Attendance} /></Route>
-        <Route path="/notifications"><ProtectedRoute component={NotificationsPage} /></Route>
-        <Route path="/audit"><ProtectedRoute component={AuditPage} /></Route>
-        <Route path="/payments"><ProtectedRoute component={Payments} permKey="payments" /></Route>
-        <Route path="/vouchers"><Redirect to="/payments" /></Route>
-        <Route path="/accounts"><ProtectedRoute component={Accounts} permKey="accounts" /></Route>
-        <Route path="/financials"><ProtectedRoute component={Financials} permKey="viewAccounting" /></Route>
-        <Route path="/stock"><ProtectedRoute component={Stock} permKey="stock" /></Route>
-        <Route path="/sales"><ProtectedRoute component={Sales} permKey="sales" /></Route>
-        <Route path="/supplements"><ProtectedRoute component={Supplements} permKey="stock" /></Route>
+          <Route path="/dashboard"><ProtectedRoute component={Dashboard} permKey="dashboard" /></Route>
+          <Route path="/staff"><ProtectedRoute component={Staff} permKey="staff" /></Route>
+          <Route path="/settings"><ProtectedRoute component={Settings} permKey="settings" /></Route>
+          <Route path="/period-reset"><ProtectedRoute component={PeriodReset} permKey="settings" /></Route>
+          <Route path="/members"><ProtectedRoute component={Members} permKey="members" /></Route>
+          <Route path="/members-overview"><ProtectedRoute component={MembersOverview} permKey="members" /></Route>
+          <Route path="/members/:id">{(params) => <ProtectedMemberProfile id={Number(params.id)} />}</Route>
+          <Route path="/plans"><ProtectedRoute component={Plans} permKey="plans" /></Route>
+          <Route path="/payroll"><Redirect to="/staff" /></Route>
+          <Route path="/attendance"><ProtectedRoute component={Attendance} /></Route>
+          <Route path="/notifications"><ProtectedRoute component={NotificationsPage} /></Route>
+          <Route path="/audit"><ProtectedRoute component={AuditPage} /></Route>
+          <Route path="/payments"><ProtectedRoute component={Payments} permKey="payments" /></Route>
+          <Route path="/vouchers"><Redirect to="/payments" /></Route>
+          <Route path="/accounts"><ProtectedRoute component={Accounts} permKey="accounts" /></Route>
+          <Route path="/financials"><ProtectedRoute component={Financials} permKey="viewAccounting" /></Route>
+          <Route path="/stock"><ProtectedRoute component={Stock} permKey="stock" /></Route>
+          <Route path="/sales"><ProtectedRoute component={Sales} permKey="sales" /></Route>
+          <Route path="/supplements"><ProtectedRoute component={Supplements} permKey="stock" /></Route>
 
-        <Route path="*"><NotFound /></Route>
-      </Switch>
+          <Route path="*"><NotFound /></Route>
+        </Switch>
+      </Suspense>
       <Toaster />
     </>
   );
