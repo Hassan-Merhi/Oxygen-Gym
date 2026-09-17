@@ -1,0 +1,29 @@
+name: One-time merged branch cleanup
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  delete-merged-refs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete verified merged branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for branch in \
+            "fix/mobile-phase2-data-surfaces-backup" \
+            "phase3/github-governance-hardening" \
+            "phase3/delete-merged-refs"
+          do
+            encoded=${branch//\//%2F}
+            echo "Deleting merged branch: $branch"
+            gh api --method DELETE "repos/$GH_REPO/git/refs/heads/$encoded"
+          done
