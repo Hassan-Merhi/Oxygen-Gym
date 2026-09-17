@@ -36,22 +36,37 @@ const PRIORITY_DOT: Record<string, string> = {
   low: "bg-slate-400",
 };
 
+const NOTIFICATION_COUNT_REFRESH_MS = 2 * 60 * 1000;
+const NOTIFICATION_COUNT_STALE_MS = 60 * 1000;
+
 function NotificationBell() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const unreadQueryKey = getListNotificationsQueryKey({ read: "unread" } as any);
 
+  // Notifications are useful, but they do not need to create a database-backed
+  // request every 30 seconds on every open browser tab. Keep the badge fresh
+  // enough for the UI while relying on explicit mutation invalidation for
+  // immediate updates after the user marks notifications read.
   const { data: countData } = useGetNotificationCount({
-    query: { queryKey: ["getNotificationCount"], refetchInterval: 30000 }
+    query: {
+      queryKey: ["getNotificationCount"],
+      staleTime: NOTIFICATION_COUNT_STALE_MS,
+      refetchInterval: NOTIFICATION_COUNT_REFRESH_MS,
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: false,
+    }
   });
   const unread = countData?.unread ?? 0;
 
   const { data } = useListNotifications({ read: "unread" } as any, {
     query: {
-      queryKey: getListNotificationsQueryKey({ read: "unread" } as any),
+      queryKey: unreadQueryKey,
       enabled: open,
-      refetchInterval: open ? 30000 : false,
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
     }
   });
   const recent = (data?.items ?? []).slice(0, 8);
@@ -60,7 +75,7 @@ function NotificationBell() {
   const markAllRead = useMarkAllNotificationsRead();
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ["listNotifications"] });
+    queryClient.invalidateQueries({ queryKey: unreadQueryKey });
     queryClient.invalidateQueries({ queryKey: ["getNotificationCount"] });
   };
 

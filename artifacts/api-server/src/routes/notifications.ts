@@ -4,7 +4,7 @@ import * as ApiContracts from "@workspace/api-zod";
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db, type PagePermissions } from "@workspace/db";
-import { membersTable, productsTable, payrollTable, notificationReadsTable } from "@workspace/db/schema";
+import { membersTable, payrollTable, notificationReadsTable } from "@workspace/db/schema";
 import { and, eq, lte, gte, sql } from "drizzle-orm";
 import { logActivity } from "../lib/activity";
 import { sqlRows } from "../lib/sql-rows";
@@ -27,6 +27,10 @@ interface NotificationSqlRow {
   name?: string;
   quantity?: number | string;
   alertQuantity?: number | string;
+}
+
+interface NotificationCountSqlRow {
+  unread?: number | string;
 }
 
 interface Notification {
@@ -174,6 +178,78 @@ async function computeNotifications(userId: number, permissions: PagePermissions
   return notifications;
 }
 
+async function computeUnreadCount(userId: number, permissions: PagePermissions): Promise<number> {
+  const now = new Date();
+  const in30 = new Date(now);
+  in30.setDate(in30.getDate() + 30);
+  const canMembers = permissions.members || permissions.manageMembers;
+  const canStock = permissions.stock || permissions.manageInventory;
+  const canPayroll = permissions.payroll || permissions.managePayroll;
+
+  // The bell only needs a number. Do not materialize every notification and run
+  // seven separate queries every polling interval; count all eligible unread
+  // sources in one database round trip instead.
+  const result = await db.execute(sql`
+    SELECT (
+      CASE WHEN ${canMembers} THEN
+        (SELECT COUNT(*) FROM members m
+          WHERE m.status = 'active'
+            AND m.expiry_date >= ${now}
+            AND m.expiry_date <= ${in30}
+            AND NOT EXISTS (
+              SELECT 1 FROM notification_reads nr
+              WHERE nr.user_id = ${userId}
+                AND nr.notification_key = 'member_expiring_' || m.id::text
+            ))
+        + (SELECT COUNT(*) FROM members m
+          WHERE m.status = 'frozen'
+            AND NOT EXISTS (
+              SELECT 1 FROM notification_reads nr
+              WHERE nr.user_id = ${userId}
+                AND nr.notification_key = 'member_frozen_' || m.id::text
+            ))
+        + (SELECT COUNT(*) FROM members m
+          WHERE m.status = 'inactive'
+            AND NOT EXISTS (
+              SELECT 1 FROM notification_reads nr
+              WHERE nr.user_id = ${userId}
+                AND nr.notification_key = 'member_inactive_' || m.id::text
+            ))
+      ELSE 0 END
+      + CASE WHEN ${canStock} THEN
+        (SELECT COUNT(*) FROM products p
+          WHERE p.status = 'active'
+            AND p.quantity > 0
+            AND p.quantity <= p.alert_quantity
+            AND NOT EXISTS (
+              SELECT 1 FROM notification_reads nr
+              WHERE nr.user_id = ${userId}
+                AND nr.notification_key = 'stock_low_' || p.id::text
+            ))
+        + (SELECT COUNT(*) FROM products p
+          WHERE p.status = 'active'
+            AND p.quantity = 0
+            AND NOT EXISTS (
+              SELECT 1 FROM notification_reads nr
+              WHERE nr.user_id = ${userId}
+                AND nr.notification_key = 'stock_out_' || p.id::text
+            ))
+      ELSE 0 END
+      + CASE WHEN ${canPayroll} THEN
+        (SELECT COUNT(*) FROM payroll p
+          WHERE p.status = 'draft'
+            AND NOT EXISTS (
+              SELECT 1 FROM notification_reads nr
+              WHERE nr.user_id = ${userId}
+                AND nr.notification_key = 'payroll_draft_' || p.id::text
+            ))
+      ELSE 0 END
+    ) AS unread
+  `);
+
+  return Number(sqlRows<NotificationCountSqlRow>(result)[0]?.unread ?? 0);
+}
+
 function effectivePermissions(req: Request): PagePermissions {
   const user = authenticatedUser(req);
   return normalizePermissions(user.role, user.permissions);
@@ -195,8 +271,7 @@ router.get("/", async (req: Request, res: Response) => {
 
 router.get("/count", async (req: Request, res: Response) => {
   const user = authenticatedUser(req);
-  const items = await computeNotifications(user.id, effectivePermissions(req));
-  res.json({ unread: items.filter((n) => !n.isRead).length });
+  res.json({ unread: await computeUnreadCount(user.id, effectivePermissions(req)) });
 });
 
 router.patch("/:key/read", async (req: Request, res: Response) => {
