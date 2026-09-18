@@ -974,7 +974,7 @@ export interface AddStockPurchaseBody {
   costPerUnit: number;
   totalCost: number;
   currency: AddStockPurchaseBodyCurrency;
-  exchangeRate: number;
+  exchangeRate?: number;
   supplier?: string | null;
   notes?: string | null;
   paidFromCash: boolean;
