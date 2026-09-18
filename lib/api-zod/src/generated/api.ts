@@ -2722,7 +2722,7 @@ export const AddStockPurchaseBody = zod.object({
   "costPerUnit": zod.number(),
   "totalCost": zod.number(),
   "currency": zod.enum(['USD', 'CDF']),
-  "exchangeRate": zod.number(),
+  "exchangeRate": zod.number().optional(),
   "supplier": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "paidFromCash": zod.boolean(),
