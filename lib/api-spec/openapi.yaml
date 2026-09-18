@@ -3639,7 +3639,7 @@ components:
         notes: { type: string, nullable: true }
         paidFromCash: { type: boolean }
         purchaseDate: { type: string, nullable: true }
-      required: [quantityAdded, costPerUnit, totalCost, currency, exchangeRate, paidFromCash]
+      required: [quantityAdded, costPerUnit, totalCost, currency, paidFromCash]
 
     StockSummary:
       type: object
