@@ -15,6 +15,7 @@ import {
   multiplyMoney,
   subtractMoney,
 } from "../artifacts/api-server/src/shared/accounting/decimal";
+import { AddStockPurchaseBody } from "../lib/api-zod/src/generated/api";
 
 function user(id: number, permissions: FeaturePermission[] = [], role = "manager"): AuthorizationUser {
   return {
@@ -92,4 +93,20 @@ test("accounting decimal helpers preserve configured precision and reject invali
   assert.equal(fxRate(2800.123456789), 2800.12345679);
   assert.throws(() => fxRate(0), /greater than zero/i);
   assert.throws(() => divideMoney(10, 0), /non-zero/i);
+});
+
+
+test("stock purchase contract allows system exchange rate fallback", () => {
+  const parsed = AddStockPurchaseBody.safeParse({
+    quantityAdded: 3,
+    costPerUnit: 12.5,
+    totalCost: 37.5,
+    currency: "CDF",
+    supplier: null,
+    notes: null,
+    paidFromCash: false,
+    purchaseDate: "2026-09-18",
+  });
+
+  assert.equal(parsed.success, true, "exchangeRate should be optional so the server can use the configured system rate");
 });
