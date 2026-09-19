@@ -1436,7 +1436,7 @@ export const CreatePaymentBody = zod.object({
   "amount": zod.number(),
   "discount": zod.number(),
   "currency": zod.enum(['USD', 'CDF']),
-  "exchangeRate": zod.number(),
+  "exchangeRate": zod.number().optional(),
   "account": zod.string().optional(),
   "notes": zod.string().nullish(),
   "paymentDate": zod.string().nullish()
@@ -1460,7 +1460,7 @@ export const UpdatePaymentBody = zod.object({
   "amount": zod.number(),
   "discount": zod.number(),
   "currency": zod.enum(['USD', 'CDF']),
-  "exchangeRate": zod.number(),
+  "exchangeRate": zod.number().optional(),
   "account": zod.string().optional(),
   "notes": zod.string().nullish(),
   "paymentDate": zod.string().nullish()
