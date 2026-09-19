@@ -618,7 +618,6 @@ export default function CashBookModern() {
         amount,
         discount: 0,
         currency: payForm.currency,
-        exchangeRate: settings?.usdToCdfRate ?? 2800,
         account: payForm.account || "cash",
         notes: payForm.notes.trim() || undefined,
         paymentDate: payForm.paymentDate || undefined,
@@ -628,8 +627,15 @@ export default function CashBookModern() {
         body: JSON.stringify(payload),
       });
       if (!response.ok) {
-        const error = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(error.error ?? "Unable to save transaction");
+        const error = await response.json().catch(() => ({})) as {
+          error?: string;
+          details?: Array<{ path?: string; message?: string }>;
+        };
+        const detail = error.details?.find((item) => item.message);
+        const detailMessage = detail?.message
+          ? `${detail.path ? `${detail.path}: ` : ""}${detail.message}`
+          : undefined;
+        throw new Error(detailMessage ?? error.error ?? "Unable to save transaction");
       }
       toast({ title: payEditId ? "Transaction updated" : "Transaction recorded" });
       setPayModal(false);
