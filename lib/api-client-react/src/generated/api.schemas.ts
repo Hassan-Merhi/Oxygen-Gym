@@ -659,7 +659,7 @@ export interface PaymentInput {
   amount: number;
   discount: number;
   currency: PaymentInputCurrency;
-  exchangeRate: number;
+  exchangeRate?: number;
   account?: string;
   notes?: string | null;
   paymentDate?: string | null;

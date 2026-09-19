@@ -3294,7 +3294,7 @@ components:
         account: { type: string }
         notes: { type: string, nullable: true }
         paymentDate: { type: string, nullable: true }
-      required: [direction, category, amount, discount, currency, exchangeRate]
+      required: [direction, category, amount, discount, currency]
 
     PaymentsPage:
       type: object

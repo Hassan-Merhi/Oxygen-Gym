@@ -15,7 +15,7 @@ import {
   multiplyMoney,
   subtractMoney,
 } from "../artifacts/api-server/src/shared/accounting/decimal";
-import { AddStockPurchaseBody } from "../lib/api-zod/src/generated/api";
+import { AddStockPurchaseBody, CreatePaymentBody, UpdatePaymentBody } from "../lib/api-zod/src/generated/api";
 
 function user(id: number, permissions: FeaturePermission[] = [], role = "manager"): AuthorizationUser {
   return {
@@ -110,3 +110,29 @@ test("stock purchase contract allows system exchange rate fallback", () => {
 
   assert.equal(parsed.success, true, "exchangeRate should be optional so the server can use the configured system rate");
 });
+
+test("payment contract allows the server to own the exchange rate", () => {
+  const payment = {
+    direction: "out",
+    category: "expense",
+    linkedEntityName: null,
+    amount: 30000,
+    discount: 0,
+    currency: "CDF",
+    account: "cash",
+    notes: "POUBELLE",
+    paymentDate: "2026-09-19",
+  };
+
+  assert.equal(
+    CreatePaymentBody.safeParse(payment).success,
+    true,
+    "new payments should not require a client-supplied exchange rate",
+  );
+  assert.equal(
+    UpdatePaymentBody.safeParse(payment).success,
+    true,
+    "payment edits should not require a client-supplied exchange rate",
+  );
+});
+
