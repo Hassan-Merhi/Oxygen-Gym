@@ -105,7 +105,7 @@ router.get("/contacts", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Green API credentials not configured" });
       return;
     }
-    const base = `https://api.green-api.com/waInstance${settings.greenApiInstanceId}`;
+    const base = `https://api.greenapi.com/waInstance${settings.greenApiInstanceId}`;
     const token = settings.greenApiToken;
 
     // Fetch chats (existing conversations) and contacts (phone book) in parallel
