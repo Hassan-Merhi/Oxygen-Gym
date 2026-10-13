@@ -3,7 +3,7 @@ import { whatsappChatsTable, paymentsTable, vouchersTable, salesTable, productsT
 import { eq, and, gte, lte, sum, not, isNull } from "drizzle-orm";
 import { logger } from "./logger";
 
-const GREEN_API_BASE = "https://api.green-api.com";
+const GREEN_API_BASE = "https://api.greenapi.com";
 
 /**
  * Strip all non-digit characters from a phone number, then call Green API's
