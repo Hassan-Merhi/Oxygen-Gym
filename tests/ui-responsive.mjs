@@ -121,7 +121,9 @@ for (const lang of LANGS) {
         if (coarse || vw < 768) {
           for (const el of document.querySelectorAll("main button, main input:not([type=checkbox]):not([type=radio]):not([type=file]), main [role=combobox], header button")) {
             if (!isVisible(el)) continue;
-            const r = el.getBoundingClientRect();
+            // A small checkbox or switch counts by its clickable label when it has one.
+            const label = el.closest("label");
+            const r = (label && label.getBoundingClientRect().height >= 43.5 ? label : el).getBoundingClientRect();
             if (r.height < 43.5 || (el.tagName === "BUTTON" && r.width < 43.5)) {
               small.push(`${el.tagName.toLowerCase()} ${Math.round(r.width)}x${Math.round(r.height)} "${(el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 24)}"`);
             }

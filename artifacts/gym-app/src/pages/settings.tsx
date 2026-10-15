@@ -388,13 +388,14 @@ function WhatsAppTab() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <label className="text-sm font-medium">{t("settings.dailySummaryEnabled")}</label>
+          <label htmlFor="daily-summary-enabled" className="flex min-h-11 cursor-pointer items-center justify-between rounded-lg border p-3">
+            <span className="text-sm font-medium">{t("settings.dailySummaryEnabled")}</span>
             <Switch
+              id="daily-summary-enabled"
               checked={dailyEnabled}
               onCheckedChange={setDailyEnabled}
             />
-          </div>
+          </label>
           {dailyEnabled && (
             <div className="space-y-1.5 max-w-[200px]">
               <label className="text-sm font-medium">{t("settings.dailySummaryHour")}</label>
@@ -584,18 +585,20 @@ function WhatsAppTab() {
                     <p className="text-xs text-muted-foreground font-mono truncate">{chat.chatId}</p>
                   </div>
                   <Badge variant={chat.enabled ? "default" : "secondary"} className="text-xs shrink-0">
-                    {chat.enabled ? "ON" : "OFF"}
+                    {chat.enabled ? t("settings.chatOn") : t("settings.chatOff")}
                   </Badge>
                   <Switch
                     checked={chat.enabled ?? true}
                     onCheckedChange={() => handleToggle(chat)}
+                    aria-label={chat.label}
                     className="shrink-0"
                   />
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-destructive/70 hover:text-destructive shrink-0"
+                    className="h-9 w-9 shrink-0 text-destructive/70 hover:text-destructive max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
                     onClick={() => handleDelete(chat.id)}
+                    aria-label={`${t("common.delete")} ${chat.label}`}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>

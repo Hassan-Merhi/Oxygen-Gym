@@ -51,8 +51,8 @@ test("navigation chrome has localized copy for English, French and Arabic", () =
 const GYM_SRC = fileURLToPath(new URL("../artifacts/gym-app/src/", import.meta.url));
 
 function dictionaryBlock(source: string, name: string): Map<string, string> {
-  const match = source.match(new RegExp(`\\nconst ${name}: Translations = \\{\\n([\\s\\S]*?)\\n\\};`));
-  assert.ok(match, `could not find the ${name} dictionary in lib/i18n.ts`);
+  const match = source.match(new RegExp(`\\n(?:export )?const ${name}: Translations = \\{\\n([\\s\\S]*?)\\n\\};`));
+  assert.ok(match, `could not find the ${name} dictionary`);
   const entries = new Map<string, string>();
   for (const line of match[1].matchAll(/^\s*"([^"]+)":\s*"((?:[^"\\]|\\.)*)"/gm)) {
     entries.set(line[1], line[2]);
@@ -61,21 +61,17 @@ function dictionaryBlock(source: string, name: string): Map<string, string> {
 }
 
 const i18nSource = readFileSync(join(GYM_SRC, "lib/i18n.ts"), "utf8");
+// Accounting screens keep their strings in lib/i18n-accounting.ts; the app merges both files.
+const accountingSource = readFileSync(join(GYM_SRC, "lib/i18n-accounting.ts"), "utf8");
+const merged = (name: string, accountingName: string) =>
+  new Map([...dictionaryBlock(i18nSource, name), ...dictionaryBlock(accountingSource, accountingName)]);
 const dictionaries = {
-  en: dictionaryBlock(i18nSource, "en"),
-  fr: dictionaryBlock(i18nSource, "fr"),
-  ar: dictionaryBlock(i18nSource, "ar"),
+  en: merged("en", "accountingEn"),
+  fr: merged("fr", "accountingFr"),
+  ar: merged("ar", "accountingAr"),
 };
 
-// Pages owned by the accounting workstream use lib/i18n-accounting.ts.
-const EXCLUDED = new Set([
-  "pages/cash-book-canonical.tsx",
-  "pages/payments.tsx",
-  "pages/accounts.tsx",
-  "pages/financials.tsx",
-  "pages/period-reset.tsx",
-  "pages/audit.tsx",
-]);
+const EXCLUDED = new Set<string>();
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

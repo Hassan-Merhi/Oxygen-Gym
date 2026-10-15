@@ -3,7 +3,7 @@ import { useI18n } from "@/lib/i18n";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Users, Dumbbell, CreditCard, Package, FlaskConical,
-  TrendingUp, Settings, BookOpen, BarChart3, RefreshCcw,
+  TrendingUp, Settings, BookOpen, BarChart3, BookLock,
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,7 +27,7 @@ const NAV_ITEMS = [
   { id: "supplements", href: "/supplements", icon: FlaskConical, labelKey: "nav.supplements", allOf: ["stock", "viewCost", "viewProfit"] },
   { id: "sales", href: "/sales", icon: TrendingUp, labelKey: "nav.sales", allOf: ["sales"] },
   { id: "settings", href: "/settings", icon: Settings, labelKey: "nav.settings", allOf: ["manageSettings"] },
-  { id: "period-reset", href: "/period-reset", icon: RefreshCcw, labelOverride: "periodReset", allOf: ["manageSettings"], adminOnly: true },
+  { id: "period-reset", href: "/period-reset", icon: BookLock, labelOverride: "periodReset", allOf: ["manageSettings"], adminOnly: true },
 ] as const;
 
 export function Sidebar() {
