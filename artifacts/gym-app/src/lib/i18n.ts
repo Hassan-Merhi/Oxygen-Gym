@@ -1058,6 +1058,19 @@ const en: Translations = {
   "members.profile.receiptNo": "Receipt #",
   "members.profile.printReceipt": "Print receipt",
   "members.profile.totalCount": "{count} total",
+
+  "settings.serverError": "Server error {status}",
+  "settings.networkError": "Network error — could not reach the server",
+  "settings.checkConnection": "Check connection",
+  "settings.contactsErrorHint": "Check that your Green API Instance ID and Token are saved correctly in settings.",
+  "settings.noContactsHint": "Make sure your WhatsApp is connected in Green API and has existing chats.",
+  "settings.gymNameRequired": "Gym name is required",
+  "settings.subtitle": "Manage your gym configuration and users",
+  "settings.tabGeneral": "General",
+  "settings.tabUsers": "Users",
+
+  "dashboard.restricted": "Restricted",
+  "dashboard.openCard": "Open {label}",
 };
 
 const fr: Translations = {
@@ -2110,6 +2123,19 @@ const fr: Translations = {
   "members.profile.receiptNo": "N° reçu",
   "members.profile.printReceipt": "Imprimer le reçu",
   "members.profile.totalCount": "{count} au total",
+
+  "settings.serverError": "Erreur serveur {status}",
+  "settings.networkError": "Erreur réseau — serveur injoignable",
+  "settings.checkConnection": "Vérifier la connexion",
+  "settings.contactsErrorHint": "Vérifiez que l'ID d'instance et le jeton Green API sont bien enregistrés dans les paramètres.",
+  "settings.noContactsHint": "Assurez-vous que WhatsApp est connecté dans Green API et contient des discussions.",
+  "settings.gymNameRequired": "Le nom de la salle est obligatoire",
+  "settings.subtitle": "Gérez la configuration de la salle et les utilisateurs",
+  "settings.tabGeneral": "Général",
+  "settings.tabUsers": "Utilisateurs",
+
+  "dashboard.restricted": "Accès restreint",
+  "dashboard.openCard": "Ouvrir {label}",
 };
 
 const ar: Translations = {
@@ -3162,6 +3188,19 @@ const ar: Translations = {
   "members.profile.receiptNo": "رقم الإيصال",
   "members.profile.printReceipt": "طباعة الإيصال",
   "members.profile.totalCount": "الإجمالي {count}",
+
+  "settings.serverError": "خطأ في الخادم {status}",
+  "settings.networkError": "خطأ في الشبكة — تعذّر الوصول إلى الخادم",
+  "settings.checkConnection": "التحقق من الاتصال",
+  "settings.contactsErrorHint": "تحقّق من حفظ معرّف مثيل Green API والرمز بشكل صحيح في الإعدادات.",
+  "settings.noContactsHint": "تأكد من ربط واتساب في Green API ووجود محادثات سابقة.",
+  "settings.gymNameRequired": "اسم النادي مطلوب",
+  "settings.subtitle": "إدارة إعدادات النادي والمستخدمين",
+  "settings.tabGeneral": "عام",
+  "settings.tabUsers": "المستخدمون",
+
+  "dashboard.restricted": "مقيّد",
+  "dashboard.openCard": "فتح {label}",
 };
 
 const dictionaries: Record<Language, Translations> = { en, fr, ar };

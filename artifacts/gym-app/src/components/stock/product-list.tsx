@@ -43,18 +43,18 @@ function ProductActions({ product, canManage, t, onEdit, onPurchase, onHistory, 
       <DropdownMenuContent align="end" className="w-48">
         {canManage && (
           <DropdownMenuItem onClick={() => onEdit(product)}>
-            <Pencil className="me-2 h-4 w-4" aria-hidden="true" />
+            <Pencil className="h-4 w-4" aria-hidden="true" />
             {t("stock.actions.edit")}
           </DropdownMenuItem>
         )}
         {canManage && (
           <DropdownMenuItem onClick={() => onPurchase(product)}>
-            <ShoppingCart className="me-2 h-4 w-4" aria-hidden="true" />
+            <ShoppingCart className="h-4 w-4" aria-hidden="true" />
             {t("stock.actions.purchase")}
           </DropdownMenuItem>
         )}
         <DropdownMenuItem onClick={() => onHistory(product)}>
-          <History className="me-2 h-4 w-4" aria-hidden="true" />
+          <History className="h-4 w-4" aria-hidden="true" />
           {t("stock.actions.history")}
         </DropdownMenuItem>
         {canManage && (
@@ -62,19 +62,19 @@ function ProductActions({ product, canManage, t, onEdit, onPurchase, onHistory, 
             <DropdownMenuSeparator />
             {product.status === "active" && (
               <DropdownMenuItem className="text-amber-700 dark:text-amber-400" onClick={() => onStatus(product, "archived")}>
-                <Archive className="me-2 h-4 w-4" aria-hidden="true" />
+                <Archive className="h-4 w-4" aria-hidden="true" />
                 {t("stock.actions.archive")}
               </DropdownMenuItem>
             )}
             {product.status === "archived" && (
               <DropdownMenuItem onClick={() => onStatus(product, "active")}>
-                <RotateCcw className="me-2 h-4 w-4" aria-hidden="true" />
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
                 {t("stock.actions.restore")}
               </DropdownMenuItem>
             )}
             {product.status !== "deleted" && (
               <DropdownMenuItem className="text-rose-700 dark:text-rose-400" onClick={() => onStatus(product, "deleted")}>
-                <Trash2 className="me-2 h-4 w-4" aria-hidden="true" />
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
                 {t("stock.actions.delete")}
               </DropdownMenuItem>
             )}

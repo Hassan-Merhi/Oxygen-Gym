@@ -260,7 +260,7 @@ export default function PlansPage() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
         <DropdownMenuItem onClick={() => { setEditPlan(plan); setShowModal(true); }}>
-          <Edit className="me-2 h-4 w-4" aria-hidden="true" />
+          <Edit className="h-4 w-4" aria-hidden="true" />
           {t("common.edit")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -269,7 +269,7 @@ export default function PlansPage() {
           className="text-red-700 focus:text-red-700 dark:text-red-400 dark:focus:text-red-400"
           disabled={deletePlan.isPending}
         >
-          <Trash2 className="me-2 h-4 w-4" aria-hidden="true" />
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
           {t("common.delete")}
         </DropdownMenuItem>
       </DropdownMenuContent>
