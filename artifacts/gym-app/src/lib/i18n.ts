@@ -1048,6 +1048,16 @@ const en: Translations = {
   "overview.expires": "Expires {date}",
   "overview.col.joined": "Joined",
   "overview.showing": "Showing {from}–{to} of {total}",
+
+  "members.profile.notFound": "Member not found",
+  "members.profile.frozenRange": "Frozen: {from} → {to} ({days} days)",
+  "members.profile.perMonth": "{n}/mo",
+  "members.profile.attended": "Attended",
+  "members.profile.notAttended": "Not attended",
+  "members.profile.restricted": "Access restricted",
+  "members.profile.receiptNo": "Receipt #",
+  "members.profile.printReceipt": "Print receipt",
+  "members.profile.totalCount": "{count} total",
 };
 
 const fr: Translations = {
@@ -2090,6 +2100,16 @@ const fr: Translations = {
   "overview.expires": "Expire le {date}",
   "overview.col.joined": "Inscrit le",
   "overview.showing": "{from}–{to} sur {total}",
+
+  "members.profile.notFound": "Membre introuvable",
+  "members.profile.frozenRange": "Gelé : {from} → {to} ({days} jours)",
+  "members.profile.perMonth": "{n}/mois",
+  "members.profile.attended": "Présent",
+  "members.profile.notAttended": "Absent",
+  "members.profile.restricted": "Accès restreint",
+  "members.profile.receiptNo": "N° reçu",
+  "members.profile.printReceipt": "Imprimer le reçu",
+  "members.profile.totalCount": "{count} au total",
 };
 
 const ar: Translations = {
@@ -3132,6 +3152,16 @@ const ar: Translations = {
   "overview.expires": "ينتهي في {date}",
   "overview.col.joined": "تاريخ الانضمام",
   "overview.showing": "عرض {from}–{to} من {total}",
+
+  "members.profile.notFound": "العضو غير موجود",
+  "members.profile.frozenRange": "مجمّد: {from} ← {to} ({days} يوم)",
+  "members.profile.perMonth": "{n}/شهر",
+  "members.profile.attended": "حضر",
+  "members.profile.notAttended": "لم يحضر",
+  "members.profile.restricted": "الوصول مقيّد",
+  "members.profile.receiptNo": "رقم الإيصال",
+  "members.profile.printReceipt": "طباعة الإيصال",
+  "members.profile.totalCount": "الإجمالي {count}",
 };
 
 const dictionaries: Record<Language, Translations> = { en, fr, ar };

@@ -53,8 +53,8 @@ export interface MemberInvoiceData {
   memberPhone?: string;
   planName: string;
   planPrice: number;
-  startDate: string;
-  expiryDate: string;
+  startDate?: string;
+  expiryDate?: string;
   amountPaid: number;
   discount: number;
   balance: number;
@@ -123,8 +123,8 @@ export function printMemberInvoice(
   ${inv.memberPhone ? `<div class="row"><span class="label">${t("members.invoice.phone")}</span><span class="val">${escapeHtml(inv.memberPhone)}</span></div>` : ""}
   <hr class="divider">
   <div class="row"><span class="label">${t("members.invoice.plan")}</span><span class="val">${escapeHtml(inv.planName)}</span></div>
-  <div class="row"><span class="label">${t("members.invoice.start")}</span><span class="val">${fmtD(inv.startDate)}</span></div>
-  <div class="row"><span class="label">${t("members.invoice.expiry")}</span><span class="val">${fmtD(inv.expiryDate)}</span></div>
+  ${inv.startDate ? `<div class="row"><span class="label">${t("members.invoice.start")}</span><span class="val">${fmtD(inv.startDate)}</span></div>` : ""}
+  ${inv.expiryDate ? `<div class="row"><span class="label">${t("members.invoice.expiry")}</span><span class="val">${fmtD(inv.expiryDate)}</span></div>` : ""}
   <hr class="divider">
   <div class="sum-row"><span class="label">${t("members.invoice.price")}</span><span>${fmt(inv.planPrice)}</span></div>
   ${inv.discount > 0 ? `<div class="sum-row"><span class="label">${t("members.invoice.discount")}</span><span style="color:#dc2626">-${fmt(inv.discount)}</span></div>` : ""}
