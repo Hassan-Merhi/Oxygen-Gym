@@ -28,7 +28,7 @@ import {
   Plus, Trash2, Send, Eye, EyeOff, Search, MessageSquare, Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { LoginUsersTab } from "@/pages/staff";
+import { LoginUsersTab } from "@/components/staff/login-users";
 import { useGetMe } from "@/hooks/use-me";
 import { AlertTriangle, CheckCircle2, ShieldAlert } from "lucide-react";
 
