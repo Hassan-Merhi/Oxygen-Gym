@@ -5,10 +5,13 @@
  * Gym Management API
  * OpenAPI spec version: 0.1.0
  */
-import type { SetOpeningBalance200Balance } from './setOpeningBalance200Balance';
+import type { LedgerBalance } from './ledgerBalance';
+import type { SetOpeningBalance200AdjustmentsItem } from './setOpeningBalance200AdjustmentsItem';
 
 export type SetOpeningBalance200 = {
   ok: boolean;
   skipped: boolean;
-  balance: SetOpeningBalance200Balance;
+  journalId?: string | null;
+  adjustments: SetOpeningBalance200AdjustmentsItem[];
+  balance: LedgerBalance;
 };

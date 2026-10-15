@@ -23,6 +23,7 @@ export const pagePermissionsSchema = z.object({
   manageInventory: z.boolean().default(false),
   manageMembers: z.boolean().default(false),
   managePlans: z.boolean().default(false),
+  approveCorrections: z.boolean().default(false),
 });
 
 export type PagePermissions = z.infer<typeof pagePermissionsSchema>;
@@ -34,6 +35,7 @@ export const defaultAdminPermissions: PagePermissions = {
   viewCost: true, viewProfit: true, viewAccounting: true,
   manageStaff: true, manageSettings: true, managePayroll: true,
   manageInventory: true, manageMembers: true, managePlans: true,
+  approveCorrections: true,
 };
 
 export const defaultManagerPermissions: PagePermissions = {
@@ -43,6 +45,7 @@ export const defaultManagerPermissions: PagePermissions = {
   viewCost: true, viewProfit: true, viewAccounting: false,
   manageStaff: true, manageSettings: false, managePayroll: true,
   manageInventory: true, manageMembers: true, managePlans: true,
+  approveCorrections: false,
 };
 
 export const defaultStaffPermissions: PagePermissions = {
@@ -52,6 +55,7 @@ export const defaultStaffPermissions: PagePermissions = {
   viewCost: false, viewProfit: false, viewAccounting: false,
   manageStaff: false, manageSettings: false, managePayroll: false,
   manageInventory: false, manageMembers: false, managePlans: false,
+  approveCorrections: false,
 };
 
 export const usersTable = pgTable("users", {

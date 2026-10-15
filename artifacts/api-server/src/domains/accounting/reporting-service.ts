@@ -1,9 +1,21 @@
 import { db } from "@workspace/db";
-import { paymentsTable, vouchersTable } from "@workspace/db/schema";
-import { and, count, desc, eq, gte, ilike, inArray, isNull, lte, not, or, sql } from "drizzle-orm";
-import { getCurrentBalance } from "../../lib/ledger";
-import { addMoney, money, subtractMoney } from "../../shared/accounting/decimal";
-import { getFinancialReport } from "./financials-service";
+import { chartOfAccountsTable } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
+import { ACCOUNTS, MONEY_ACCOUNTS, normalizeName } from "../../lib/accounting";
+import {
+  countLedgerLines,
+  getCashMovements,
+  getCurrentBalance,
+  getLedgerLines,
+  getMoneyBalance,
+  lineToMovement,
+  summarizeMovements,
+  withRunningBalance,
+} from "../../lib/ledger";
+import { lubumbashiMonthBounds, lubumbashiTodayEnd, lubumbashiTodayStart } from "../../lib/timezone";
+import { addMoney, subtractMoney } from "../../shared/accounting/decimal";
+import { notFound } from "../../shared/http/errors";
+import { getProfitAndLoss, resolvePeriod } from "./ledger-reports";
 
 export interface AccountMovementListInput {
   page: number;
@@ -14,249 +26,177 @@ export interface AccountMovementListInput {
   currency?: string;
 }
 
-function toDateKey(value?: Date): string | undefined {
-  return value ? value.toISOString().slice(0, 10) : undefined;
-}
-
-async function cashMovementForRange(from: Date, to: Date) {
-  const result = await db.execute(sql`
-    WITH payment_values AS (
-      SELECT
-        direction,
-        COALESCE(amount_usd, CASE
-          WHEN currency = 'USD' THEN amount
-          WHEN COALESCE(exchange_rate, 0) > 0 THEN amount / exchange_rate
-          ELSE 0 END) AS usd,
-        COALESCE(amount_cdf, CASE
-          WHEN currency = 'CDF' THEN amount
-          WHEN COALESCE(exchange_rate, 0) > 0 THEN amount * exchange_rate
-          ELSE 0 END) AS cdf
-      FROM payments
-      WHERE status = 'completed'
-        AND payment_date BETWEEN ${from} AND ${to}
-        AND LOWER(REPLACE(TRIM(COALESCE(account, 'cash')), '_', ' ')) = 'cash'
-    ),
-    voucher_values AS (
-      SELECT
-        v.direction,
-        COALESCE(v.amount_usd, CASE
-          WHEN v.currency = 'USD' THEN v.amount
-          WHEN COALESCE(v.exchange_rate, 0) > 0 THEN v.amount / v.exchange_rate
-          ELSE 0 END) AS usd,
-        COALESCE(v.amount_cdf, CASE
-          WHEN v.currency = 'CDF' THEN v.amount
-          WHEN COALESCE(v.exchange_rate, 0) > 0 THEN v.amount * v.exchange_rate
-          ELSE 0 END) AS cdf
-      FROM vouchers v
-      WHERE v.status = 'recorded'
-        AND v.deleted_at IS NULL
-        AND v.voucher_date BETWEEN ${from} AND ${to}
-        AND LOWER(REPLACE(TRIM(COALESCE(v.account, 'cash')), '_', ' ')) = 'cash'
-        AND NOT (
-          v.linked_entity = 'member'
-          AND v.voucher_type = 'cash_receipt'
-          AND EXISTS (
-            SELECT 1 FROM payments p
-            WHERE p.member_id = v.linked_entity_id
-              AND p.category = 'membership'
-              AND p.status = 'completed'
-          )
-        )
-    ),
-    stock_cash AS (
-      SELECT
-        -COALESCE(SUM(COALESCE(total_cost_usd, CASE
-          WHEN currency = 'USD' THEN total_cost
-          WHEN COALESCE(exchange_rate, 0) > 0 THEN total_cost / exchange_rate
-          ELSE 0 END)), 0) AS usd,
-        -COALESCE(SUM(COALESCE(total_cost_cdf, CASE
-          WHEN currency = 'CDF' THEN total_cost
-          WHEN COALESCE(exchange_rate, 0) > 0 THEN total_cost * exchange_rate
-          ELSE 0 END)), 0) AS cdf
-      FROM stock_purchases sp
-      WHERE paid_from_cash = 1
-        AND purchase_date BETWEEN ${from} AND ${to}
-        AND (payment_id IS NULL OR NOT EXISTS (
-          SELECT 1 FROM payments p2 WHERE p2.id = sp.payment_id AND p2.status = 'completed'
-        ))
-    ),
-    movements AS (
-      SELECT CASE WHEN direction='in' THEN usd ELSE -usd END AS usd,
-             CASE WHEN direction='in' THEN cdf ELSE -cdf END AS cdf,
-             direction
-      FROM payment_values
-      UNION ALL
-      SELECT CASE WHEN direction='in' THEN usd ELSE -usd END,
-             CASE WHEN direction='in' THEN cdf ELSE -cdf END,
-             direction
-      FROM voucher_values
-    )
-    SELECT
-      COALESCE(SUM(CASE WHEN direction='in' THEN usd ELSE 0 END), 0) AS in_usd,
-      COALESCE(SUM(CASE WHEN direction='in' THEN cdf ELSE 0 END), 0) AS in_cdf,
-      COALESCE(-SUM(CASE WHEN direction='out' THEN usd ELSE 0 END), 0) - stock_cash.usd AS out_usd,
-      COALESCE(-SUM(CASE WHEN direction='out' THEN cdf ELSE 0 END), 0) - stock_cash.cdf AS out_cdf
-    FROM movements, stock_cash
-    GROUP BY stock_cash.usd, stock_cash.cdf
-  `);
-  const row = result.rows[0] as Record<string, string | number | null> | undefined;
-  return {
-    inUsd: money(Number(row?.in_usd ?? 0)),
-    inCdf: money(Number(row?.in_cdf ?? 0)),
-    outUsd: money(Number(row?.out_usd ?? 0)),
-    outCdf: money(Number(row?.out_cdf ?? 0)),
-  };
-}
-
+/** Headline figures for the Accounts page: drawer balance, today and this month. */
 export async function getAccountsSummary() {
   const now = new Date();
-  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-  const [balance, todayReport, monthReport, todayCash, monthCash] = await Promise.all([
+  const today = { from: lubumbashiTodayStart(now), to: lubumbashiTodayEnd(now) };
+  const month = lubumbashiMonthBounds(now);
+  const [balance, todayPnl, monthPnl, todayCash, monthCash] = await Promise.all([
     getCurrentBalance(),
-    getFinancialReport({ period: "today" }),
-    getFinancialReport({ period: "month" }),
-    cashMovementForRange(todayStart, todayEnd),
-    cashMovementForRange(monthStart, monthEnd),
+    getProfitAndLoss(today),
+    getProfitAndLoss({ from: month.start, to: month.end }),
+    getCashMovements({ dateFrom: today.from, dateTo: today.to }),
+    getCashMovements({ dateFrom: month.start, dateTo: month.end }),
   ]);
+  const todaySummary = summarizeMovements(todayCash);
+  const monthSummary = summarizeMovements(monthCash);
 
   return {
+    rate: balance.rate,
     cash: {
       balanceUsd: balance.balanceUsd,
       balanceCdf: balance.balanceCdf,
-      todayInUsd: todayCash.inUsd,
-      todayOutUsd: todayCash.outUsd,
-      monthInUsd: monthCash.inUsd,
-      monthOutUsd: monthCash.outUsd,
+      nativeUsd: balance.nativeUsd,
+      nativeCdf: balance.nativeCdf,
+      todayInUsd: todaySummary.inBookUsd,
+      todayOutUsd: todaySummary.outBookUsd,
+      monthInUsd: monthSummary.inBookUsd,
+      monthOutUsd: monthSummary.outBookUsd,
     },
     sales: {
-      todayUsd: todayReport.revenue.usd,
-      todayCdf: todayReport.revenue.cdf,
-      monthUsd: monthReport.revenue.usd,
-      monthCdf: monthReport.revenue.cdf,
+      todayUsd: todayPnl.revenue.usd,
+      todayCdf: todayPnl.revenue.cdf,
+      monthUsd: monthPnl.revenue.usd,
+      monthCdf: monthPnl.revenue.cdf,
     },
     expenses: {
-      todayUsd: todayReport.expenses.usd,
-      todayCdf: todayReport.expenses.cdf,
-      monthUsd: monthReport.expenses.usd,
-      monthCdf: monthReport.expenses.cdf,
+      todayUsd: todayPnl.expenses.usd,
+      todayCdf: todayPnl.expenses.cdf,
+      monthUsd: monthPnl.expenses.usd,
+      monthCdf: monthPnl.expenses.cdf,
     },
     profit: {
-      todayUsd: todayReport.net.usd,
-      todayCdf: todayReport.net.cdf,
-      monthUsd: monthReport.net.usd,
-      monthCdf: monthReport.net.cdf,
+      todayUsd: todayPnl.net.usd,
+      todayCdf: todayPnl.net.cdf,
+      monthUsd: monthPnl.net.usd,
+      monthCdf: monthPnl.net.cdf,
     },
   };
 }
 
-export async function getProfitLoss(input: { period: string; dateFrom?: Date; dateTo?: Date }) {
-  const report = await getFinancialReport({
-    period: input.period,
-    dateFrom: toDateKey(input.dateFrom),
-    dateTo: toDateKey(input.dateTo),
-  });
-  return {
-    period: report.period,
-    dateFrom: report.dateFrom,
-    dateTo: report.dateTo,
-    revenue: report.revenue,
-    expenses: report.expenses,
-    net: report.net,
-    breakdown: Object.fromEntries(
-      report.categories.map((row) => [row.category, { usd: row.usd, cdf: row.cdf, kind: row.kind }]),
-    ),
+async function listPnlLines(type: "income" | "expense", input: AccountMovementListInput) {
+  const query = {
+    accountTypes: [type],
+    dateFrom: input.dateFrom,
+    dateTo: input.dateTo,
+    excludeClosing: true,
+    search: input.search,
   };
-}
-
-/** P&L expense movements only: excludes inventory purchases and supplier-liability settlements. */
-export async function listAccountExpenses(input: AccountMovementListInput) {
-  const nonExpensePaymentCategories = ["membership", "product_sale", "stock_purchase", "supplier_payment"];
-  const payConditions: ReturnType<typeof eq>[] = [
-    eq(paymentsTable.direction, "out"),
-    eq(paymentsTable.status, "completed"),
-    not(inArray(paymentsTable.category, nonExpensePaymentCategories)) as ReturnType<typeof eq>,
-  ];
-  const voucherConditions: ReturnType<typeof eq>[] = [
-    eq(vouchersTable.direction, "out"),
-    eq(vouchersTable.status, "recorded"),
-    isNull(vouchersTable.deletedAt) as ReturnType<typeof eq>,
-    or(
-      isNull(vouchersTable.category),
-      not(inArray(vouchersTable.category, ["inventory", "stock_purchase", "stock"])),
-    ) as ReturnType<typeof eq>,
-  ];
-  if (input.dateFrom) {
-    payConditions.push(gte(paymentsTable.paymentDate, input.dateFrom));
-    voucherConditions.push(gte(vouchersTable.voucherDate, input.dateFrom));
-  }
-  if (input.dateTo) {
-    payConditions.push(lte(paymentsTable.paymentDate, input.dateTo));
-    voucherConditions.push(lte(vouchersTable.voucherDate, input.dateTo));
-  }
-  if (input.currency) {
-    payConditions.push(eq(paymentsTable.currency, input.currency));
-    voucherConditions.push(eq(vouchersTable.currency, input.currency));
-  }
-  if (input.search) {
-    payConditions.push(or(
-      ilike(paymentsTable.paymentNumber, `%${input.search}%`),
-      ilike(paymentsTable.linkedEntityName, `%${input.search}%`),
-      ilike(paymentsTable.notes, `%${input.search}%`),
-    ) as ReturnType<typeof eq>);
-    voucherConditions.push(or(
-      ilike(vouchersTable.voucherNumber, `%${input.search}%`),
-      ilike(vouchersTable.paidTo, `%${input.search}%`),
-      ilike(vouchersTable.description, `%${input.search}%`),
-    ) as ReturnType<typeof eq>);
-  }
-
-  const offset = (input.page - 1) * input.limit;
-  const fetchLimit = input.limit + offset;
-  const [payments, vouchers, [paymentCount], [voucherCount]] = await Promise.all([
-    db.select().from(paymentsTable).where(and(...payConditions)).orderBy(desc(paymentsTable.paymentDate)).limit(fetchLimit),
-    db.select().from(vouchersTable).where(and(...voucherConditions)).orderBy(desc(vouchersTable.voucherDate)).limit(fetchLimit),
-    db.select({ total: count() }).from(paymentsTable).where(and(...payConditions)),
-    db.select({ total: count() }).from(vouchersTable).where(and(...voucherConditions)),
+  const [lines, total] = await Promise.all([
+    getLedgerLines({ ...query, order: "desc", limit: input.limit, offset: (input.page - 1) * input.limit }),
+    countLedgerLines(query),
   ]);
+  const items = lines
+    .map((line) => {
+      const usd = type === "income" ? subtractMoney(line.creditUsd, line.debitUsd) : subtractMoney(line.debitUsd, line.creditUsd);
+      const cdf = type === "income" ? subtractMoney(line.creditCdf, line.debitCdf) : subtractMoney(line.debitCdf, line.creditCdf);
+      return {
+        id: `entry-${line.entryId}`,
+        sourceType: line.sourceType,
+        sourceNumber: line.sourceNumber,
+        date: line.date.toISOString(),
+        description: line.description,
+        party: line.party,
+        category: line.accountName,
+        amount: line.amount,
+        currency: line.currency,
+        amountUsd: usd,
+        amountCdf: cdf,
+        createdBy: line.createdBy,
+      };
+    })
+    .filter((item) => !input.currency || item.currency === input.currency.toUpperCase());
+  return { items, total, page: input.page, limit: input.limit };
+}
 
-  const items = [
-    ...payments.map((payment) => ({
-      id: `pay-${payment.id}`,
-      sourceType: "payment",
-      sourceNumber: payment.paymentNumber,
-      date: payment.paymentDate,
-      description: payment.notes ?? payment.category,
-      party: payment.linkedEntityName ?? "",
-      category: payment.category,
-      amount: payment.amount,
-      currency: payment.currency,
-      amountUsd: money(payment.amountUsd ?? 0),
-      amountCdf: money(payment.amountCdf ?? 0),
-      createdBy: payment.createdBy,
-    })),
-    ...vouchers.map((voucher) => ({
-      id: `vch-${voucher.id}`,
-      sourceType: "voucher",
-      sourceNumber: voucher.voucherNumber,
-      date: voucher.voucherDate,
-      description: voucher.description,
-      party: voucher.paidTo ?? voucher.linkedEntityName ?? "",
-      category: voucher.category ?? voucher.voucherType,
-      amount: voucher.amount,
-      currency: voucher.currency,
-      amountUsd: money(voucher.amountUsd ?? 0),
-      amountCdf: money(voucher.amountCdf ?? 0),
-      createdBy: voucher.createdBy,
-    })),
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(offset, offset + input.limit);
+/** Revenue lines (income accounts) newest first. */
+export function listAccountSales(input: AccountMovementListInput) {
+  return listPnlLines("income", input);
+}
 
+/** Expense lines (expense accounts) newest first. Inventory purchases and supplier settlements are not expenses. */
+export function listAccountExpenses(input: AccountMovementListInput) {
+  return listPnlLines("expense", input);
+}
+
+export async function getProfitLoss(input: { period: string; dateFrom?: string; dateTo?: string }) {
+  const range = resolvePeriod(input.period, input.dateFrom, input.dateTo);
+  const pnl = await getProfitAndLoss({ from: range.from, to: range.to });
   return {
-    items,
-    total: Number(paymentCount.total) + Number(voucherCount.total),
-    page: input.page,
-    limit: input.limit,
+    period: range.period,
+    dateFrom: range.from?.toISOString() ?? "",
+    dateTo: range.to?.toISOString() ?? "",
+    revenue: pnl.revenue,
+    expenses: pnl.expenses,
+    net: pnl.net,
+    breakdown: Object.fromEntries(pnl.categories.map((row) => [row.category, { usd: row.usd, cdf: row.cdf, kind: row.kind }])),
   };
 }
+
+/**
+ * Statement of any chart account from the ledger. Money accounts (Cash, Bank,
+ * Mobile Money) also carry per-currency running balances; every account carries
+ * a running USD book balance in its normal direction.
+ */
+export async function getAccountStatement(id: number, dateFrom?: Date, dateTo?: Date) {
+  const [account] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, id)).limit(1);
+  if (!account) throw notFound("Account not found");
+  const debitNormal = account.type === "asset" || account.type === "expense";
+
+  const [openingTotals] = dateFrom
+    ? await getLedgerLines({ accountId: id, dateTo: new Date(dateFrom.getTime() - 1) }).then((lines) => [lines.reduce(
+      (sum, line) => ({
+        usd: addMoney(sum.usd, debitNormal ? subtractMoney(line.debitUsd, line.creditUsd) : subtractMoney(line.creditUsd, line.debitUsd)),
+        cdf: addMoney(sum.cdf, debitNormal ? subtractMoney(line.debitCdf, line.creditCdf) : subtractMoney(line.creditCdf, line.debitCdf)),
+      }),
+      { usd: 0, cdf: 0 },
+    )])
+    : [{ usd: 0, cdf: 0 }];
+
+  const isMoney = MONEY_ACCOUNTS.map((name) => name.toLowerCase()).includes(normalizeName(account.name).toLowerCase());
+  const nativeOpening = isMoney && dateFrom
+    ? await getMoneyBalance({ accountNames: [account.name], before: dateFrom })
+    : { usd: 0, cdf: 0, bookUsd: 0, bookCdf: 0 };
+
+  const lines = await getLedgerLines({ accountId: id, dateFrom, dateTo });
+  let running = openingTotals!.usd;
+  let runningCdf = openingTotals!.cdf;
+  const native = withRunningBalance(lines.map(lineToMovement), nativeOpening);
+  const rows = lines.map((line, index) => {
+    running = addMoney(running, debitNormal ? subtractMoney(line.debitUsd, line.creditUsd) : subtractMoney(line.creditUsd, line.debitUsd));
+    runningCdf = addMoney(runningCdf, debitNormal ? subtractMoney(line.debitCdf, line.creditCdf) : subtractMoney(line.creditCdf, line.debitCdf));
+    return {
+      id: line.entryId,
+      journalId: line.journalId,
+      date: line.date,
+      description: line.description,
+      party: line.party || line.sourceNumber || "",
+      counterAccount: line.counterAccount,
+      sourceType: line.sourceType,
+      sourceId: line.sourceId,
+      sourceNumber: line.sourceNumber,
+      amount: line.amount,
+      currency: line.currency,
+      debitUsd: line.debitUsd,
+      creditUsd: line.creditUsd,
+      debitCdf: line.debitCdf,
+      creditCdf: line.creditCdf,
+      exchangeRate: line.exchangeRate,
+      runningBalance: running,
+      runningBalanceCdf: runningCdf,
+      ...(isMoney ? { nativeBalanceUsd: native[index]!.balanceUsd, nativeBalanceCdf: native[index]!.balanceCdf } : {}),
+    };
+  });
+
+  return {
+    account,
+    openingBalance: openingTotals!.usd,
+    openingBalanceCdf: openingTotals!.cdf,
+    closingBalance: running,
+    closingBalanceCdf: runningCdf,
+    ...(isMoney ? { openingNative: { usd: nativeOpening.usd, cdf: nativeOpening.cdf } } : {}),
+    rows,
+  };
+}
+
+export const CASH_ACCOUNT = ACCOUNTS.CASH;

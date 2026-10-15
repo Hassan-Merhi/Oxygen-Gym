@@ -6,9 +6,10 @@ import {
   supplierCreditsTable,
   supplierPaymentsTable,
 } from "@workspace/db/schema";
-import { and, desc, eq } from "drizzle-orm";
-import { appendLedgerEntry } from "../../lib/ledger";
-import { ACCOUNTS, postDoubleEntry, reverseEntries } from "../../lib/accounting";
+import { and, desc, eq, isNull } from "drizzle-orm";
+import type { DbExecutor } from "@workspace/db";
+import { ACCOUNTS, assertPeriodOpen, newJournalId, postDoubleEntry, reverseEntries } from "../../lib/accounting";
+import { lubumbashiTodayEnd } from "../../lib/timezone";
 import { getNextNumber } from "../../lib/numbering";
 import { convertCurrencyAmount, getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
 import { addMoney, fxRate, money, multiplyMoney, subtractMoney } from "../../shared/accounting/decimal";
@@ -55,15 +56,55 @@ function normalizeCurrency(value: string): "USD" | "CDF" {
   return currency;
 }
 
-function supplierCreditDebit(productId?: number | null) {
-  return productId
-    ? { debitName: ACCOUNTS.INVENTORY, debitType: "asset" as const }
-    : { debitName: ACCOUNTS.GENERAL_EXPENSE, debitType: "expense" as const };
+/**
+ * A manual supplier credit is a bill for goods or services that did not go
+ * through a stock purchase, so it is an expense. Stock bought on credit is
+ * recorded as a stock purchase "on credit"; that posts Inventory against
+ * Supplier Payables and opens its supplier credit automatically.
+ */
+function supplierCreditDebit() {
+  return { debitName: ACCOUNTS.GENERAL_EXPENSE, debitType: "expense" as const };
+}
+
+function assertNotFuture(date: Date | undefined, what: string) {
+  if (date && date.getTime() > lubumbashiTodayEnd().getTime()) throw badRequest(`${what} cannot be dated in the future`);
+}
+
+/** Open the supplier balance for a stock purchase made on credit (posting is done by the purchase). */
+export async function openCreditForStockPurchase(executor: DbExecutor, purchase: {
+  id: number;
+  purchaseNumber: string | null;
+  productId: number;
+  productName: string;
+  supplier: string | null;
+  totalCost: number;
+  currency: string;
+  exchangeRate: number;
+  purchaseDate: Date;
+  notes: string | null;
+}) {
+  const creditNumber = await getNextNumber("SUP", executor);
+  const [credit] = await executor.insert(supplierCreditsTable).values({
+    creditNumber,
+    supplier: purchase.supplier?.trim() || "Unknown supplier",
+    description: `Stock purchase ${purchase.purchaseNumber ?? purchase.id}: ${purchase.productName}`,
+    productId: purchase.productId,
+    productName: purchase.productName,
+    totalAmount: money(purchase.totalCost),
+    amountPaid: 0,
+    currency: purchase.currency,
+    exchangeRate: purchase.exchangeRate,
+    purchaseDate: purchase.purchaseDate,
+    notes: purchase.notes,
+    status: "open",
+    stockPurchaseId: purchase.id,
+  }).returning();
+  return credit!;
 }
 
 export async function getSupplierCreditSummary() {
   const [credits, salesRows, products] = await Promise.all([
-    db.select().from(supplierCreditsTable).orderBy(desc(supplierCreditsTable.createdAt)),
+    db.select().from(supplierCreditsTable).where(isNull(supplierCreditsTable.deletedAt)).orderBy(desc(supplierCreditsTable.createdAt)),
     db.select({ totalProfitUsd: salesTable.totalProfitUsd })
       .from(salesTable)
       .where(eq(salesTable.status, "completed")),
@@ -91,7 +132,9 @@ export async function getSupplierCreditSummary() {
 }
 
 export async function listSupplierCredits() {
-  const credits = await db.select().from(supplierCreditsTable).orderBy(desc(supplierCreditsTable.purchaseDate));
+  const credits = await db.select().from(supplierCreditsTable)
+    .where(isNull(supplierCreditsTable.deletedAt))
+    .orderBy(desc(supplierCreditsTable.purchaseDate));
   return credits.map((credit) => ({ ...credit, remaining: subtractMoney(credit.totalAmount, credit.amountPaid) }));
 }
 
@@ -99,8 +142,10 @@ export async function createSupplierCredit(input: CreateSupplierCreditInput, act
   if (!input.supplier.trim()) throw badRequest("supplier is required");
   if (!Number.isFinite(input.totalAmount) || input.totalAmount <= 0) throw badRequest("totalAmount must be positive");
   const currency = normalizeCurrency(input.currency ?? "USD");
+  assertNotFuture(input.purchaseDate, "A supplier credit");
 
   return withTransaction(async (tx) => {
+    await assertPeriodOpen(tx, input.purchaseDate ?? new Date(), "This supplier credit");
     const rate = fxRate(input.exchangeRate ?? await getExchangeRate(tx));
     const creditNumber = await getNextNumber("SUP", tx);
     const totalAmount = money(input.totalAmount);
@@ -125,7 +170,7 @@ export async function createSupplierCredit(input: CreateSupplierCreditInput, act
       sourceId: credit.id,
       sourceNumber: creditNumber,
       entryDate: credit.purchaseDate,
-      ...supplierCreditDebit(credit.productId),
+      ...supplierCreditDebit(),
       creditName: ACCOUNTS.SUPPLIER_PAYABLES,
       creditType: "liability",
       amount: totalAmount,
@@ -143,7 +188,8 @@ export async function createSupplierCredit(input: CreateSupplierCreditInput, act
 export async function updateSupplierCredit(id: number, input: UpdateSupplierCreditInput, actor = "system") {
   return withTransaction(async (tx) => {
     const [existing] = await tx.select().from(supplierCreditsTable).where(eq(supplierCreditsTable.id, id)).for("update");
-    if (!existing) throw notFound("Supplier credit not found");
+    if (!existing || existing.deletedAt) throw notFound("Supplier credit not found");
+    assertNotFuture(input.purchaseDate, "A supplier credit");
 
     const storedRate = Number(existing.exchangeRate ?? 0);
     if (input.exchangeRate !== undefined && storedRate > 0 && fxRate(input.exchangeRate) !== fxRate(storedRate)) {
@@ -167,8 +213,14 @@ export async function updateSupplierCredit(id: number, input: UpdateSupplierCred
       || productId !== existing.productId
       || (input.purchaseDate !== undefined && input.purchaseDate.getTime() !== existing.purchaseDate.getTime());
 
+    if (financialChanged && existing.stockPurchaseId) {
+      throw badRequest("This balance comes from a stock purchase on credit. Correct the amount with a stock adjustment or settle it with supplier payments.");
+    }
+    const journalId = newJournalId();
     if (financialChanged) {
-      await reverseEntries("supplier_credit", id, "supplier_credit_correction", actor, tx);
+      await assertPeriodOpen(tx, existing.purchaseDate, "The original supplier credit");
+      await assertPeriodOpen(tx, input.purchaseDate ?? existing.purchaseDate, "The corrected supplier credit");
+      await reverseEntries("supplier_credit", id, "supplier_credit_correction", actor, tx, { journalId, entryDate: existing.purchaseDate });
     }
 
     const computedStatus = amountPaid >= totalAmount ? "paid" : "open";
@@ -189,11 +241,12 @@ export async function updateSupplierCredit(id: number, input: UpdateSupplierCred
     if (financialChanged) {
       const converted = toUsdCdf(totalAmount, currency, rate);
       await postDoubleEntry({
+        journalId,
         sourceType: "supplier_credit_correction",
         sourceId: id,
         sourceNumber: existing.creditNumber ?? undefined,
         entryDate: input.purchaseDate ?? existing.purchaseDate,
-        ...supplierCreditDebit(productId),
+        ...supplierCreditDebit(),
         creditName: ACCOUNTS.SUPPLIER_PAYABLES,
         creditType: "liability",
         amount: totalAmount,
@@ -209,32 +262,42 @@ export async function updateSupplierCredit(id: number, input: UpdateSupplierCred
   });
 }
 
+/** Supplier credits are never erased: the credit is marked deleted and its posting reversed. */
 export async function deleteSupplierCredit(id: number, actor = "system") {
   return withTransaction(async (tx) => {
     const [existing] = await tx.select().from(supplierCreditsTable).where(eq(supplierCreditsTable.id, id)).for("update");
-    if (!existing) throw notFound("Supplier credit not found");
+    if (!existing || existing.deletedAt) throw notFound("Supplier credit not found");
+    if (existing.stockPurchaseId) {
+      throw badRequest("This balance comes from a stock purchase on credit and cannot be deleted. Settle it with supplier payments.");
+    }
     const payments = await tx.select({ id: supplierPaymentsTable.id }).from(supplierPaymentsTable)
-      .where(eq(supplierPaymentsTable.creditId, id));
-    if (payments.length > 0) throw badRequest("Delete supplier payments before deleting this supplier credit");
+      .where(and(eq(supplierPaymentsTable.creditId, id), isNull(supplierPaymentsTable.deletedAt)));
+    if (payments.length > 0) throw badRequest("Reverse the supplier payments before deleting this supplier credit");
 
-    await reverseEntries("supplier_credit", id, "supplier_credit_reversal", actor, tx);
-    await tx.delete(supplierCreditsTable).where(eq(supplierCreditsTable.id, id));
+    await reverseEntries("supplier_credit", id, "supplier_credit_reversal", actor, tx, {
+      description: `Deleted supplier credit ${existing.creditNumber ?? id}`,
+    });
+    await tx.update(supplierCreditsTable)
+      .set({ deletedAt: new Date(), deletedBy: actor, status: "cancelled" })
+      .where(eq(supplierCreditsTable.id, id));
     return { ok: true };
   });
 }
 
 export async function listSupplierPayments(creditId: number) {
   return db.select().from(supplierPaymentsTable)
-    .where(eq(supplierPaymentsTable.creditId, creditId))
+    .where(and(eq(supplierPaymentsTable.creditId, creditId), isNull(supplierPaymentsTable.deletedAt)))
     .orderBy(desc(supplierPaymentsTable.paymentDate));
 }
 
 export async function addSupplierPayment(creditId: number, input: SupplierPaymentInput, actor = "system") {
   if (!Number.isFinite(input.amount) || input.amount <= 0) throw badRequest("amount must be positive");
+  assertNotFuture(input.paymentDate, "A supplier payment");
 
   return withTransaction(async (tx) => {
     const [credit] = await tx.select().from(supplierCreditsTable).where(eq(supplierCreditsTable.id, creditId)).for("update");
-    if (!credit) throw notFound("Supplier credit not found");
+    if (!credit || credit.deletedAt) throw notFound("Supplier credit not found");
+    await assertPeriodOpen(tx, input.paymentDate ?? new Date(), "This supplier payment");
     const currency = normalizeCurrency(input.currency ?? credit.currency);
     if (currency !== normalizeCurrency(credit.currency)) {
       throw badRequest("Supplier payments must use the credit currency so the liability settles at its locked FX rate");
@@ -286,19 +349,6 @@ export async function addSupplierPayment(creditId: number, input: SupplierPaymen
     }).returning();
     await tx.update(supplierPaymentsTable).set({ paymentId: cashPayment.id }).where(eq(supplierPaymentsTable.id, supplierPayment.id));
 
-    await appendLedgerEntry({
-      entryDate: paymentDate,
-      sourceType: "supplier_payment",
-      sourceNumber: paymentNumber,
-      sourceId: supplierPayment.id,
-      direction: "out",
-      amount,
-      currency,
-      exchangeRate: rate,
-      description,
-      createdBy: actor,
-    }, tx);
-
     await postDoubleEntry({
       entryDate: paymentDate,
       sourceType: "supplier_payment",
@@ -336,29 +386,20 @@ export async function deleteSupplierPayment(creditId: number, paymentId: number,
       eq(supplierPaymentsTable.id, paymentId),
       eq(supplierPaymentsTable.creditId, creditId),
     )).for("update");
-    if (!payment) throw notFound("Supplier payment not found");
+    if (!payment || payment.deletedAt) throw notFound("Supplier payment not found");
 
     const [credit] = await tx.select().from(supplierCreditsTable).where(eq(supplierCreditsTable.id, creditId)).for("update");
     if (!credit) throw notFound("Supplier credit not found");
-    const rate = fxRate(Number(payment.exchangeRate || credit.exchangeRate || 1));
-
-    await appendLedgerEntry({
-      entryDate: new Date(),
-      sourceType: "supplier_payment_reversal",
-      sourceId: payment.id,
-      direction: "in",
-      amount: payment.amount,
-      currency: payment.currency,
-      exchangeRate: rate,
+    await reverseEntries("supplier_payment", payment.id, "supplier_payment_reversal", actor, tx, {
       description: `Reversal of supplier payment — ${credit.supplier}`,
-      createdBy: actor,
-    }, tx);
-    await reverseEntries("supplier_payment", payment.id, "supplier_payment_reversal", actor, tx);
+    });
     if (payment.paymentId) {
       await tx.update(paymentsTable).set({ status: "cancelled" }).where(eq(paymentsTable.id, payment.paymentId));
     }
 
-    await tx.delete(supplierPaymentsTable).where(eq(supplierPaymentsTable.id, paymentId));
+    await tx.update(supplierPaymentsTable)
+      .set({ deletedAt: new Date(), deletedBy: actor })
+      .where(eq(supplierPaymentsTable.id, paymentId));
     const newPaid = money(Math.max(0, subtractMoney(credit.amountPaid, payment.amount)));
     const [updated] = await tx.update(supplierCreditsTable).set({
       amountPaid: newPaid,

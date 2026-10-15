@@ -2,63 +2,61 @@ import { contractBody, contractQueryAs } from "../../http/contracts";
 import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
+import { logActivity } from "../../lib/activity";
 import { getCurrentUser } from "../../shared/auth/permissions";
-import {
-  asRecord,
-  nonNegativeNumber,
-  optionalDate,
-  optionalString,
-  parseLimit,
-  parsePage,
-} from "../../shared/http/validation";
-import { getLedgerBalance, listCurrentCashMovements, listLedger, setOpeningBalance } from "./ledger-service";
-import { resetOperationalPeriod } from "./period-reset-service";
+import { asRecord, optionalDate, optionalString, parseLimit, parsePage } from "../../shared/http/validation";
+import { badRequest } from "../../shared/http/errors";
+import { getLedgerHealth } from "./ledger-health";
+import { getLedgerBalance, listCashMovements, listLedger, recordCashCount } from "./ledger-service";
+import { rangeEnd, rangeStart } from "./report-dates";
 
 const router = Router();
 router.use(requireAuth());
+
+function optionalAmount(value: unknown, field: string): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw badRequest(`${field} must be a non-negative number`);
+  return parsed;
+}
 
 router.get("/balance", async (_req, res) => {
   res.json(await getLedgerBalance());
 });
 
-router.get("/movements", async (_req, res) => {
-  res.json(await listCurrentCashMovements());
+router.get("/health", async (_req, res) => {
+  res.json(await getLedgerHealth());
+});
+
+router.get("/movements", async (req, res) => {
+  const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListCurrentCashMovementsQueryParams);
+  res.json(await listCashMovements({
+    account: optionalString(query.account),
+    dateFrom: rangeStart(query.dateFrom),
+    dateTo: rangeEnd(query.dateTo),
+  }));
 });
 
 router.post("/opening-balance", async (req, res) => {
   const body = asRecord(contractBody(req, ApiContracts.SetOpeningBalanceBody));
-  const targetAmountUsd = nonNegativeNumber(body.targetAmountUsd, "targetAmountUsd");
-  const date = optionalDate(body.date, "date");
-  const notes = optionalString(body.notes);
-  const actor = getCurrentUser(req).name;
-  const resetConfirmation = String(req.headers["x-reset-confirmation"] ?? "");
-
-  if (resetConfirmation) {
-    res.json(await resetOperationalPeriod({
-      openingCashUsd: targetAmountUsd,
-      resetDate: date,
-      notes,
-      confirmation: resetConfirmation,
-    }, actor));
-    return;
-  }
-
-  res.json(await setOpeningBalance({
-    targetAmountUsd,
-    date,
-    notes,
-  }, actor));
+  const result = await recordCashCount({
+    countedUsd: optionalAmount(body.countedUsd ?? body.targetAmountUsd, "countedUsd"),
+    countedCdf: optionalAmount(body.countedCdf, "countedCdf"),
+    date: optionalDate(body.date, "date"),
+    notes: optionalString(body.notes),
+    account: optionalString(body.account),
+  }, getCurrentUser(req).name);
+  await logActivity(req, "create", "cash_count", undefined, { adjustments: result.adjustments });
+  res.json(result);
 });
 
 router.get("/", async (req, res) => {
   const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListLedgerQueryParams);
-  const dateTo = optionalDate(query.dateTo, "dateTo");
-  if (dateTo) dateTo.setHours(23, 59, 59, 999);
   res.json(await listLedger({
     page: parsePage(query.page),
     limit: parseLimit(query.limit, 50, 200),
-    dateFrom: optionalDate(query.dateFrom, "dateFrom"),
-    dateTo,
+    dateFrom: rangeStart(query.dateFrom),
+    dateTo: rangeEnd(query.dateTo),
     direction: optionalString(query.direction),
   }));
 });

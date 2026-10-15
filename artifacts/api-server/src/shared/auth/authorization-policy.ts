@@ -19,6 +19,7 @@ export const FEATURE_PERMISSIONS = [
   "manageInventory",
   "manageMembers",
   "managePlans",
+  "approveCorrections",
 ] as const;
 
 export type FeaturePermission = (typeof FEATURE_PERMISSIONS)[number];
@@ -134,25 +135,30 @@ export const ENDPOINT_POLICIES: readonly EndpointPolicy[] = [
   p("GET", "/payments/admin/cash-cleanup", "admin", "Offline cash-cleanup compatibility endpoint"),
   p("POST", "/payments/admin/cash-cleanup", "admin", "Offline cash-cleanup compatibility endpoint"),
   p("POST", "/payments/:id/send-receipt", "permission", "Send payment receipt", { allOf: ["payments"] }),
-  p("PATCH", "/payments/:id", "permission", "Edit payment", { allOf: ["payments"] }),
-  p("DELETE", "/payments/:id", "permission", "Cancel payment", { allOf: ["payments"] }),
+  p("PATCH", "/payments/:id", "permission", "Correct payment (maker-checker)", { allOf: ["payments", "approveCorrections"] }),
+  p("DELETE", "/payments/:id", "permission", "Cancel payment (maker-checker)", { allOf: ["payments", "approveCorrections"] }),
 
   // Vouchers.
   p("GET", "/vouchers", "permission", "List vouchers", { allOf: ["vouchers"] }),
   p("POST", "/vouchers", "permission", "Create voucher", { allOf: ["vouchers"] }),
   p("GET", "/vouchers/:id", "permission", "Read voucher", { allOf: ["vouchers"] }),
-  p("PATCH", "/vouchers/:id", "permission", "Edit voucher", { allOf: ["vouchers"] }),
-  p("DELETE", "/vouchers/:id", "permission", "Cancel voucher", { allOf: ["vouchers"] }),
+  p("PATCH", "/vouchers/:id", "permission", "Correct voucher (maker-checker)", { allOf: ["vouchers", "approveCorrections"] }),
+  p("DELETE", "/vouchers/:id", "permission", "Cancel voucher (maker-checker)", { allOf: ["vouchers", "approveCorrections"] }),
 
   // Ledger / accounting.
   p("GET", "/ledger/balance", "permission", "Read cash balance", { allOf: ["viewAccounting"] }),
   p("GET", "/ledger/movements", "permission", "Read current cash movements", { anyOf: ["payments", "viewAccounting"] }),
-  p("POST", "/ledger/opening-balance", "admin", "Set opening cash balance"),
+  p("POST", "/ledger/opening-balance", "admin", "Record a physical cash count"),
+  p("GET", "/ledger/health", "permission", "Ledger reconciliation checks", { allOf: ["viewAccounting"] }),
   p("GET", "/ledger", "permission", "Read cash ledger", { allOf: ["viewAccounting"] }),
   p("GET", "/accounts/summary", "permission", "Accounts summary", { allOf: ["viewAccounting"] }),
   p("GET", "/accounts/sales", "permission", "Accounts sales ledger", { allOf: ["viewAccounting"] }),
   p("GET", "/accounts/expenses", "permission", "Accounts expense ledger", { allOf: ["viewAccounting"] }),
   p("GET", "/accounts/profit-loss", "permission", "Profit and loss", { allOf: ["viewAccounting", "viewProfit"] }),
+  p("GET", "/accounts/trial-balance", "permission", "Trial balance", { allOf: ["viewAccounting"] }),
+  p("GET", "/accounts/balance-sheet", "permission", "Balance sheet", { allOf: ["viewAccounting", "viewProfit"] }),
+  p("GET", "/accounts/periods", "permission", "Closed accounting periods", { allOf: ["viewAccounting"] }),
+  p("POST", "/accounts/periods/close", "admin", "Close the books through a date"),
   p("GET", "/accounts/chart", "permission", "Read chart of accounts", { allOf: ["viewAccounting"] }),
   p("POST", "/accounts/chart", "admin", "Create chart account"),
   p("PUT", "/accounts/chart/:id", "admin", "Update chart account"),
@@ -176,10 +182,10 @@ export const ENDPOINT_POLICIES: readonly EndpointPolicy[] = [
   p("GET", "/supplier-credits", "permission", "List supplier credits", { allOf: ["stock", "viewCost"] }),
   p("POST", "/supplier-credits", "permission", "Create supplier credit", { allOf: ["manageInventory"] }),
   p("PATCH", "/supplier-credits/:id", "permission", "Update supplier credit", { allOf: ["manageInventory"] }),
-  p("DELETE", "/supplier-credits/:id", "permission", "Delete supplier credit", { allOf: ["manageInventory"] }),
+  p("DELETE", "/supplier-credits/:id", "permission", "Delete supplier credit (maker-checker)", { allOf: ["manageInventory", "approveCorrections"] }),
   p("GET", "/supplier-credits/:id/payments", "permission", "Read supplier settlements", { allOf: ["stock", "viewCost"] }),
   p("POST", "/supplier-credits/:id/payments", "permission", "Record supplier settlement", { allOf: ["manageInventory"] }),
-  p("DELETE", "/supplier-credits/:id/payments/:paymentId", "permission", "Reverse supplier settlement", { allOf: ["manageInventory"] }),
+  p("DELETE", "/supplier-credits/:id/payments/:paymentId", "permission", "Reverse supplier settlement (maker-checker)", { allOf: ["manageInventory", "approveCorrections"] }),
 
   // Sales / POS. Route responses redact cost/profit fields unless their dedicated permissions are present.
   p("GET", "/sales/lookup-barcode", "permission", "POS barcode lookup", { allOf: ["sales"] }),
@@ -187,7 +193,7 @@ export const ENDPOINT_POLICIES: readonly EndpointPolicy[] = [
   p("GET", "/sales/:id", "permission", "Read sale", { allOf: ["sales"] }),
   p("POST", "/sales", "permission", "Complete sale", { allOf: ["sales"] }),
   p("PATCH", "/sales/:id", "admin", "Correct completed sale"),
-  p("PATCH", "/sales/:id/void", "permission", "Void sale", { allOf: ["sales"] }),
+  p("PATCH", "/sales/:id/void", "permission", "Void sale (maker-checker)", { allOf: ["sales", "approveCorrections"] }),
 
   // Staff / payroll.
   p("GET", "/staff-employees", "permission", "List staff compensation records", { allOf: ["staff", "payroll"] }),
@@ -199,7 +205,7 @@ export const ENDPOINT_POLICIES: readonly EndpointPolicy[] = [
   p("GET", "/payroll/:id", "permission", "Read payroll", { allOf: ["payroll"] }),
   p("POST", "/payroll", "permission", "Create payroll", { allOf: ["managePayroll"] }),
   p("PATCH", "/payroll/:id/pay", "permission", "Pay payroll", { allOf: ["managePayroll"] }),
-  p("PATCH", "/payroll/:id/cancel", "permission", "Cancel payroll", { allOf: ["managePayroll"] }),
+  p("PATCH", "/payroll/:id/cancel", "permission", "Cancel payroll (maker-checker)", { allOf: ["managePayroll", "approveCorrections"] }),
   p("GET", "/commissions/summary", "permission", "Pending commission summary", { allOf: ["payroll"] }),
 
   // Attendance is member operational data.

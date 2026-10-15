@@ -7,7 +7,11 @@
  */
 
 export type SetOpeningBalanceBody = {
-  targetAmountUsd: number;
+  /** Deprecated alias of countedUsd */
+  targetAmountUsd?: number;
+  countedUsd?: number | null;
+  countedCdf?: number | null;
+  account?: string | null;
   date?: string | null;
   notes?: string | null;
 };

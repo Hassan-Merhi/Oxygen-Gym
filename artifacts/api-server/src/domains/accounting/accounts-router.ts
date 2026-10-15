@@ -3,136 +3,99 @@ import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { logActivity } from "../../lib/activity";
-import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
+import { getCurrentUser } from "../../shared/auth/permissions";
+import { badRequest } from "../../shared/http/errors";
 import {
   asRecord,
-  optionalDate,
   optionalString,
   parseId,
   parseLimit,
   parsePage,
   requiredString,
 } from "../../shared/http/validation";
-import { listAccountSales } from "./accounts-service";
-import { getAccountStatementWithRecovery } from "./account-statement-recovery";
 import {
   createChartAccount,
   deactivateChartAccount,
   listChartAccounts,
   updateChartAccount,
 } from "./chart-service";
-import { getAccountsSummary, getProfitLoss, listAccountExpenses } from "./reporting-service";
+import { getBalanceSheet, getTrialBalance } from "./ledger-reports";
+import { closePeriod, listClosedPeriods } from "./period-close-service";
+import { rangeEnd, rangeStart } from "./report-dates";
+import {
+  getAccountStatement,
+  getAccountsSummary,
+  getProfitLoss,
+  listAccountExpenses,
+  listAccountSales,
+} from "./reporting-service";
 
 const router = Router();
 router.use(requireAuth());
 
 function listInput(query: Record<string, string | undefined>) {
-  const dateTo = optionalDate(query.dateTo, "dateTo");
-  if (dateTo) dateTo.setHours(23, 59, 59, 999);
   return {
     page: parsePage(query.page),
     limit: parseLimit(query.limit, 50, 200),
     search: optionalString(query.search),
-    dateFrom: optionalDate(query.dateFrom, "dateFrom"),
-    dateTo,
+    dateFrom: rangeStart(query.dateFrom),
+    dateTo: rangeEnd(query.dateTo),
     currency: optionalString(query.currency),
   };
 }
 
-function cdfFromUsd(usd: number, rate: number) {
-  return toUsdCdf(Number(usd ?? 0), "USD", rate).amountCdf;
+function optionalAmount(value: unknown, field: string): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw badRequest(`${field} must be a non-negative number`);
+  return parsed;
 }
 
 router.get("/summary", async (_req, res) => {
-  const [summary, rate] = await Promise.all([getAccountsSummary(), getExchangeRate()]);
-  res.json({
-    ...summary,
-    rate,
-    cash: {
-      ...summary.cash,
-      balanceCdf: cdfFromUsd(summary.cash.balanceUsd, rate),
-    },
-    sales: {
-      ...summary.sales,
-      todayCdf: cdfFromUsd(summary.sales.todayUsd, rate),
-      monthCdf: cdfFromUsd(summary.sales.monthUsd, rate),
-    },
-    expenses: {
-      ...summary.expenses,
-      todayCdf: cdfFromUsd(summary.expenses.todayUsd, rate),
-      monthCdf: cdfFromUsd(summary.expenses.monthUsd, rate),
-    },
-    profit: {
-      ...summary.profit,
-      todayCdf: cdfFromUsd(summary.profit.todayUsd, rate),
-      monthCdf: cdfFromUsd(summary.profit.monthUsd, rate),
-    },
-  });
+  res.json(await getAccountsSummary());
 });
 
 router.get("/sales", async (req, res) => {
-  const [result, rate] = await Promise.all([
-    listAccountSales(listInput(contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListSalesEntriesQueryParams))),
-    getExchangeRate(),
-  ]);
-  res.json({
-    ...result,
-    rate,
-    items: result.items.map((item) => ({
-      ...item,
-      exchangeRate: rate,
-      ...toUsdCdf(Number(item.amount ?? 0), item.currency, rate),
-    })),
-  });
+  res.json(await listAccountSales(listInput(contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListSalesEntriesQueryParams))));
 });
 
 router.get("/expenses", async (req, res) => {
-  const [result, rate] = await Promise.all([
-    listAccountExpenses(listInput(contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListExpenseEntriesQueryParams))),
-    getExchangeRate(),
-  ]);
-  res.json({
-    ...result,
-    rate,
-    items: result.items.map((item) => ({
-      ...item,
-      exchangeRate: rate,
-      ...toUsdCdf(Number(item.amount ?? 0), item.currency, rate),
-    })),
-  });
+  res.json(await listAccountExpenses(listInput(contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListExpenseEntriesQueryParams))));
 });
 
 router.get("/profit-loss", async (req, res) => {
   const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.GetProfitLossQueryParams);
-  const dateTo = optionalDate(query.dateTo, "dateTo");
-  if (dateTo) dateTo.setHours(23, 59, 59, 999);
   const period = query.period ?? "month";
-  const [result, rate] = await Promise.all([
-    getProfitLoss({
-      period,
-      dateFrom: optionalDate(query.dateFrom, "dateFrom"),
-      dateTo,
-    }),
-    getExchangeRate(),
-  ]);
+  const result = await getProfitLoss({ period, dateFrom: query.dateFrom, dateTo: query.dateTo });
   await logActivity(req, "view", "accounts", undefined, { period });
-  const currentMoney = (value: { usd: number; cdf: number }) => ({
-    usd: value.usd,
-    cdf: cdfFromUsd(value.usd, rate),
-  });
-  res.json({
-    ...result,
-    rate,
-    revenue: currentMoney(result.revenue),
-    expenses: currentMoney(result.expenses),
-    net: currentMoney(result.net),
-    breakdown: Object.fromEntries(
-      Object.entries(result.breakdown).map(([key, value]) => [key, {
-        ...value,
-        cdf: cdfFromUsd(value.usd, rate),
-      }]),
-    ),
-  });
+  res.json(result);
+});
+
+router.get("/trial-balance", async (req, res) => {
+  const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.GetTrialBalanceQueryParams);
+  res.json(await getTrialBalance(rangeEnd(query.asOf, "asOf")));
+});
+
+router.get("/balance-sheet", async (req, res) => {
+  const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.GetBalanceSheetQueryParams);
+  res.json(await getBalanceSheet(rangeEnd(query.asOf, "asOf")));
+});
+
+router.get("/periods", async (_req, res) => {
+  res.json(await listClosedPeriods());
+});
+
+router.post("/periods/close", async (req, res) => {
+  const body = asRecord(contractBody(req, ApiContracts.ClosePeriodBody));
+  const result = await closePeriod({
+    closedThroughDate: requiredString(body.closedThroughDate, "closedThroughDate"),
+    confirmation: requiredString(body.confirmation, "confirmation"),
+    countedUsd: optionalAmount(body.countedUsd, "countedUsd"),
+    countedCdf: optionalAmount(body.countedCdf, "countedCdf"),
+    notes: optionalString(body.notes),
+  }, getCurrentUser(req).name);
+  await logActivity(req, "create", "period_close", result.periodId, { closedThrough: result.closedThroughDate, netIncome: result.netIncome });
+  res.json(result);
 });
 
 router.get("/chart", async (_req, res) => {
@@ -164,12 +127,10 @@ router.delete("/chart/:id", async (req, res) => {
 
 router.get("/chart/:id/statement", async (req, res) => {
   const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.GetChartAccountStatementQueryParams);
-  const dateTo = optionalDate(query.dateTo, "dateTo");
-  if (dateTo) dateTo.setHours(23, 59, 59, 999);
-  res.json(await getAccountStatementWithRecovery(
+  res.json(await getAccountStatement(
     parseId(contractParams(req, ApiContracts.GetChartAccountStatementParams).id, "account id"),
-    optionalDate(query.dateFrom, "dateFrom"),
-    dateTo,
+    rangeStart(query.dateFrom),
+    rangeEnd(query.dateTo),
   ));
 });
 

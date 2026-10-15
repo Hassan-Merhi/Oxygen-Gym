@@ -6,9 +6,8 @@ import {
   staffEmployeesTable,
 } from "@workspace/db/schema";
 import { and, count, desc, eq, gte, ilike, lte, or } from "drizzle-orm";
-import { appendLedgerEntry } from "../../lib/ledger";
 import { getNextNumber } from "../../lib/numbering";
-import { ACCOUNTS, postDoubleEntry, reverseEntries } from "../../lib/accounting";
+import { ACCOUNTS, assertPeriodOpen, postDoubleEntry, reverseEntries } from "../../lib/accounting";
 import { convertCurrencyAmount, getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
 import { addMoney, fxRate, money, subtractMoney } from "../../shared/accounting/decimal";
 import { withTransaction } from "../../shared/db/transaction";
@@ -136,6 +135,7 @@ export async function payPayroll(id: number, actor: string) {
     if (!record) throw notFound("Payroll record not found");
     if (record.status === "paid") throw badRequest("Already paid");
     if (record.status === "cancelled") throw badRequest("Cannot pay a cancelled payroll");
+    await assertPeriodOpen(tx, new Date(), "This payroll payment");
 
     const storedRate = Number(record.exchangeRate ?? 0);
     const rate = fxRate(storedRate > 0 ? storedRate : await getExchangeRate(tx));
@@ -162,18 +162,6 @@ export async function payPayroll(id: number, actor: string) {
       createdBy: actor,
       status: "completed",
     }).returning();
-
-    await appendLedgerEntry({
-      sourceType: "payroll",
-      sourceNumber: record.payrollNumber ?? undefined,
-      sourceId: record.id,
-      direction: "out",
-      amount: netPay,
-      currency: record.currency,
-      exchangeRate: rate,
-      description,
-      createdBy: actor,
-    }, tx);
 
     await postDoubleEntry({
       sourceType: "payroll",
@@ -220,21 +208,9 @@ export async function cancelPayroll(id: number, reason: string, actor: string) {
     if (record.status === "cancelled") throw badRequest("Already cancelled");
 
     if (record.status === "paid") {
-      const storedRate = Number(record.exchangeRate ?? 0);
-      const rate = fxRate(storedRate > 0 ? storedRate : await getExchangeRate(tx));
-      await appendLedgerEntry({
-        sourceType: "payroll_reversal",
-        sourceNumber: record.payrollNumber ?? undefined,
-        sourceId: record.id,
-        direction: "in",
-        amount: money(record.netPay),
-        currency: record.currency,
-        exchangeRate: rate,
+      await reverseEntries("payroll", record.id, "payroll_reversal", actor, tx, {
         description: `Reversal of payroll ${record.payrollNumber} — ${reason}`,
-        createdBy: actor,
-      }, tx);
-
-      await reverseEntries("payroll", record.id, "payroll_reversal", actor, tx);
+      });
       if (record.paymentId) {
         await tx.update(paymentsTable).set({ status: "cancelled" }).where(eq(paymentsTable.id, record.paymentId));
       }

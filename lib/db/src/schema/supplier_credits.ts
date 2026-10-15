@@ -19,6 +19,10 @@ export const supplierCreditsTable = pgTable("supplier_credits", {
   purchaseDate: timestamp("purchase_date", { withTimezone: true }).notNull().defaultNow(),
   notes: text("notes"),
   status: text("status").notNull().default("open"),
+  // Supplier documents are never hard-deleted; a reversal journal is posted instead.
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedBy: text("deleted_by"),
+  stockPurchaseId: integer("stock_purchase_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -35,6 +39,8 @@ export const supplierPaymentsTable = pgTable("supplier_payments", {
   paymentId: integer("payment_id"),
   paymentDate: timestamp("payment_date", { withTimezone: true }).notNull().defaultNow(),
   notes: text("notes"),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedBy: text("deleted_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

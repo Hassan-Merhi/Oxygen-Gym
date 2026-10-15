@@ -6,12 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { GetFinancials200MonthsItemTransactionsItemKind } from './getFinancials200MonthsItemTransactionsItemKind';
-import type { GetFinancials200MonthsItemTransactionsItemSourceType } from './getFinancials200MonthsItemTransactionsItemSourceType';
 
 export type GetFinancials200MonthsItemTransactionsItem = {
   id: string;
-  sourceType: GetFinancials200MonthsItemTransactionsItemSourceType;
-  sourceId: number;
+  journalId: string;
+  sourceType: string;
+  sourceId: number | null;
   reference: string;
   date: string;
   dateKey: string;

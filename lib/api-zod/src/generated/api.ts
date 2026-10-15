@@ -62,7 +62,8 @@ export const RunSetupResponse = zod.object({
   "managePayroll": zod.boolean(),
   "manageInventory": zod.boolean(),
   "manageMembers": zod.boolean(),
-  "managePlans": zod.boolean()
+  "managePlans": zod.boolean(),
+  "approveCorrections": zod.boolean().optional().describe('May edit or cancel posted payments and vouchers, void sales, cancel paid payroll and reverse supplier records')
 }).describe('Per-page and per-feature permissions for a user'),
   "lastLoginAt": zod.coerce.date().nullish()
 })
@@ -106,7 +107,8 @@ export const LoginResponse = zod.object({
   "managePayroll": zod.boolean(),
   "manageInventory": zod.boolean(),
   "manageMembers": zod.boolean(),
-  "managePlans": zod.boolean()
+  "managePlans": zod.boolean(),
+  "approveCorrections": zod.boolean().optional().describe('May edit or cancel posted payments and vouchers, void sales, cancel paid payroll and reverse supplier records')
 }).describe('Per-page and per-feature permissions for a user'),
   "lastLoginAt": zod.coerce.date().nullish()
 })
@@ -143,7 +145,8 @@ export const GetMeResponse = zod.object({
   "managePayroll": zod.boolean(),
   "manageInventory": zod.boolean(),
   "manageMembers": zod.boolean(),
-  "managePlans": zod.boolean()
+  "managePlans": zod.boolean(),
+  "approveCorrections": zod.boolean().optional().describe('May edit or cancel posted payments and vouchers, void sales, cancel paid payroll and reverse supplier records')
 }).describe('Per-page and per-feature permissions for a user'),
   "lastLoginAt": zod.coerce.date().nullish()
 })
@@ -190,7 +193,8 @@ export const ListUsersResponseItem = zod.object({
   "managePayroll": zod.boolean(),
   "manageInventory": zod.boolean(),
   "manageMembers": zod.boolean(),
-  "managePlans": zod.boolean()
+  "managePlans": zod.boolean(),
+  "approveCorrections": zod.boolean().optional().describe('May edit or cancel posted payments and vouchers, void sales, cancel paid payroll and reverse supplier records')
 }).describe('Per-page and per-feature permissions for a user'),
   "lastLoginAt": zod.coerce.date().nullish(),
   "deletedAt": zod.coerce.date().nullish(),
@@ -230,7 +234,8 @@ export const CreateUserBody = zod.object({
   "managePayroll": zod.boolean(),
   "manageInventory": zod.boolean(),
   "manageMembers": zod.boolean(),
-  "managePlans": zod.boolean()
+  "managePlans": zod.boolean(),
+  "approveCorrections": zod.boolean().optional().describe('May edit or cancel posted payments and vouchers, void sales, cancel paid payroll and reverse supplier records')
 }).optional().describe('Per-page and per-feature permissions for a user')
 })
 
@@ -270,7 +275,8 @@ export const GetUserResponse = zod.object({
   "managePayroll": zod.boolean(),
   "manageInventory": zod.boolean(),
   "manageMembers": zod.boolean(),
-  "managePlans": zod.boolean()
+  "managePlans": zod.boolean(),
+  "approveCorrections": zod.boolean().optional().describe('May edit or cancel posted payments and vouchers, void sales, cancel paid payroll and reverse supplier records')
 }).describe('Per-page and per-feature permissions for a user'),
   "lastLoginAt": zod.coerce.date().nullish(),
   "deletedAt": zod.coerce.date().nullish(),
@@ -322,7 +328,8 @@ export const UpdateUserResponse = zod.object({
   "managePayroll": zod.boolean(),
   "manageInventory": zod.boolean(),
   "manageMembers": zod.boolean(),
-  "managePlans": zod.boolean()
+  "managePlans": zod.boolean(),
+  "approveCorrections": zod.boolean().optional().describe('May edit or cancel posted payments and vouchers, void sales, cancel paid payroll and reverse supplier records')
 }).describe('Per-page and per-feature permissions for a user'),
   "lastLoginAt": zod.coerce.date().nullish(),
   "deletedAt": zod.coerce.date().nullish(),
@@ -366,7 +373,8 @@ export const UpdateUserPermissionsBody = zod.object({
   "managePayroll": zod.boolean(),
   "manageInventory": zod.boolean(),
   "manageMembers": zod.boolean(),
-  "managePlans": zod.boolean()
+  "managePlans": zod.boolean(),
+  "approveCorrections": zod.boolean().optional().describe('May edit or cancel posted payments and vouchers, void sales, cancel paid payroll and reverse supplier records')
 }).describe('Per-page and per-feature permissions for a user')
 })
 
@@ -398,7 +406,8 @@ export const UpdateUserPermissionsResponse = zod.object({
   "managePayroll": zod.boolean(),
   "manageInventory": zod.boolean(),
   "manageMembers": zod.boolean(),
-  "managePlans": zod.boolean()
+  "managePlans": zod.boolean(),
+  "approveCorrections": zod.boolean().optional().describe('May edit or cancel posted payments and vouchers, void sales, cancel paid payroll and reverse supplier records')
 }).describe('Per-page and per-feature permissions for a user'),
   "lastLoginAt": zod.coerce.date().nullish(),
   "deletedAt": zod.coerce.date().nullish(),
@@ -1652,15 +1661,42 @@ export const DeleteVoucherParams = zod.object({
 
 
 /**
- * @summary List current cash movements revalued at the live exchange rate
+ * @summary Cash Book for a money account with opening and running balances per currency
  */
+export const ListCurrentCashMovementsQueryParams = zod.object({
+  "account": zod.coerce.string().optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional()
+})
+
 export const ListCurrentCashMovementsResponse = zod.object({
+  "account": zod.string(),
   "exchangeRate": zod.number(),
+  "opening": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "closing": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "totals": zod.object({
+  "inUsd": zod.number(),
+  "outUsd": zod.number(),
+  "inCdf": zod.number(),
+  "outCdf": zod.number(),
+  "inBookUsd": zod.number(),
+  "outBookUsd": zod.number(),
+  "netBookUsd": zod.number()
+}),
   "items": zod.array(zod.object({
+  "entryId": zod.number(),
+  "journalId": zod.string(),
   "sourceType": zod.string(),
   "sourceId": zod.number().nullable(),
   "sourceNumber": zod.string().nullable(),
   "date": zod.coerce.date(),
+  "dateKey": zod.string(),
   "direction": zod.enum(['in', 'out']),
   "category": zod.string(),
   "amount": zod.number(),
@@ -1669,16 +1705,23 @@ export const ListCurrentCashMovementsResponse = zod.object({
   "amountUsd": zod.number(),
   "amountCdf": zod.number(),
   "description": zod.string(),
-  "party": zod.string()
+  "party": zod.string(),
+  "account": zod.string(),
+  "createdBy": zod.string().nullish(),
+  "balanceUsd": zod.number().describe('Running USD notes after this line'),
+  "balanceCdf": zod.number().describe('Running CDF notes after this line')
 }))
 })
 
 
 /**
- * @summary Set a cash opening balance (inserts an adjustment entry, no data deleted)
+ * @summary Record a physical cash count (differences post to Cash Over/Short; nothing is deleted)
  */
 export const SetOpeningBalanceBody = zod.object({
-  "targetAmountUsd": zod.number(),
+  "targetAmountUsd": zod.number().optional().describe('Deprecated alias of countedUsd'),
+  "countedUsd": zod.number().nullish(),
+  "countedCdf": zod.number().nullish(),
+  "account": zod.string().nullish(),
   "date": zod.string().nullish(),
   "notes": zod.string().nullish()
 })
@@ -1686,10 +1729,39 @@ export const SetOpeningBalanceBody = zod.object({
 export const SetOpeningBalanceResponse = zod.object({
   "ok": zod.boolean(),
   "skipped": zod.boolean(),
+  "journalId": zod.string().nullish(),
+  "adjustments": zod.array(zod.object({
+  "currency": zod.string(),
+  "expected": zod.number(),
+  "counted": zod.number(),
+  "difference": zod.number()
+})),
   "balance": zod.object({
-  "balanceUsd": zod.number(),
-  "balanceCdf": zod.number()
+  "balanceUsd": zod.number().describe('USD and CDF notes valued at today\'s rate, in USD'),
+  "balanceCdf": zod.number().describe('USD and CDF notes valued at today\'s rate, in CDF'),
+  "nativeUsd": zod.number().optional().describe('USD notes expected in the drawer'),
+  "nativeCdf": zod.number().optional().describe('CDF notes expected in the drawer'),
+  "bookUsd": zod.number().optional().describe('Book value at the rates locked on each entry'),
+  "rate": zod.number().optional(),
+  "lockedThrough": zod.string().nullish()
 })
+})
+
+
+/**
+ * @summary Reconcile the ledger with cash, stock and supplier balances
+ */
+export const GetLedgerHealthResponse = zod.object({
+  "ok": zod.boolean(),
+  "rate": zod.number(),
+  "checks": zod.array(zod.object({
+  "key": zod.string(),
+  "ok": zod.boolean(),
+  "expected": zod.number(),
+  "actual": zod.number(),
+  "difference": zod.number(),
+  "message": zod.string()
+}))
 })
 
 
@@ -1707,6 +1779,7 @@ export const ListLedgerQueryParams = zod.object({
 export const ListLedgerResponse = zod.object({
   "items": zod.array(zod.object({
   "id": zod.number(),
+  "journalId": zod.string().optional(),
   "entryDate": zod.string(),
   "sourceType": zod.string(),
   "sourceNumber": zod.string().nullish(),
@@ -1733,8 +1806,13 @@ export const ListLedgerResponse = zod.object({
  * @summary Get current cash balance
  */
 export const GetLedgerBalanceResponse = zod.object({
-  "balanceUsd": zod.number(),
-  "balanceCdf": zod.number()
+  "balanceUsd": zod.number().describe('USD and CDF notes valued at today\'s rate, in USD'),
+  "balanceCdf": zod.number().describe('USD and CDF notes valued at today\'s rate, in CDF'),
+  "nativeUsd": zod.number().optional().describe('USD notes expected in the drawer'),
+  "nativeCdf": zod.number().optional().describe('CDF notes expected in the drawer'),
+  "bookUsd": zod.number().optional().describe('Book value at the rates locked on each entry'),
+  "rate": zod.number().optional(),
+  "lockedThrough": zod.string().nullish()
 })
 
 
@@ -2654,7 +2732,8 @@ export const UpdateProductBody = zod.object({
   "costPrice": zod.number().optional(),
   "sellingPrice": zod.number().optional(),
   "currency": zod.enum(['USD', 'CDF']).optional(),
-  "status": zod.string().optional()
+  "status": zod.string().optional(),
+  "adjustmentReason": zod.string().optional().describe('Why quantity or cost changed; posted with the stock adjustment')
 })
 
 export const UpdateProductResponse = zod.object({
@@ -2752,9 +2831,12 @@ export const GetProductHistoryResponse = zod.array(GetProductHistoryResponseItem
  * @summary Get account cards overview with balances and movements
  */
 export const GetAccountSummaryResponse = zod.object({
+  "rate": zod.number().optional(),
   "cash": zod.object({
   "balanceUsd": zod.number(),
   "balanceCdf": zod.number(),
+  "nativeUsd": zod.number().optional(),
+  "nativeCdf": zod.number().optional(),
   "todayInUsd": zod.number(),
   "todayOutUsd": zod.number(),
   "monthInUsd": zod.number(),
@@ -2795,18 +2877,17 @@ export const ListSalesEntriesQueryParams = zod.object({
 
 export const ListSalesEntriesResponse = zod.object({
   "items": zod.array(zod.object({
-  "id": zod.number(),
-  "paymentNumber": zod.string().nullish(),
-  "direction": zod.string(),
-  "category": zod.string(),
-  "memberName": zod.string().nullish(),
-  "linkedEntityName": zod.string().nullish(),
-  "planName": zod.string().nullish(),
+  "id": zod.string(),
+  "sourceType": zod.string(),
+  "sourceNumber": zod.string().nullish(),
+  "date": zod.string(),
+  "description": zod.string().nullish(),
+  "party": zod.string().nullish(),
+  "category": zod.string().nullish(),
   "amount": zod.number(),
   "currency": zod.string(),
-  "amountUsd": zod.number().nullish(),
-  "amountCdf": zod.number().nullish(),
-  "paymentDate": zod.string(),
+  "amountUsd": zod.number(),
+  "amountCdf": zod.number(),
   "createdBy": zod.string().nullish()
 })),
   "total": zod.number(),
@@ -2849,10 +2930,152 @@ export const ListExpenseEntriesResponse = zod.object({
 
 
 /**
+ * @summary Trial balance as of a business date
+ */
+export const GetTrialBalanceQueryParams = zod.object({
+  "asOf": zod.coerce.string().optional()
+})
+
+export const GetTrialBalanceResponse = zod.object({
+  "asOf": zod.string(),
+  "balanced": zod.boolean(),
+  "totals": zod.object({
+  "debitUsd": zod.number(),
+  "creditUsd": zod.number(),
+  "debitCdf": zod.number(),
+  "creditCdf": zod.number()
+}),
+  "rows": zod.array(zod.object({
+  "accountId": zod.number(),
+  "name": zod.string(),
+  "type": zod.string(),
+  "normal": zod.enum(['debit', 'credit']),
+  "debitUsd": zod.number(),
+  "creditUsd": zod.number(),
+  "debitCdf": zod.number(),
+  "creditCdf": zod.number(),
+  "balanceUsd": zod.number(),
+  "balanceCdf": zod.number()
+}))
+})
+
+
+/**
+ * @summary Balance sheet as of a business date
+ */
+export const GetBalanceSheetQueryParams = zod.object({
+  "asOf": zod.coerce.string().optional()
+})
+
+export const GetBalanceSheetResponse = zod.object({
+  "asOf": zod.string(),
+  "balanced": zod.boolean(),
+  "assets": zod.array(zod.object({
+  "accountId": zod.number(),
+  "name": zod.string(),
+  "usd": zod.number(),
+  "cdf": zod.number()
+})),
+  "liabilities": zod.array(zod.object({
+  "accountId": zod.number(),
+  "name": zod.string(),
+  "usd": zod.number(),
+  "cdf": zod.number()
+})),
+  "equity": zod.array(zod.object({
+  "accountId": zod.number(),
+  "name": zod.string(),
+  "usd": zod.number(),
+  "cdf": zod.number()
+})),
+  "currentEarnings": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "totals": zod.object({
+  "assets": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "liabilities": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "equity": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "liabilitiesAndEquity": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+})
+})
+})
+
+
+/**
+ * @summary Closed accounting periods
+ */
+export const ListClosedPeriodsResponse = zod.object({
+  "lockedThrough": zod.string().nullable(),
+  "lockedThroughDate": zod.string().nullable(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "closedThrough": zod.string(),
+  "closedThroughDate": zod.string(),
+  "journalId": zod.string().nullish(),
+  "netIncomeUsd": zod.number(),
+  "netIncomeCdf": zod.number(),
+  "notes": zod.string().nullish(),
+  "closedBy": zod.string().nullish(),
+  "closedAt": zod.string()
+}))
+})
+
+
+/**
+ * @summary Close the books through a business date (revalue, close to Retained Earnings, lock)
+ */
+export const ClosePeriodBody = zod.object({
+  "closedThroughDate": zod.string(),
+  "confirmation": zod.string(),
+  "countedUsd": zod.number().nullish(),
+  "countedCdf": zod.number().nullish(),
+  "notes": zod.string().nullish()
+})
+
+export const ClosePeriodResponse = zod.object({
+  "ok": zod.boolean(),
+  "closedThrough": zod.string(),
+  "closedThroughDate": zod.string(),
+  "journalId": zod.string(),
+  "revaluationJournalId": zod.string().nullish(),
+  "exchangeRate": zod.number(),
+  "netIncome": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "revenue": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "expenses": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "fxAdjustment": zod.object({
+  "usd": zod.number(),
+  "cdf": zod.number()
+}),
+  "periodId": zod.number()
+})
+
+
+/**
  * @summary Get profit and loss report
  */
 export const GetProfitLossQueryParams = zod.object({
-  "period": zod.enum(['today', 'month', 'last_month', 'year', 'custom']).optional(),
+  "period": zod.enum(['today', 'month', 'last_month', 'year', 'all', 'custom']).optional(),
   "dateFrom": zod.coerce.string().optional(),
   "dateTo": zod.coerce.string().optional()
 })
@@ -2996,15 +3219,15 @@ export const GetChartAccountStatementResponse = zod.record(zod.string(), zod.unk
 export const getFinancialsQueryPeriodDefault = `month`;
 
 export const GetFinancialsQueryParams = zod.object({
-  "period": zod.enum(['today', 'month', 'last_month', 'year', 'custom']).default(getFinancialsQueryPeriodDefault),
+  "period": zod.enum(['today', 'month', 'last_month', 'year', 'all', 'custom']).default(getFinancialsQueryPeriodDefault),
   "dateFrom": zod.coerce.string().optional(),
   "dateTo": zod.coerce.string().optional()
 })
 
 export const GetFinancialsResponse = zod.object({
-  "period": zod.enum(['today', 'month', 'last_month', 'year', 'custom']),
-  "dateFrom": zod.string(),
-  "dateTo": zod.string(),
+  "period": zod.enum(['today', 'month', 'last_month', 'year', 'all', 'custom']),
+  "dateFrom": zod.string().nullable(),
+  "dateTo": zod.string().nullable(),
   "rate": zod.number(),
   "currency": zod.object({
   "base": zod.enum(['USD']),
@@ -3045,8 +3268,9 @@ export const GetFinancialsResponse = zod.object({
 }),
   "transactions": zod.array(zod.object({
   "id": zod.string(),
-  "sourceType": zod.enum(['payment', 'voucher', 'sale_revenue', 'sale_cogs']),
-  "sourceId": zod.number(),
+  "journalId": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.number().nullable(),
   "reference": zod.string(),
   "date": zod.string(),
   "dateKey": zod.string(),

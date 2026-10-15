@@ -7,6 +7,9 @@ const fx = (name: string) => numeric(name, { precision: 20, scale: 8, mode: "num
 
 export const accountingEntriesTable = pgTable("accounting_entries", {
   id: serial("id").primaryKey(),
+  // Every posting belongs to one journal; a deferred database trigger enforces
+  // that each journal balances in both USD and CDF at commit.
+  journalId: text("journal_id").notNull(),
   entryDate: timestamp("entry_date", { withTimezone: true }).notNull().defaultNow(),
   sourceType: text("source_type").notNull(),
   sourceId: integer("source_id"),
@@ -24,6 +27,20 @@ export const accountingEntriesTable = pgTable("accounting_entries", {
   createdBy: text("created_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const accountingPeriodsTable = pgTable("accounting_periods", {
+  id: serial("id").primaryKey(),
+  // Books are locked for every entry dated on or before this instant.
+  closedThrough: timestamp("closed_through", { withTimezone: true }).notNull(),
+  journalId: text("journal_id"),
+  netIncomeUsd: money("net_income_usd").notNull().default(0),
+  netIncomeCdf: money("net_income_cdf").notNull().default(0),
+  notes: text("notes"),
+  closedBy: text("closed_by"),
+  closedAt: timestamp("closed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AccountingPeriod = typeof accountingPeriodsTable.$inferSelect;
 
 export const insertAccountingEntrySchema = createInsertSchema(accountingEntriesTable).omit({ id: true, createdAt: true });
 export type InsertAccountingEntry = z.infer<typeof insertAccountingEntrySchema>;

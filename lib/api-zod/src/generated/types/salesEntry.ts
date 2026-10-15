@@ -7,17 +7,16 @@
  */
 
 export interface SalesEntry {
-  id: number;
-  paymentNumber?: string | null;
-  direction: string;
-  category: string;
-  memberName?: string | null;
-  linkedEntityName?: string | null;
-  planName?: string | null;
+  id: string;
+  sourceType: string;
+  sourceNumber?: string | null;
+  date: string;
+  description?: string | null;
+  party?: string | null;
+  category?: string | null;
   amount: number;
   currency: string;
-  amountUsd?: number | null;
-  amountCdf?: number | null;
-  paymentDate: string;
+  amountUsd: number;
+  amountCdf: number;
   createdBy?: string | null;
 }

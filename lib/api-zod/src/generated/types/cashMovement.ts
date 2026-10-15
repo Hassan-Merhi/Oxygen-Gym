@@ -5,14 +5,17 @@
  * Gym Management API
  * OpenAPI spec version: 0.1.0
  */
-import type { ListCurrentCashMovements200ItemsItemDirection } from './listCurrentCashMovements200ItemsItemDirection';
+import type { CashMovementDirection } from './cashMovementDirection';
 
-export type ListCurrentCashMovements200ItemsItem = {
+export interface CashMovement {
+  entryId: number;
+  journalId: string;
   sourceType: string;
   sourceId: number | null;
   sourceNumber: string | null;
   date: Date;
-  direction: ListCurrentCashMovements200ItemsItemDirection;
+  dateKey: string;
+  direction: CashMovementDirection;
   category: string;
   amount: number;
   currency: string;
@@ -21,4 +24,10 @@ export type ListCurrentCashMovements200ItemsItem = {
   amountCdf: number;
   description: string;
   party: string;
-};
+  account: string;
+  createdBy?: string | null;
+  /** Running USD notes after this line */
+  balanceUsd: number;
+  /** Running CDF notes after this line */
+  balanceCdf: number;
+}

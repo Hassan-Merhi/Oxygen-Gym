@@ -50,6 +50,20 @@
       "when": 1789646500000,
       "tag": "0005_hot_path_query_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792080000000,
+      "tag": "0006_ledger_journals",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792080100000,
+      "tag": "0007_ledger_cutover",
+      "breakpoints": true
     }
   ]
 }

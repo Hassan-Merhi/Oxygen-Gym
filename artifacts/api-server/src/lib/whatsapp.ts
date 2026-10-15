@@ -1,7 +1,11 @@
 import { db } from "@workspace/db";
-import { whatsappChatsTable, paymentsTable, vouchersTable, salesTable, productsTable } from "@workspace/db/schema";
-import { eq, and, gte, lte, sum, not, isNull } from "drizzle-orm";
+import { whatsappChatsTable, salesTable, productsTable } from "@workspace/db/schema";
+import { eq, and, gte, lte, not, isNull } from "drizzle-orm";
 import { logger } from "./logger";
+import { ACCOUNTS } from "./accounting";
+import { getCashMovements, summarizeMovements } from "./ledger";
+import { businessDateKey, lubumbashiTodayEnd, lubumbashiTodayStart } from "./timezone";
+import { getProfitAndLoss } from "../domains/accounting/ledger-reports";
 
 const GREEN_API_BASE = "https://api.greenapi.com";
 
@@ -232,83 +236,15 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
 
   const { greenApiInstanceId: instanceId, greenApiToken: token } = settings;
 
-  const lubOffsetMs = 2 * 60 * 60 * 1000;
-  const lubNow = new Date(Date.now() + lubOffsetMs);
-  const lubDateStr = lubNow.toISOString().slice(0, 10);
+  // The report covers today's business day (21:00 → 21:00 Lubumbashi), the
+  // same day boundary as the Cash Book, Dashboard and Profit & Loss.
+  const dayStart = lubumbashiTodayStart();
+  const dayEnd = lubumbashiTodayEnd();
+  const lubDateStr = businessDateKey(new Date());
 
-  // Report covers the full calendar day in Lubumbashi time (UTC+2):
-  // 00:00:00 → 23:59:59.999. Transactions at any hour of the day are
-  // included in that day's report, with no 9 PM cut-off.
-  const dayStart = new Date(`${lubDateStr}T00:00:00+02:00`);
-  const dayEnd   = new Date(`${lubDateStr}T23:59:59.999+02:00`);
-
-  const [
-    membershipRow,
-    allPaymentsInRow,
-    incomeVouchersRow,
-    expPayments,
-    expVouchers,
-    todaySales,
-  ] = await Promise.all([
-    // Membership in (USD) — excludes product_sale, for display only
-    db.select({ usd: sum(paymentsTable.amountUsd) })
-      .from(paymentsTable)
-      .where(and(
-        eq(paymentsTable.direction, "in"),
-        eq(paymentsTable.status, "completed"),
-        not(eq(paymentsTable.category, "product_sale")),
-        gte(paymentsTable.paymentDate, dayStart),
-        lte(paymentsTable.paymentDate, dayEnd),
-      )),
-    // All payments in (USD) — including product_sale, used for remaining calc
-    db.select({ usd: sum(paymentsTable.amountUsd) })
-      .from(paymentsTable)
-      .where(and(
-        eq(paymentsTable.direction, "in"),
-        eq(paymentsTable.status, "completed"),
-        gte(paymentsTable.paymentDate, dayStart),
-        lte(paymentsTable.paymentDate, dayEnd),
-      )),
-    // Income vouchers (Cash Receipts etc.) — counted in Cash Book "Cash In"
-    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) })
-      .from(vouchersTable)
-      .where(and(
-        eq(vouchersTable.direction, "in"),
-        eq(vouchersTable.status, "recorded"),
-        gte(vouchersTable.voucherDate, dayStart),
-        lte(vouchersTable.voucherDate, dayEnd),
-      )),
-    // Expense payments (with description)
-    db.select({
-      notes:     paymentsTable.notes,
-      amount:    paymentsTable.amount,
-      currency:  paymentsTable.currency,
-      amountUsd: paymentsTable.amountUsd,
-      amountCdf: paymentsTable.amountCdf,
-    })
-      .from(paymentsTable)
-      .where(and(
-        eq(paymentsTable.direction, "out"),
-        eq(paymentsTable.status, "completed"),
-        gte(paymentsTable.paymentDate, dayStart),
-        lte(paymentsTable.paymentDate, dayEnd),
-      )),
-    // Expense vouchers (with description)
-    db.select({
-      description: vouchersTable.description,
-      paidTo:      vouchersTable.paidTo,
-      amount:      vouchersTable.amount,
-      currency:    vouchersTable.currency,
-      amountUsd:   vouchersTable.amountUsd,
-      amountCdf:   vouchersTable.amountCdf,
-    })
-      .from(vouchersTable)
-      .where(and(
-        eq(vouchersTable.direction, "out"),
-        eq(vouchersTable.status, "recorded"),
-        gte(vouchersTable.voucherDate, dayStart),
-        lte(vouchersTable.voucherDate, dayEnd),
-      )),
+  const [pnl, cashToday, todaySales] = await Promise.all([
+    getProfitAndLoss({ from: dayStart, to: dayEnd }),
+    getCashMovements({ dateFrom: dayStart, dateTo: dayEnd }),
     // Full sale rows with JSONB items (for product breakdown display only)
     db.select({ items: salesTable.items, currency: salesTable.currency })
       .from(salesTable)
@@ -319,32 +255,18 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
       )),
   ]);
 
-  const n = (v: unknown) => Number(v ?? 0);
+  // ── Memberships: Membership Revenue posted today ──────────────────────────
+  const memberships = pnl.categories.find((row) => row.category === ACCOUNTS.MEMBERSHIP_REVENUE)?.usd ?? 0;
 
-  // ── Memberships (for display — excludes product_sale) ─────────────────────
-  const memberships = n(membershipRow[0]?.usd);
-
-  // ── All payments in (for remaining calc — matches Net Today) ──────────────
-  const allPaymentsInUsd = n(allPaymentsInRow[0]?.usd);
-
-  // ── Income vouchers (Cash Receipts etc.) — same as Cash Book "Cash In" ────
-  const incomeVouchersUsd = n(incomeVouchersRow[0]?.usd);
-
-  // ── Expenses (per-item detail) ─────────────────────────────────────────────
-  const expenseLines: ExpenseLine[] = [
-    ...expPayments.map(p => ({
-      desc: p.notes?.trim() || "Dépense",
-      amount: p.amount ?? 0,
-      currency: p.currency ?? "USD",
-    })),
-    ...expVouchers.map(v => ({
-      desc: v.description?.trim() || v.paidTo?.trim() || "Dépense",
-      amount: v.amount ?? 0,
-      currency: v.currency ?? "USD",
-    })),
-  ];
-  const expenses = expPayments.reduce((a, p) => a + n(p.amountUsd), 0)
-                 + expVouchers.reduce((a, v) => a + n(v.amountUsd), 0);
+  // ── Money out of the drawer today (expenses, payroll, stock, suppliers) ───
+  const outflows = cashToday.filter((movement) => movement.direction === "out");
+  const expenseLines: ExpenseLine[] = outflows.map((movement) => ({
+    desc: movement.description?.trim() || movement.category || "Dépense",
+    amount: movement.amount,
+    currency: movement.currency,
+  }));
+  const cashSummary = summarizeMovements(cashToday);
+  const expenses = cashSummary.outBookUsd;
 
   // ── Sales (aggregate products for display only) ────────────────────────────
   const productMap = new Map<string, ProductLine>();
@@ -365,9 +287,8 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const sales    = productLines.filter(p => p.currency === "USD").reduce((a, p) => a + p.total, 0);
   const salesCdf = productLines.filter(p => p.currency === "CDF").reduce((a, p) => a + p.total, 0);
 
-  // ── Remaining = all cash in (payments + vouchers) − all cash out ───────────
-  // Matches the Net Today figure from the cashbook exactly.
-  const remaining = allPaymentsInUsd + incomeVouchersUsd - expenses;
+  // ── Remaining = cash in − cash out today (matches Net Today in the Cash Book)
+  const remaining = cashSummary.netBookUsd;
 
   const [year, month, day] = lubDateStr.split("-");
   const friendlyDate = `${day}/${month}/${year}`;

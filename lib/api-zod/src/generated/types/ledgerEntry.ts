@@ -8,6 +8,7 @@
 
 export interface LedgerEntry {
   id: number;
+  journalId?: string;
   entryDate: string;
   sourceType: string;
   sourceNumber?: string | null;

@@ -73,7 +73,7 @@ router.post("/", async (req, res) => {
     sellingPrice: body.sellingPrice === undefined ? undefined : nonNegativeNumber(body.sellingPrice, "sellingPrice"),
     currency: optionalString(body.currency),
     status: optionalString(body.status),
-  });
+  }, getCurrentUser(req).name);
   await logActivity(req, "product_created", "product", result.product.id, {
     name,
     productNumber: result.productNumber,
@@ -103,8 +103,9 @@ router.patch("/:id", async (req, res) => {
     sellingPrice: body.sellingPrice === undefined ? undefined : nonNegativeNumber(body.sellingPrice, "sellingPrice"),
     currency: optionalString(body.currency),
     status: optionalString(body.status),
+    adjustmentReason: optionalString(body.adjustmentReason),
   };
-  const result = await updateProduct(id, input);
+  const result = await updateProduct(id, input, getCurrentUser(req).name);
   await logActivity(req, result.action, "product", id, { name: input.name, status: input.status });
   res.json(result.product);
 });
