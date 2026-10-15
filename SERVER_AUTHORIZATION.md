@@ -126,7 +126,7 @@ The feature-permission keys are `dashboard`, `members`, `plans`, `staff`, `payro
 | GET | `/payroll/:id` | `payroll` |
 | POST | `/payroll` | `managePayroll` |
 | PATCH | `/payroll/:id/pay` | `managePayroll` |
-| PATCH | `/payroll/:id/cancel` | `managePayroll + approveCorrections` (maker-checker) |
+| PATCH | `/payroll/:id/cancel` | `managePayroll`; reversing a **paid** record also needs `approveCorrections` (checked in the handler) |
 | GET | `/commissions/summary` | `payroll` |
 | GET | `/attendance/summary` | `members` |
 | GET | `/attendance/daily` | `members` |

@@ -205,7 +205,7 @@ export const ENDPOINT_POLICIES: readonly EndpointPolicy[] = [
   p("GET", "/payroll/:id", "permission", "Read payroll", { allOf: ["payroll"] }),
   p("POST", "/payroll", "permission", "Create payroll", { allOf: ["managePayroll"] }),
   p("PATCH", "/payroll/:id/pay", "permission", "Pay payroll", { allOf: ["managePayroll"] }),
-  p("PATCH", "/payroll/:id/cancel", "permission", "Cancel payroll (maker-checker)", { allOf: ["managePayroll", "approveCorrections"] }),
+  p("PATCH", "/payroll/:id/cancel", "permission", "Cancel payroll (reversing a paid one also needs approveCorrections)", { allOf: ["managePayroll"] }),
   p("GET", "/commissions/summary", "permission", "Pending commission summary", { allOf: ["payroll"] }),
 
   // Attendance is member operational data.

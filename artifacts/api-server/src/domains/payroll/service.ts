@@ -11,7 +11,7 @@ import { ACCOUNTS, assertPeriodOpen, postDoubleEntry, reverseEntries } from "../
 import { convertCurrencyAmount, getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
 import { addMoney, fxRate, money, subtractMoney } from "../../shared/accounting/decimal";
 import { withTransaction } from "../../shared/db/transaction";
-import { badRequest, notFound } from "../../shared/http/errors";
+import { badRequest, forbidden, notFound } from "../../shared/http/errors";
 
 export interface PayrollListInput {
   page: number;
@@ -199,7 +199,8 @@ export async function payPayroll(id: number, actor: string) {
   });
 }
 
-export async function cancelPayroll(id: number, reason: string, actor: string) {
+/** Cancel a payroll record. A draft has no ledger effect; reversing a paid one is a correction that needs an approver. */
+export async function cancelPayroll(id: number, reason: string, actor: string, options: { canReversePaid: boolean } = { canReversePaid: false }) {
   if (!reason.trim()) throw badRequest("Cancellation reason is required");
 
   return withTransaction(async (tx) => {
@@ -208,6 +209,7 @@ export async function cancelPayroll(id: number, reason: string, actor: string) {
     if (record.status === "cancelled") throw badRequest("Already cancelled");
 
     if (record.status === "paid") {
+      if (!options.canReversePaid) throw forbidden("Reversing a paid payroll needs the Approve corrections permission.");
       await reverseEntries("payroll", record.id, "payroll_reversal", actor, tx, {
         description: `Reversal of payroll ${record.payrollNumber} — ${reason}`,
       });
