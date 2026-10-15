@@ -1,772 +1,420 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useGetMe } from "@/hooks/use-me";
-import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Plus,
-  ArrowLeft,
-  TrendingUp,
-  TrendingDown,
-  Trash2,
-  Wallet,
-  AlertCircle,
-  BookOpen,
-  BarChart3,
-  Receipt,
-  Scale,
-  ChevronRight,
-  FileText,
-  RefreshCw,
-} from "lucide-react";
-import { toast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useToast } from "@/hooks/use-toast";
 import { useFmtDate } from "@/lib/useFmtDate";
+import { useI18n } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
+import {
+  accountLabel,
+  apiRequest,
+  businessDateKey,
+  errorMessage,
+  formatAmount,
+  qs,
+  rangeForPreset,
+  useApi,
+  type DatePreset,
+  type Money,
+} from "@/lib/accounting-client";
+import { BookOpen, CheckCircle2, Loader2, Plus, Power, Scale, ShieldAlert } from "lucide-react";
 
+type AccountType = "asset" | "liability" | "equity" | "income" | "expense";
+const ACCOUNT_TYPES: AccountType[] = ["asset", "liability", "equity", "income", "expense"];
+const MONEY_ACCOUNTS = new Set(["Cash", "Bank", "Mobile Money"]);
+const PRESETS: DatePreset[] = ["today", "month", "last_month", "year", "all", "custom"];
 
-type AccountType = "asset" | "liability" | "income" | "expense" | "equity";
-type PeriodFilter = "day" | "month" | "year" | "custom";
-type CurrencyView = "USD" | "CDF" | "BOTH";
-
-interface Account {
+type ChartAccount = {
   id: number;
   name: string;
   type: AccountType;
   description: string | null;
   isActive: boolean;
-  createdAt: string;
-}
+  isSystem: boolean;
+  balanceUsd: number;
+  balanceCdf: number;
+  entryCount: number;
+};
 
-interface StatementRow {
+type StatementRow = {
   id: number;
   date: string;
   description: string;
   party: string;
-  sourceType: string;
-  sourceId: number | null;
-  amount: number | null;
-  currency: string | null;
-  debitUsd: number | null;
-  creditUsd: number | null;
-  debitCdf: number | null;
-  creditCdf: number | null;
-  exchangeRate: number | null;
-  runningBalance: number;
-}
-
-interface Statement {
-  account: Account;
-  rows: StatementRow[];
-}
-
-interface EffectiveRow extends StatementRow {
+  counterAccount: string;
+  sourceNumber: string | null;
+  amount: number;
+  currency: string;
   debitUsd: number;
   creditUsd: number;
-  debitCdf: number;
-  creditCdf: number;
-}
-
-interface DisplayRow extends EffectiveRow {
-  inAmount: number;
-  outAmount: number;
-  balance: number;
-}
-
-const TYPE_ORDER: AccountType[] = ["asset", "income", "expense", "liability", "equity"];
-
-const TYPE_CONF: Record<AccountType, {
-  label: string;
-  plural: string;
-  icon: React.ElementType;
-  iconBg: string;
-  iconColor: string;
-  badge: string;
-}> = {
-  asset: {
-    label: "Asset",
-    plural: "Assets",
-    icon: Wallet,
-    iconBg: "bg-blue-500/10",
-    iconColor: "text-blue-500",
-    badge: "bg-blue-500/10 text-blue-500",
-  },
-  income: {
-    label: "Income",
-    plural: "Income",
-    icon: TrendingUp,
-    iconBg: "bg-emerald-500/10",
-    iconColor: "text-emerald-500",
-    badge: "bg-emerald-500/10 text-emerald-500",
-  },
-  expense: {
-    label: "Expense",
-    plural: "Expenses",
-    icon: Receipt,
-    iconBg: "bg-rose-500/10",
-    iconColor: "text-rose-500",
-    badge: "bg-rose-500/10 text-rose-500",
-  },
-  liability: {
-    label: "Liability",
-    plural: "Liabilities",
-    icon: AlertCircle,
-    iconBg: "bg-amber-500/10",
-    iconColor: "text-amber-500",
-    badge: "bg-amber-500/10 text-amber-500",
-  },
-  equity: {
-    label: "Equity",
-    plural: "Equity",
-    icon: Scale,
-    iconBg: "bg-violet-500/10",
-    iconColor: "text-violet-500",
-    badge: "bg-violet-500/10 text-violet-500",
-  },
+  runningBalance: number;
+  runningBalanceCdf: number;
+  nativeBalanceUsd?: number;
+  nativeBalanceCdf?: number;
 };
 
-const numberFormat = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
+type Statement = {
+  account: ChartAccount;
+  openingBalance: number;
+  openingBalanceCdf: number;
+  closingBalance: number;
+  closingBalanceCdf: number;
+  openingNative?: Money;
+  rows: StatementRow[];
+};
 
-function formatMoney(value: number, currency: "USD" | "CDF") {
-  const sign = value < 0 ? "−" : "";
-  const formatted = numberFormat.format(Math.abs(value));
-  return currency === "CDF" ? `${sign}FC ${formatted}` : `${sign}$${formatted}`;
+type TrialBalance = {
+  asOf: string;
+  rows: Array<{ accountId: number; name: string; type: AccountType; normal: "debit" | "credit"; debitUsd: number; creditUsd: number; balanceUsd: number; balanceCdf: number }>;
+  totals: { debitUsd: number; creditUsd: number };
+  balanced: boolean;
+};
+
+type SheetLine = { accountId: number; name: string; usd: number; cdf: number };
+type BalanceSheet = {
+  asOf: string;
+  assets: SheetLine[];
+  liabilities: SheetLine[];
+  equity: SheetLine[];
+  currentEarnings: Money;
+  totals: { assets: Money; liabilities: Money; equity: Money; liabilitiesAndEquity: Money };
+  balanced: boolean;
+};
+
+type TrialRow = TrialBalance["rows"][number];
+
+/** Which column a balance sits in: its normal side, or the other one when it has gone negative. */
+function trialSide(row: TrialRow) {
+  const positive = row.balanceUsd >= 0;
+  return (row.normal === "debit") === positive ? "debit" : "credit";
 }
 
-function localDateInput(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+function BalancedBadge({ balanced, t }: { balanced: boolean; t: (key: string) => string }) {
+  return balanced ? (
+    <Badge variant="outline" className="gap-1 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />{t("ab.balanced")}</Badge>
+  ) : (
+    <Badge variant="destructive" className="gap-1"><ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />{t("ab.unbalanced")}</Badge>
+  );
 }
 
-function getPresetRange(period: Exclude<PeriodFilter, "custom">) {
-  const now = new Date();
-  if (period === "day") {
-    const today = localDateInput(now);
-    return { from: today, to: today };
-  }
-  if (period === "month") {
-    return {
-      from: localDateInput(new Date(now.getFullYear(), now.getMonth(), 1)),
-      to: localDateInput(now),
-    };
-  }
-  return {
-    from: localDateInput(new Date(now.getFullYear(), 0, 1)),
-    to: localDateInput(now),
-  };
-}
+function StatementPanel({ account, initialPreset }: { account: ChartAccount; initialPreset: DatePreset }) {
+  const { t, language } = useI18n();
+  const { fmtDate } = useFmtDate();
+  const [preset, setPreset] = useState<DatePreset>(initialPreset);
+  const [from, setFrom] = useState(businessDateKey());
+  const [to, setTo] = useState(businessDateKey());
+  const range = rangeForPreset(preset, from, to);
+  const statementQ = useApi<Statement>(`/api/accounts/chart/${account.id}/statement${qs({ dateFrom: range.from, dateTo: range.to })}`, { refetchInterval: 30_000 });
+  const statement = statementQ.data;
+  const native = MONEY_ACCOUNTS.has(account.name);
 
-function logicalSourceType(sourceType: string) {
-  return sourceType.replace(/_(correction|reversal)$/i, "");
-}
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:items-end">
+        <div className="col-span-2 space-y-1 sm:col-span-1">
+          <Label htmlFor="st-period" className="text-xs text-muted-foreground">{t("acc.period")}</Label>
+          <Select value={preset} onValueChange={(value) => setPreset(value as DatePreset)}>
+            <SelectTrigger id="st-period" className="h-10 max-md:h-11 pointer-coarse:h-11 sm:w-44"><SelectValue /></SelectTrigger>
+            <SelectContent>{PRESETS.map((value) => <SelectItem key={value} value={value}>{t(`cb.preset.${value}`)}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        {preset === "custom" && <>
+          <div className="space-y-1"><Label htmlFor="st-from" className="text-xs text-muted-foreground">{t("acc.dateFrom")}</Label><Input id="st-from" type="date" className="h-10 max-md:h-11 pointer-coarse:h-11" value={from} onChange={(event) => setFrom(event.target.value)} /></div>
+          <div className="space-y-1"><Label htmlFor="st-to" className="text-xs text-muted-foreground">{t("acc.dateTo")}</Label><Input id="st-to" type="date" className="h-10 max-md:h-11 pointer-coarse:h-11" value={to} onChange={(event) => setTo(event.target.value)} /></div>
+        </>}
+      </div>
 
-function collapseAccountingRows(rows: StatementRow[]): EffectiveRow[] {
-  const groups = new Map<string, StatementRow[]>();
+      {statementQ.isError && <p className="text-sm text-destructive">{errorMessage(statementQ.error, t)}</p>}
+      {statement && (
+        <dl className="grid grid-cols-2 gap-3 text-sm">
+          <div className="rounded-xl border border-border/70 p-3">
+            <dt className="text-xs uppercase tracking-wide text-muted-foreground">{t("cb.opening")}</dt>
+            <dd className="mt-1 font-semibold tabular-nums">{native && statement.openingNative ? formatAmount(statement.openingNative.usd, "USD", language) : formatAmount(statement.openingBalance, "USD", language)}</dd>
+            {native && statement.openingNative && <dd className="text-xs tabular-nums text-muted-foreground">{formatAmount(statement.openingNative.cdf, "CDF", language)}</dd>}
+          </div>
+          <div className="rounded-xl border border-border/70 p-3">
+            <dt className="text-xs uppercase tracking-wide text-muted-foreground">{t("cb.closing")}</dt>
+            <dd className="mt-1 font-semibold tabular-nums">{formatAmount(native ? statement.rows.at(-1)?.nativeBalanceUsd ?? statement.openingNative?.usd : statement.closingBalance, "USD", language)}</dd>
+            {native && <dd className="text-xs tabular-nums text-muted-foreground">{formatAmount(statement.rows.at(-1)?.nativeBalanceCdf ?? statement.openingNative?.cdf, "CDF", language)}</dd>}
+          </div>
+        </dl>
+      )}
 
-  for (const row of rows) {
-    const base = logicalSourceType(row.sourceType || "entry");
-    const key = row.sourceId != null ? `${base}:${row.sourceId}` : `row:${row.id}`;
-    const group = groups.get(key) ?? [];
-    group.push(row);
-    groups.set(key, group);
-  }
-
-  const EPSILON = 0.000001;
-  const effective: EffectiveRow[] = [];
-
-  for (const group of groups.values()) {
-    const ordered = [...group].sort((a, b) => {
-      const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
-      return dateDiff || a.id - b.id;
-    });
-
-    const latest = ordered[ordered.length - 1];
-    const original = ordered.find((row) => !/_(correction|reversal)$/i.test(row.sourceType));
-
-    const netUsd = ordered.reduce(
-      (sum, row) => sum + Number(row.debitUsd ?? 0) - Number(row.creditUsd ?? 0),
-      0,
-    );
-    const netCdf = ordered.reduce(
-      (sum, row) => sum + Number(row.debitCdf ?? 0) - Number(row.creditCdf ?? 0),
-      0,
-    );
-
-    if (Math.abs(netUsd) < EPSILON && Math.abs(netCdf) < EPSILON) continue;
-
-    const debitSide = Math.abs(netUsd) >= EPSILON ? netUsd > 0 : netCdf > 0;
-    effective.push({
-      ...latest,
-      date: original?.date ?? latest.date,
-      description: original?.description || latest.description,
-      currency: latest.currency,
-      amount: latest.amount,
-      exchangeRate: latest.exchangeRate,
-      debitUsd: debitSide ? Math.abs(netUsd) : 0,
-      creditUsd: debitSide ? 0 : Math.abs(netUsd),
-      debitCdf: debitSide ? Math.abs(netCdf) : 0,
-      creditCdf: debitSide ? 0 : Math.abs(netCdf),
-      runningBalance: 0,
-    });
-  }
-
-  return effective.sort((a, b) => {
-    const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
-    return dateDiff || a.id - b.id;
-  });
-}
-
-function withinDateRange(row: EffectiveRow, from: string, to: string) {
-  const date = new Date(row.date);
-  if (Number.isNaN(date.getTime())) return false;
-  if (from && date < new Date(`${from}T00:00:00`)) return false;
-  if (to && date > new Date(`${to}T23:59:59.999`)) return false;
-  return true;
-}
-
-async function apiFetch(path: string, options?: RequestInit) {
-  const token = localStorage.getItem("gym_token");
-  const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
-  return fetch(`${apiBase}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options?.headers ?? {}),
-    },
-  });
+      {statementQ.isLoading ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : (
+        <ul className="divide-y divide-border/50 rounded-xl border border-border/70">
+          {(statement?.rows ?? []).length === 0 && <li className="px-4 py-10 text-center text-sm text-muted-foreground">{t("acc.empty")}</li>}
+          {(statement?.rows ?? []).slice().reverse().map((row) => {
+            const debit = row.debitUsd > 0;
+            return (
+              <li key={row.id} className="px-3 py-2.5 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{row.description || accountLabel(row.counterAccount, t)}</p>
+                    <p className="truncate text-xs text-muted-foreground">{fmtDate(row.date)} · {accountLabel(row.counterAccount, t)}{row.sourceNumber ? ` · ${row.sourceNumber}` : ""}</p>
+                  </div>
+                  <div className="shrink-0 text-end tabular-nums">
+                    <p className={cn("font-semibold", debit ? "text-foreground" : "text-muted-foreground")}>
+                      <span className="text-xs font-normal uppercase text-muted-foreground">{debit ? t("ab.debit") : t("ab.credit")} </span>
+                      {native ? formatAmount(row.amount, row.currency, language) : formatAmount(debit ? row.debitUsd : row.creditUsd, "USD", language)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {native ? `${formatAmount(row.nativeBalanceUsd, "USD", language)} · ${formatAmount(row.nativeBalanceCdf, "CDF", language)}` : formatAmount(row.runningBalance, "USD", language)}
+                    </p>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 export default function AccountsPage() {
-  const { fmtDate } = useFmtDate();
+  const { t, language } = useI18n();
   const me = useGetMe();
-  const canView = me?.role === "admin" || me?.permissions?.viewAccounting;
-  const canManage = me?.role === "admin";
-
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Account | null>(null);
-  const [statement, setStatement] = useState<Statement | null>(null);
-  const [stmtLoading, setStmtLoading] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-  const deepLinkHandled = useRef(false);
-
-  const [period, setPeriod] = useState<PeriodFilter>(() => {
-    const requested = new URLSearchParams(window.location.search).get("period");
-    return requested === "day" || requested === "month" || requested === "year" || requested === "custom"
-      ? requested
-      : "month";
-  });
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
-  const [currencyView, setCurrencyView] = useState<CurrencyView>("BOTH");
-
-  const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ name: "", type: "asset" as AccountType, description: "" });
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const isAdmin = me?.role === "admin";
+  const params = new URLSearchParams(window.location.search);
+  const [typeFilter, setTypeFilter] = useState<AccountType | "all">((ACCOUNT_TYPES as string[]).includes(params.get("type") ?? "") ? params.get("type") as AccountType : "all");
+  const initialPreset = (PRESETS as string[]).includes(params.get("period") ?? "") ? params.get("period") as DatePreset : "month";
+  const [selected, setSelected] = useState<ChartAccount | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
+  const [asOf, setAsOf] = useState(businessDateKey());
+  const [createOpen, setCreateOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", type: "expense" as AccountType, description: "" });
   const [saving, setSaving] = useState(false);
-  const [deleteAccountId, setDeleteAccountId] = useState<number | null>(null);
 
-  const preset = period === "custom" ? null : getPresetRange(period);
-  const dateFrom = period === "custom" ? customFrom : preset?.from ?? "";
-  const dateTo = period === "custom" ? customTo : preset?.to ?? "";
+  const chartQ = useApi<ChartAccount[]>("/api/accounts/chart", { refetchInterval: 60_000 });
+  const trialQ = useApi<TrialBalance>(`/api/accounts/trial-balance${qs({ asOf })}`);
+  const sheetQ = useApi<BalanceSheet>(`/api/accounts/balance-sheet${qs({ asOf })}`);
 
-  async function loadAccounts(silent = false) {
-    if (!silent) setLoading(true);
-    try {
-      const response = await apiFetch("/api/accounts/chart");
-      if (!response.ok) return;
-      const next: Account[] = await response.json();
-      setAccounts(next);
-      setSelected((current) => {
-        if (current) return next.find((account) => account.id === current.id) ?? current;
-        if (deepLinkHandled.current) return current;
+  const trialTotals = useMemo(() => (trialQ.data?.rows ?? []).reduce((totals, row) => {
+    totals[trialSide(row)] += Math.abs(row.balanceUsd);
+    return totals;
+  }, { debit: 0, credit: 0 }), [trialQ.data]);
 
-        deepLinkHandled.current = true;
-        const requestedType = new URLSearchParams(window.location.search).get("type");
-        if (requestedType && TYPE_ORDER.includes(requestedType as AccountType)) {
-          return next.find((account) => account.isActive && account.type === requestedType) ?? null;
-        }
-        return current;
-      });
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }
-
-  async function loadStatement(account: Account, silent = false) {
-    if (!silent) setStmtLoading(true);
-    try {
-      // Always fetch the complete ledger before collapsing corrections. Filtering
-      // corrections server-side by date can separate a reversal from its original
-      // row and produce a false balance.
-      const response = await apiFetch(`/api/accounts/chart/${account.id}/statement`);
-      if (!response.ok) return;
-      setStatement(await response.json());
-      setLastRefresh(new Date());
-    } finally {
-      if (!silent) setStmtLoading(false);
-    }
-  }
+  const grouped = useMemo(() => {
+    const accounts = (chartQ.data ?? []).filter((account) => (showInactive || account.isActive) && (typeFilter === "all" || account.type === typeFilter));
+    return ACCOUNT_TYPES.map((type) => ({ type, accounts: accounts.filter((account) => account.type === type) })).filter((group) => group.accounts.length > 0);
+  }, [chartQ.data, showInactive, typeFilter]);
 
   useEffect(() => {
-    if (canView === undefined) return;
-    void loadAccounts();
-    const timer = window.setInterval(() => void loadAccounts(true), 60_000);
-    return () => window.clearInterval(timer);
-  }, [canView]);
+    if (selected && chartQ.data) setSelected(chartQ.data.find((account) => account.id === selected.id) ?? null);
+  }, [chartQ.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (!selected) return;
-    void loadStatement(selected);
-
-    const refresh = () => void loadStatement(selected, true);
-    const timer = window.setInterval(refresh, 20_000);
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function changePeriod(next: PeriodFilter) {
-    if (next === "custom" && !customFrom && !customTo) {
-      const month = getPresetRange("month");
-      setCustomFrom(month.from);
-      setCustomTo(month.to);
-    }
-    setPeriod(next);
-  }
-
-  async function handleCreate(event: React.FormEvent) {
+  async function createAccount(event: React.FormEvent) {
     event.preventDefault();
+    if (!form.name.trim()) return;
     setSaving(true);
     try {
-      const response = await apiFetch("/api/accounts/chart", {
-        method: "POST",
-        body: JSON.stringify(form),
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        toast({ title: error.error ?? "Unable to create account", variant: "destructive" });
-        return;
-      }
-      setShowCreate(false);
-      setForm({ name: "", type: "asset", description: "" });
-      await loadAccounts(true);
-      toast({ title: "Account created" });
+      await apiRequest("/api/accounts/chart", { method: "POST", body: JSON.stringify({ name: form.name.trim(), type: form.type, description: form.description.trim() || undefined }) });
+      toast({ title: t("ab.toast.created") });
+      setCreateOpen(false);
+      setForm({ name: "", type: "expense", description: "" });
+      await queryClient.invalidateQueries();
+    } catch (error) {
+      toast({ title: errorMessage(error, t), variant: "destructive" });
     } finally {
       setSaving(false);
     }
   }
 
-  async function doDeleteAccount() {
-    if (!deleteAccountId) return;
-    const id = deleteAccountId;
-    const response = await apiFetch(`/api/accounts/chart/${id}`, { method: "DELETE" });
-    setDeleteAccountId(null);
-    if (!response.ok) {
-      toast({ title: "Cannot delete an account with transactions", variant: "destructive" });
-      return;
+  async function toggleActive(account: ChartAccount) {
+    try {
+      if (account.isActive) await apiRequest(`/api/accounts/chart/${account.id}`, { method: "DELETE" });
+      else await apiRequest(`/api/accounts/chart/${account.id}`, { method: "PUT", body: JSON.stringify({ isActive: true }) });
+      toast({ title: account.isActive ? t("ab.toast.deactivated") : t("ab.toast.activated") });
+      await queryClient.invalidateQueries();
+    } catch (error) {
+      toast({ title: errorMessage(error, t), variant: "destructive" });
     }
-    setAccounts((current) => current.filter((account) => account.id !== id));
-    if (selected?.id === id) setSelected(null);
-    toast({ title: "Account removed" });
   }
 
-  if (!canView) {
-    return (
-      <div className="flex h-[60vh] flex-col items-center justify-center gap-3">
-        <AlertCircle className="h-10 w-10 text-muted-foreground" />
-        <p className="text-muted-foreground">You don't have permission to view accounts.</p>
-      </div>
-    );
-  }
-
-  if (selected) {
-    const conf = TYPE_CONF[selected.type];
-    const Icon = conf.icon;
-    const isDebitNormal = selected.type === "asset" || selected.type === "expense";
-    const effectiveRows = collapseAccountingRows(statement?.rows ?? []);
-
-    // Build the true all-time account balance first. Date and currency filters below
-    // must never change this canonical balance. Every ledger entry keeps both USD
-    // and FC/CDF equivalents so the running/current balance can follow the selected
-    // display currency without changing the underlying accounting.
-    let allTimeBalanceUsd = 0;
-    let allTimeBalanceCdf = 0;
-    const balanceAfterRowUsd = new Map<number, number>();
-    const balanceAfterRowCdf = new Map<number, number>();
-    for (const row of effectiveRows) {
-      const deltaUsd = isDebitNormal
-        ? row.debitUsd - row.creditUsd
-        : row.creditUsd - row.debitUsd;
-      const deltaCdf = isDebitNormal
-        ? row.debitCdf - row.creditCdf
-        : row.creditCdf - row.debitCdf;
-      allTimeBalanceUsd += deltaUsd;
-      allTimeBalanceCdf += deltaCdf;
-      balanceAfterRowUsd.set(row.id, allTimeBalanceUsd);
-      balanceAfterRowCdf.set(row.id, allTimeBalanceCdf);
-    }
-
-    const periodRows = effectiveRows.filter((row) => withinDateRange(row, dateFrom, dateTo));
-    const nativeRows = periodRows.filter((row) => {
-      const nativeCurrency = (row.currency ?? "USD").toUpperCase();
-      if (currencyView === "USD") return nativeCurrency === "USD";
-      if (currencyView === "CDF") return nativeCurrency === "CDF";
-      return true;
-    });
-
-    const displayCurrency: "USD" | "CDF" = currencyView === "CDF" ? "CDF" : "USD";
-    const balanceAfterRow = displayCurrency === "CDF" ? balanceAfterRowCdf : balanceAfterRowUsd;
-    const allTimeBalance = displayCurrency === "CDF" ? allTimeBalanceCdf : allTimeBalanceUsd;
-    const rows: DisplayRow[] = nativeRows.map((row) => {
-      const debit = displayCurrency === "CDF" ? row.debitCdf : row.debitUsd;
-      const credit = displayCurrency === "CDF" ? row.creditCdf : row.creditUsd;
-      const inAmount = isDebitNormal ? debit : credit;
-      const outAmount = isDebitNormal ? credit : debit;
-      return {
-        ...row,
-        inAmount,
-        outAmount,
-        balance: balanceAfterRow.get(row.id) ?? allTimeBalance,
-      };
-    });
-
-    const totalIn = rows.reduce((sum, row) => sum + row.inAmount, 0);
-    const totalOut = rows.reduce((sum, row) => sum + row.outAmount, 0);
-    const balance = allTimeBalance;
-    const balanceLabel = displayCurrency === "CDF" ? "FC" : "USD";
-
-    return (
-      <div className="mx-auto max-w-6xl space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <Button variant="outline" size="sm" onClick={() => setSelected(null)} className="h-9 gap-1.5">
-              <ArrowLeft className="h-4 w-4" /> Back
-            </Button>
-            <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", conf.iconBg)}>
-              <Icon className={cn("h-5 w-5", conf.iconColor)} />
-            </div>
-            <div className="min-w-0">
-              <h1 className="truncate text-2xl font-bold tracking-tight">{selected.name}</h1>
-              <div className="mt-0.5 flex items-center gap-2">
-                <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", conf.badge)}>{conf.label}</span>
-                {selected.description && <span className="truncate text-xs text-muted-foreground">{selected.description}</span>}
-              </div>
-            </div>
+  const sheetSection = (title: string, lines: SheetLine[], totalValue: Money, extra?: SheetLine) => (
+    <section className="rounded-2xl border border-border/70 bg-card">
+      <h3 className="border-b border-border/60 px-4 py-3 text-sm font-semibold">{title}</h3>
+      <dl className="divide-y divide-border/40 text-sm">
+        {[...lines, ...(extra ? [extra] : [])].map((line) => (
+          <div key={`${line.accountId}-${line.name}`} className="flex items-center justify-between gap-3 px-4 py-2.5">
+            <dt className="min-w-0 truncate">{accountLabel(line.name, t)}</dt>
+            <dd className={cn("shrink-0 tabular-nums", line.usd < 0 && "text-destructive")}>{formatAmount(line.usd, "USD", language)}</dd>
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <RefreshCw className={cn("h-3.5 w-3.5", stmtLoading && "animate-spin")} />
-            <span>Auto-refresh 20s{lastRefresh ? ` · ${lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}</span>
-          </div>
+        ))}
+        <div className="flex items-center justify-between gap-3 bg-muted/20 px-4 py-2.5 font-semibold">
+          <dt>{t("ab.total")}</dt>
+          <dd className="tabular-nums">{formatAmount(totalValue.usd, "USD", language)}</dd>
         </div>
+      </dl>
+    </section>
+  );
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="flex min-h-[112px] flex-col justify-between rounded-xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-muted-foreground">Total In</span>
-              <TrendingUp className="h-4 w-4 text-emerald-500" />
-            </div>
-            <p className="mt-3 text-right text-2xl font-bold tabular-nums text-emerald-500">{formatMoney(totalIn, displayCurrency)}</p>
+  return (
+    <div className="mx-auto max-w-7xl space-y-5">
+      <PageHeader
+        icon={BookOpen}
+        title={t("ab.title")}
+        subtitle={t("ab.subtitle")}
+        actions={isAdmin ? <Button className="h-10 max-md:h-11 pointer-coarse:h-11 gap-2" onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> {t("ab.newAccount")}</Button> : undefined}
+      />
+
+      <Tabs defaultValue="chart" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-3 sm:inline-flex sm:w-auto">
+          <TabsTrigger value="chart">{t("ab.tab.chart")}</TabsTrigger>
+          <TabsTrigger value="trial">{t("ab.tab.trial")}</TabsTrigger>
+          <TabsTrigger value="sheet">{t("ab.tab.sheet")}</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="chart" className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as AccountType | "all")}>
+              <SelectTrigger className="h-10 max-md:h-11 pointer-coarse:h-11 w-full sm:w-48" aria-label={t("ab.type")}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("ab.allTypes")}</SelectItem>
+                {ACCOUNT_TYPES.map((type) => <SelectItem key={type} value={type}>{t(`ab.type.${type}`)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input type="checkbox" className="h-4 w-4 accent-primary" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
+              {t("ab.showInactive")}
+            </label>
           </div>
-          <div className="flex min-h-[112px] flex-col justify-between rounded-xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-muted-foreground">Total Out</span>
-              <TrendingDown className="h-4 w-4 text-rose-500" />
-            </div>
-            <p className="mt-3 text-right text-2xl font-bold tabular-nums text-rose-500">{formatMoney(totalOut, displayCurrency)}</p>
+          {chartQ.isLoading && <Loader2 className="mx-auto h-5 w-5 animate-spin" />}
+          {chartQ.isError && <p className="text-sm text-destructive">{errorMessage(chartQ.error, t)}</p>}
+          <div className="grid gap-4 lg:grid-cols-2">
+            {grouped.map((group) => (
+              <section key={group.type} className="overflow-hidden rounded-2xl border border-border/70 bg-card" aria-labelledby={`grp-${group.type}`}>
+                <h2 id={`grp-${group.type}`} className="border-b border-border/60 bg-muted/20 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t(`ab.type.${group.type}`)}</h2>
+                <ul className="divide-y divide-border/40">
+                  {group.accounts.map((account) => (
+                    <li key={account.id} className="flex items-center gap-2 pe-2">
+                      <button type="button" onClick={() => setSelected(account)} className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4 py-3 text-start transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:outline-none">
+                        <span className="min-w-0">
+                          <span className={cn("block truncate font-medium", !account.isActive && "text-muted-foreground line-through")}>{accountLabel(account.name, t)}</span>
+                          <span className="block truncate text-xs text-muted-foreground">{account.isSystem ? t("ab.system") : t("ab.custom")} · {t("ab.entries").replace("{count}", String(account.entryCount))}</span>
+                        </span>
+                        <span className="shrink-0 text-end tabular-nums">
+                          <span className={cn("block font-semibold", account.balanceUsd < 0 && "text-destructive")}>{formatAmount(account.balanceUsd, "USD", language)}</span>
+                          <span className="block text-xs text-muted-foreground">{formatAmount(account.balanceCdf, "CDF", language)}</span>
+                        </span>
+                      </button>
+                      {isAdmin && !account.isSystem && (
+                        <Button variant="ghost" size="icon" className="h-9 w-9 max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11 shrink-0" onClick={() => void toggleActive(account)} aria-label={account.isActive ? t("ab.deactivate") : t("ab.activate")} title={account.isActive ? t("ab.deactivate") : t("ab.activate")}>
+                          <Power className={cn("h-4 w-4", account.isActive ? "text-muted-foreground" : "text-emerald-500")} />
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
           </div>
-          <div className="flex min-h-[112px] flex-col justify-between rounded-xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-sm font-medium text-muted-foreground">Balance</span>
-                <p className="mt-0.5 text-[11px] text-muted-foreground/70">Current · all time · {balanceLabel}</p>
-              </div>
-              <BarChart3 className="h-4 w-4 text-blue-500" />
-            </div>
-            <p className={cn("mt-3 text-right text-2xl font-bold tabular-nums", balance < 0 ? "text-rose-500" : "text-blue-500")}>
-              {formatMoney(balance, displayCurrency)}
-            </p>
+          <p className="text-xs text-muted-foreground">{t("ab.balanceNote")}</p>
+        </TabsContent>
+
+        <TabsContent value="trial" className="space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="space-y-1"><Label htmlFor="tb-asof" className="text-xs text-muted-foreground">{t("ab.asOf")}</Label><Input id="tb-asof" type="date" className="h-10 max-md:h-11 pointer-coarse:h-11 w-44" value={asOf} onChange={(event) => setAsOf(event.target.value)} /></div>
+            {trialQ.data && <BalancedBadge balanced={trialQ.data.balanced} t={t} />}
           </div>
-        </div>
-
-        <div className="rounded-xl border border-border bg-card p-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap items-center gap-1 rounded-lg bg-muted/50 p-1">
-              {(["day", "month", "year", "custom"] as PeriodFilter[]).map((value) => (
-                <Button
-                  key={value}
-                  variant={period === value ? "default" : "ghost"}
-                  size="sm"
-                  className="h-8 capitalize"
-                  onClick={() => changePeriod(value)}
-                >
-                  {value}
-                </Button>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-1 rounded-lg bg-muted/50 p-1">
-              <Button
-                variant={currencyView === "USD" ? "default" : "ghost"}
-                size="sm"
-                className="h-8 min-w-16"
-                onClick={() => setCurrencyView("USD")}
-              >
-                USD
-              </Button>
-              <Button
-                variant={currencyView === "CDF" ? "default" : "ghost"}
-                size="sm"
-                className="h-8 min-w-20"
-                onClick={() => setCurrencyView("CDF")}
-              >
-                CFA / FC
-              </Button>
-              <Button
-                variant={currencyView === "BOTH" ? "default" : "ghost"}
-                size="sm"
-                className="h-8 min-w-24"
-                onClick={() => setCurrencyView("BOTH")}
-              >
-                Both (USD)
-              </Button>
-            </div>
-          </div>
-
-          {period === "custom" && (
-            <div className="mt-3 flex flex-col gap-2 border-t border-border/60 pt-3 sm:flex-row sm:items-center">
-              <div className="flex items-center gap-2">
-                <Label className="w-10 text-xs text-muted-foreground">From</Label>
-                <Input type="date" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} className="h-9 sm:w-40" />
-              </div>
-              <div className="flex items-center gap-2">
-                <Label className="w-10 text-xs text-muted-foreground">To</Label>
-                <Input type="date" value={customTo} onChange={(event) => setCustomTo(event.target.value)} className="h-9 sm:w-40" />
-              </div>
-            </div>
-          )}
-
-          <p className="mt-2 text-xs text-muted-foreground">
-            {currencyView === "USD" && "Showing only transactions originally paid in USD. Current and running balances are shown in USD."}
-            {currencyView === "CDF" && "Showing only transactions originally paid in FC/CDF, with no USD conversion. Current and running balances are shown in FC/CDF."}
-            {currencyView === "BOTH" && "Showing USD and FC/CDF transactions together in USD using each transaction's saved exchange rate. Current and running balances are shown in USD."}
-          </p>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="overflow-x-auto">
-            <table className="w-full table-fixed text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="w-[150px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Description</th>
-                  <th className="w-[150px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">In</th>
-                  <th className="w-[150px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Out</th>
-                  <th className="w-[170px] px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Balance ({balanceLabel})</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {stmtLoading && !statement && (
-                  <tr><td colSpan={5} className="py-16 text-center text-muted-foreground">Loading account…</td></tr>
-                )}
-                {!stmtLoading && rows.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="py-16 text-center">
-                      <FileText className="mx-auto mb-2 h-8 w-8 text-muted-foreground/30" />
-                      <p className="font-medium text-muted-foreground">No transactions for this view</p>
-                      <p className="mt-1 text-xs text-muted-foreground/60">Try another period or currency.</p>
-                    </td>
-                  </tr>
-                )}
-                {rows.map((row) => (
-                  <tr key={`${row.sourceType}-${row.sourceId ?? row.id}-${row.id}`} className="transition-colors hover:bg-muted/20">
-                    <td className="whitespace-nowrap px-4 py-3.5 align-middle font-medium tabular-nums">{fmtDate(row.date)}</td>
-                    <td className="px-4 py-3.5 align-middle">
-                      <p className="truncate" title={row.description || ""}>{row.description || "—"}</p>
-                    </td>
-                    <td className="px-4 py-3.5 text-right align-middle tabular-nums">
-                      {row.inAmount > 0 ? <span className="font-semibold text-emerald-500">{formatMoney(row.inAmount, displayCurrency)}</span> : <span className="text-muted-foreground/30">—</span>}
-                    </td>
-                    <td className="px-4 py-3.5 text-right align-middle tabular-nums">
-                      {row.outAmount > 0 ? <span className="font-semibold text-rose-500">{formatMoney(row.outAmount, displayCurrency)}</span> : <span className="text-muted-foreground/30">—</span>}
-                    </td>
-                    <td className={cn("px-4 py-3.5 text-right align-middle font-semibold tabular-nums", row.balance < 0 && "text-rose-500")}>
-                      {formatMoney(row.balance, displayCurrency)}
-                    </td>
+          <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-border/60 bg-muted/20 text-xs uppercase tracking-wide text-muted-foreground">
+                <th scope="col" className="px-4 py-2.5 text-start">{t("ab.account")}</th>
+                <th scope="col" className="hidden px-4 py-2.5 text-start sm:table-cell">{t("ab.type")}</th>
+                <th scope="col" className="px-4 py-2.5 text-end">{t("ab.debit")}</th>
+                <th scope="col" className="px-4 py-2.5 text-end">{t("ab.credit")}</th>
+              </tr></thead>
+              <tbody className="divide-y divide-border/40">
+                {trialQ.isLoading && <tr><td colSpan={4} className="py-10"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+                {(trialQ.data?.rows ?? []).filter((row) => Math.abs(row.balanceUsd) > 0.000001).map((row) => (
+                  <tr key={row.accountId}>
+                    <td className="px-4 py-2.5">{accountLabel(row.name, t)}</td>
+                    <td className="hidden px-4 py-2.5 text-muted-foreground sm:table-cell">{t(`ab.type.${row.type}`)}</td>
+                    <td className="px-4 py-2.5 text-end tabular-nums">{trialSide(row) === "debit" ? formatAmount(Math.abs(row.balanceUsd), "USD", language) : ""}</td>
+                    <td className="px-4 py-2.5 text-end tabular-nums">{trialSide(row) === "credit" ? formatAmount(Math.abs(row.balanceUsd), "USD", language) : ""}</td>
                   </tr>
                 ))}
               </tbody>
+              {trialQ.data && (
+                <tfoot><tr className="border-t border-border/60 bg-muted/20 font-semibold">
+                  <th scope="row" className="px-4 py-2.5 text-start" colSpan={2}>{t("ab.total")}</th>
+                  <td className="px-4 py-2.5 text-end tabular-nums">{formatAmount(trialTotals.debit, "USD", language)}</td>
+                  <td className="px-4 py-2.5 text-end tabular-nums">{formatAmount(trialTotals.credit, "USD", language)}</td>
+                </tr></tfoot>
+              )}
             </table>
           </div>
+          <p className="text-xs text-muted-foreground">{t("ab.trialNote")}</p>
+        </TabsContent>
 
-          {rows.length > 0 && (
-            <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-2 border-t border-border bg-muted/20 px-4 py-3 text-sm">
-              <span className="mr-auto text-muted-foreground">{rows.length.toLocaleString()} transactions</span>
-              <span className="font-medium text-emerald-500">In {formatMoney(totalIn, displayCurrency)}</span>
-              <span className="font-medium text-rose-500">Out {formatMoney(totalOut, displayCurrency)}</span>
-              <span className="font-bold">Current balance {formatMoney(balance, displayCurrency)}</span>
+        <TabsContent value="sheet" className="space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="space-y-1"><Label htmlFor="bs-asof" className="text-xs text-muted-foreground">{t("ab.asOf")}</Label><Input id="bs-asof" type="date" className="h-10 max-md:h-11 pointer-coarse:h-11 w-44" value={asOf} onChange={(event) => setAsOf(event.target.value)} /></div>
+            {sheetQ.data && <BalancedBadge balanced={sheetQ.data.balanced} t={t} />}
+          </div>
+          {sheetQ.isLoading && <Loader2 className="mx-auto h-5 w-5 animate-spin" />}
+          {sheetQ.data && (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {sheetSection(t("ab.type.asset"), sheetQ.data.assets, sheetQ.data.totals.assets)}
+              <div className="space-y-4">
+                {sheetSection(t("ab.type.liability"), sheetQ.data.liabilities, sheetQ.data.totals.liabilities)}
+                {sheetSection(t("ab.type.equity"), sheetQ.data.equity, sheetQ.data.totals.equity, { accountId: -1, name: t("ab.currentEarnings"), ...sheetQ.data.currentEarnings })}
+                <p className="flex items-center justify-between rounded-2xl border border-border/70 bg-muted/20 px-4 py-3 text-sm font-semibold">
+                  <span>{t("ab.liabilitiesAndEquity")}</span>
+                  <span className="tabular-nums">{formatAmount(sheetQ.data.totals.liabilitiesAndEquity.usd, "USD", language)}</span>
+                </p>
+              </div>
             </div>
           )}
-        </div>
-      </div>
-    );
-  }
+        </TabsContent>
+      </Tabs>
 
-  const activeAccounts = accounts.filter((account) => account.isActive);
+      <Sheet open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
+        <SheetContent side={language === "ar" ? "left" : "right"} className="w-full overflow-y-auto sm:max-w-xl">
+          {selected && <>
+            <SheetHeader className="mb-4">
+              <SheetTitle className="flex items-center gap-2"><Scale className="h-4 w-4 text-muted-foreground" aria-hidden="true" />{accountLabel(selected.name, t)}</SheetTitle>
+              <SheetDescription>{t(`ab.type.${selected.type}`)}{selected.description ? ` · ${selected.description}` : ""}</SheetDescription>
+            </SheetHeader>
+            <StatementPanel key={selected.id} account={selected} initialPreset={initialPreset} />
+          </>}
+        </SheetContent>
+      </Sheet>
 
-  return (
-    <div className="mx-auto max-w-5xl space-y-5">
-      <PageHeader
-        icon={BookOpen}
-        iconClass="bg-indigo-500/10 text-indigo-500"
-        title="Accounts"
-        subtitle="Income, expenses, cash and other account ledgers"
-        actions={canManage ? (
-          <Button onClick={() => setShowCreate(true)} className="gap-2">
-            <Plus className="h-4 w-4" /> New Account
-          </Button>
-        ) : undefined}
-      />
-
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        {loading ? (
-          <div className="py-16 text-center text-sm text-muted-foreground">Loading accounts…</div>
-        ) : activeAccounts.length === 0 ? (
-          <div className="py-16 text-center text-sm text-muted-foreground">No accounts yet.</div>
-        ) : (
-          <div className="divide-y divide-border/50">
-            {activeAccounts.map((account) => {
-              const conf = TYPE_CONF[account.type];
-              const Icon = conf.icon;
-              return (
-                <button
-                  key={account.id}
-                  type="button"
-                  onClick={() => setSelected(account)}
-                  className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-muted/30"
-                >
-                  <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", conf.iconBg)}>
-                    <Icon className={cn("h-4 w-4", conf.iconColor)} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate font-semibold">{account.name}</p>
-                      <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", conf.badge)}>{conf.label}</span>
-                    </div>
-                    {account.description && <p className="mt-0.5 truncate text-xs text-muted-foreground">{account.description}</p>}
-                  </div>
-                  {canManage && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-rose-500"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setDeleteAccountId(account.id);
-                      }}
-                      aria-label={`Delete ${account.name}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New Account</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="account-name">Name</Label>
-              <Input
-                id="account-name"
-                value={form.name}
-                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-                placeholder="e.g. Cash, Rent Expense"
-                required
-              />
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-w-md">
+          <form onSubmit={(event) => void createAccount(event)}>
+            <DialogHeader><DialogTitle>{t("ab.newAccount")}</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-1.5"><Label htmlFor="acct-name">{t("ab.account")}</Label><Input id="acct-name" required value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></div>
+              <div className="space-y-1.5">
+                <Label htmlFor="acct-type">{t("ab.type")}</Label>
+                <Select value={form.type} onValueChange={(value) => setForm((current) => ({ ...current, type: value as AccountType }))}>
+                  <SelectTrigger id="acct-type"><SelectValue /></SelectTrigger>
+                  <SelectContent>{ACCOUNT_TYPES.map((type) => <SelectItem key={type} value={type}>{t(`ab.type.${type}`)}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5"><Label htmlFor="acct-desc">{t("acc.col.description")}</Label><Input id="acct-desc" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="account-type">Type</Label>
-              <select
-                id="account-type"
-                value={form.type}
-                onChange={(event) => setForm((current) => ({ ...current, type: event.target.value as AccountType }))}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                {TYPE_ORDER.map((type) => <option key={type} value={type}>{TYPE_CONF[type].label}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="account-description">Description</Label>
-              <Input
-                id="account-description"
-                value={form.description}
-                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-                placeholder="Optional"
-              />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving || !form.name.trim()}>{saving ? "Creating…" : "Create"}</Button>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>{t("cb.close")}</Button>
+              <Button type="submit" disabled={saving || !form.name.trim()}>{saving && <Loader2 className="me-2 h-4 w-4 animate-spin" />}{t("cb.save")}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
-
-      <AlertDialog open={deleteAccountId !== null} onOpenChange={(open) => !open && setDeleteAccountId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove this account?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Accounts with transactions cannot be removed. Empty accounts will be deactivated.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void doDeleteAccount()} className="bg-rose-600 text-white hover:bg-rose-700">
-              Remove
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
