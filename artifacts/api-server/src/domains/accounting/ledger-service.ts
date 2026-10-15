@@ -11,6 +11,7 @@ import {
 import { businessDateKey } from "../../lib/timezone";
 import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
 import { money, subtractMoney } from "../../shared/accounting/decimal";
+import type { DbTransaction } from "@workspace/db";
 import { withTransaction } from "../../shared/db/transaction";
 import { badRequest } from "../../shared/http/errors";
 
@@ -60,10 +61,16 @@ export async function listCashMovements(input: { account?: string; dateFrom?: Da
  * against Opening Balance Equity when the account has no history yet (the very
  * first opening balance). Nothing is ever deleted.
  */
-export async function recordCashCount(
-  input: { countedUsd?: number; countedCdf?: number; date?: Date; notes?: string; account?: string },
-  actor: string,
-) {
+type CashCountInput = { countedUsd?: number; countedCdf?: number; date?: Date; notes?: string; account?: string };
+
+export async function recordCashCount(input: CashCountInput, actor: string) {
+  const exchangeRate = await getExchangeRate();
+  const result = await withTransaction((tx) => postCashCount(input, actor, exchangeRate, tx));
+  return { ok: true, skipped: result.journalId === null, journalId: result.journalId, adjustments: result.adjustments, balance: await getCurrentBalance() };
+}
+
+/** Post a cash count inside the caller's transaction (used on its own and by the period close). */
+export async function postCashCount(input: CashCountInput, actor: string, exchangeRate: number, tx: DbTransaction) {
   const account = moneyAccount(input.account);
   if (input.countedUsd === undefined && input.countedCdf === undefined) {
     throw badRequest("Enter the counted USD and/or CDF amount");
@@ -73,9 +80,8 @@ export async function recordCashCount(
   }
   const entryDate = input.date ?? new Date();
   if (entryDate.getTime() > Date.now() + 60_000) throw badRequest("A cash count cannot be dated in the future");
-  const exchangeRate = await getExchangeRate();
 
-  const result = await withTransaction(async (tx) => {
+  {
     const [expected, history] = await Promise.all([
       getMoneyBalance({ accountNames: [account], asOf: entryDate }, tx),
       getLedgerLines({ accountNames: [account], dateTo: entryDate, limit: 1 }, tx),
@@ -120,9 +126,7 @@ export async function recordCashCount(
       lines,
     }, tx);
     return { journalId, adjustments };
-  });
-
-  return { ok: true, skipped: result.journalId === null, journalId: result.journalId, adjustments: result.adjustments, balance: await getCurrentBalance() };
+  }
 }
 
 /** Paginated Cash lines, newest first, with the drawer's running balance per currency. */

@@ -13,11 +13,11 @@ import { getLedgerLines, getMoneyBalance, valueAtRate } from "../../lib/ledger";
 import { businessDateKey, businessDayEnd } from "../../lib/timezone";
 import { getExchangeRate } from "../../shared/accounting/currency";
 import { addMoney, money, subtractMoney } from "../../shared/accounting/decimal";
-import { withTransaction } from "../../shared/db/transaction";
+import { lockFinancialEvent, withTransaction } from "../../shared/db/transaction";
 import { badRequest } from "../../shared/http/errors";
 import { getAccountTotals, getProfitAndLoss } from "./ledger-reports";
 import { getStockValuation } from "./ledger-health";
-import { recordCashCount } from "./ledger-service";
+import { postCashCount } from "./ledger-service";
 
 export const PERIOD_CLOSE_CONFIRMATION = "CLOSE BOOKS";
 
@@ -76,24 +76,27 @@ export async function closePeriod(
   if (closedThrough.getTime() > Date.now()) {
     throw badRequest("That business day has not finished yet. Close through a day that has already ended.");
   }
-  const previous = await getBooksLockedThrough();
-  if (previous && closedThrough.getTime() <= previous.getTime()) {
-    throw badRequest(`The books are already closed through ${businessDateKey(previous)}.`);
-  }
-
-  if (input.countedUsd !== undefined || input.countedCdf !== undefined) {
-    await recordCashCount({
-      countedUsd: input.countedUsd,
-      countedCdf: input.countedCdf,
-      date: closedThrough,
-      notes: input.notes?.trim() ? `Closing count: ${input.notes.trim()}` : "Closing cash count",
-    }, actor);
-  }
-
   const rate = await getExchangeRate();
   const closeNumber = `CLOSE-${input.closedThroughDate}`;
 
+  // One transaction under the financial-write lock: the cutoff is checked and the
+  // count, revaluation, closing journal and period row are written together.
   return withTransaction(async (tx) => {
+    await lockFinancialEvent(tx, "period-close");
+    const previous = await getBooksLockedThrough(tx);
+    if (previous && closedThrough.getTime() <= previous.getTime()) {
+      throw badRequest(`The books are already closed through ${businessDateKey(previous)}.`);
+    }
+
+    if (input.countedUsd !== undefined || input.countedCdf !== undefined) {
+      await postCashCount({
+        countedUsd: input.countedUsd,
+        countedCdf: input.countedCdf,
+        date: closedThrough,
+        notes: input.notes?.trim() ? `Closing count: ${input.notes.trim()}` : "Closing cash count",
+      }, actor, rate, tx);
+    }
+
     // FX revaluation of money accounts.
     const revaluation: JournalLine[] = [];
     let fxNetUsd = 0;

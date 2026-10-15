@@ -46,6 +46,8 @@ export interface LedgerQuery {
   dateTo?: Date;
   /** Skip period-closing journals (they zero income/expense into retained earnings). */
   excludeClosing?: boolean;
+  /** Only lines recorded in this currency (USD or CDF). */
+  currency?: string;
   search?: string;
   limit?: number;
   offset?: number;
@@ -103,6 +105,7 @@ function whereClause(query: LedgerQuery) {
   if (query.dateFrom) parts.push(sql`e.entry_date >= ${query.dateFrom}`);
   if (query.dateTo) parts.push(sql`e.entry_date <= ${query.dateTo}`);
   if (query.excludeClosing) parts.push(sql`e.source_type <> 'period_close'`);
+  if (query.currency) parts.push(sql`upper(e.currency) = ${query.currency.toUpperCase()}`);
   if (query.search) {
     const like = `%${query.search.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
     parts.push(sql`(

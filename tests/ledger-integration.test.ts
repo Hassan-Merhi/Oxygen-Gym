@@ -133,8 +133,12 @@ test("closing the books moves profit to equity and locks the period", { skip }, 
     direction: "in", category: "other", amount: 12, currency: "USD", paymentDate: new Date(Date.now() - 10 * DAY),
   }, ACTOR);
   const closeDate = new Date(Date.now() - 5 * DAY).toISOString().slice(0, 10);
-  const result = await m.periodClose.closePeriod({ closedThroughDate: closeDate, confirmation: m.periodClose.PERIOD_CLOSE_CONFIRMATION }, ACTOR);
+  // Close with a cash count: the count, revaluation and closing journal land in one transaction.
+  const result = await m.periodClose.closePeriod({ closedThroughDate: closeDate, confirmation: m.periodClose.PERIOD_CLOSE_CONFIRMATION, countedUsd: 0, countedCdf: 0 }, ACTOR);
   assert.equal(result.ok, true);
+  assert.equal(result.closedThroughDate, closeDate);
+  const periods = await m.periodClose.listClosedPeriods();
+  assert.equal(periods.items.filter((period) => period.closedThroughDate === closeDate).length, 1, "one period row per close");
 
   // Income and expense accounts are zero through the close date.
   const closedTotals = await m.reports.getAccountTotals({ to: new Date(result.closedThrough) });

@@ -80,6 +80,7 @@ async function listPnlLines(type: "income" | "expense", input: AccountMovementLi
     dateFrom: input.dateFrom,
     dateTo: input.dateTo,
     excludeClosing: true,
+    currency: input.currency,
     search: input.search,
   };
   const [lines, total] = await Promise.all([
@@ -104,8 +105,7 @@ async function listPnlLines(type: "income" | "expense", input: AccountMovementLi
         amountCdf: cdf,
         createdBy: line.createdBy,
       };
-    })
-    .filter((item) => !input.currency || item.currency === input.currency.toUpperCase());
+    });
   return { items, total, page: input.page, limit: input.limit };
 }
 
