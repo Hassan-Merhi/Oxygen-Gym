@@ -5,6 +5,7 @@ import { fmt } from "@/lib/i18n-format";
 import { useToast } from "@/hooks/use-toast";
 import { useGetMe } from "@/hooks/use-me";
 import { canApproveCorrections } from "@/lib/permissions";
+import { useFmtDate } from "@/lib/useFmtDate";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/pager";
@@ -286,12 +287,11 @@ function CreditRow({
   /** Reversing or rewriting recorded payments needs admin or approveCorrections. */
   canCorrect: boolean;
 }) {
-  const { t, language } = useI18n();
+  const { t } = useI18n();
+  const { fmtDate } = useFmtDate();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
-  const locale = language === "ar" ? "ar" : language === "en" ? "en-GB" : "fr-FR";
-  const fmtDate = (d: string) => new Date(d).toLocaleDateString(locale);
 
   const { data: payments = [], isLoading: paymentsLoading } = useQuery<SupplierPayment[]>({
     queryKey: [`/api/supplier-credits/${credit.id}/payments`],

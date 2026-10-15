@@ -32,6 +32,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFmtDate } from "@/lib/useFmtDate";
+import { fmt } from "@/lib/i18n-format";
+import { Pager } from "@/components/ui/pager";
 
 function StatCard({ icon: Icon, label, value, color, loading }: {
   icon: React.ElementType; label: string; value?: string | number;
@@ -41,11 +43,11 @@ function StatCard({ icon: Icon, label, value, color, loading }: {
     <Card className="border-border/60 shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
         <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-        <Icon className={cn("w-4 h-4 opacity-70", color ?? "text-primary")} />
+        <Icon className={cn("w-4 h-4", color ?? "text-primary")} aria-hidden="true" />
       </CardHeader>
       <CardContent className="px-4 pb-4">
         {loading ? <Skeleton className="h-8 w-20" /> : (
-          <div className="text-2xl font-bold">{value ?? "—"}</div>
+          <div className="text-2xl font-bold tabular-nums">{value ?? "—"}</div>
         )}
       </CardContent>
     </Card>
@@ -59,8 +61,12 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 const CHART_COLOR = "#6366f1";
 
 export default function Attendance() {
-  const { t } = useI18n();
-  const { fmtDate, fmtDateTime, fmtTime } = useFmtDate();
+  const { t, language } = useI18n();
+  const { fmtDateTime, fmtTime } = useFmtDate();
+  const isRtl = language === "ar";
+  const tick = { fontSize: 12 };
+  const chartMargin = { top: 4, right: isRtl ? -12 : 4, left: isRtl ? 4 : -12, bottom: 0 };
+  const tooltipStyle = { backgroundColor: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, color: "hsl(var(--popover-foreground))" };
 
   const { data: summary, isLoading: sumLoading } = useGetAttendanceSummary();
   const { data: daily = [], isLoading: dailyLoading } = useGetAttendanceDaily();
@@ -92,17 +98,17 @@ export default function Attendance() {
     <div className="space-y-8">
       <PageHeader
         icon={CalendarCheck}
-        iconClass="bg-cyan-500/10 text-cyan-600"
+        iconClass="bg-cyan-500/10 text-cyan-700 dark:text-cyan-400"
         title={t("att.title")}
       />
 
       {/* Summary cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <StatCard icon={CalendarCheck} label={t("att.today")} value={summary?.today} loading={sumLoading} color="text-cyan-500" />
-        <StatCard icon={Activity} label={t("att.week")} value={summary?.thisWeek} loading={sumLoading} color="text-indigo-500" />
-        <StatCard icon={TrendingUp} label={t("att.month")} value={summary?.thisMonth} loading={sumLoading} color="text-violet-500" />
-        <StatCard icon={Users} label={t("att.activeToday")} value={summary?.activeToday} loading={sumLoading} color="text-emerald-500" />
-        <StatCard icon={Clock} label={t("att.avgDaily")} value={summary?.avgDaily} loading={sumLoading} color="text-amber-500" />
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3 xl:grid-cols-5">
+        <StatCard icon={CalendarCheck} label={t("att.today")} value={summary?.today} loading={sumLoading} color="text-cyan-700 dark:text-cyan-400" />
+        <StatCard icon={Activity} label={t("att.week")} value={summary?.thisWeek} loading={sumLoading} color="text-indigo-700 dark:text-indigo-400" />
+        <StatCard icon={TrendingUp} label={t("att.month")} value={summary?.thisMonth} loading={sumLoading} color="text-violet-700 dark:text-violet-400" />
+        <StatCard icon={Users} label={t("att.activeToday")} value={summary?.activeToday} loading={sumLoading} color="text-emerald-700 dark:text-emerald-400" />
+        <StatCard icon={Clock} label={t("att.avgDaily")} value={summary?.avgDaily} loading={sumLoading} color="text-amber-700 dark:text-amber-400" />
       </div>
 
       {/* Charts row */}
@@ -115,11 +121,11 @@ export default function Attendance() {
           <CardContent className="px-4 pb-4">
             {dailyLoading ? <Skeleton className="h-48 w-full" /> : (
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={dailyChartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                <BarChart data={dailyChartData} margin={chartMargin}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
+                  <XAxis dataKey="label" tick={tick} interval="preserveStartEnd" reversed={isRtl} />
+                  <YAxis tick={tick} allowDecimals={false} orientation={isRtl ? "right" : "left"} />
+                  <Tooltip contentStyle={tooltipStyle} />
                   <Bar dataKey="count" fill={CHART_COLOR} radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -135,11 +141,11 @@ export default function Attendance() {
           <CardContent className="px-4 pb-4">
             {monthlyLoading ? <Skeleton className="h-48 w-full" /> : (
               <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={monthlyChartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                <AreaChart data={monthlyChartData} margin={chartMargin}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
+                  <XAxis dataKey="label" tick={tick} reversed={isRtl} />
+                  <YAxis tick={tick} allowDecimals={false} orientation={isRtl ? "right" : "left"} />
+                  <Tooltip contentStyle={tooltipStyle} />
                   <Area type="monotone" dataKey="count" stroke={CHART_COLOR} fill={`${CHART_COLOR}30`} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -155,11 +161,11 @@ export default function Attendance() {
           <CardContent className="px-4 pb-4">
             {hourlyLoading ? <Skeleton className="h-48 w-full" /> : (
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={hourlyChartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                <BarChart data={hourlyChartData} margin={chartMargin}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={1} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
+                  <XAxis dataKey="label" tick={tick} interval="preserveStartEnd" minTickGap={8} reversed={isRtl} />
+                  <YAxis tick={tick} allowDecimals={false} orientation={isRtl ? "right" : "left"} />
+                  <Tooltip contentStyle={tooltipStyle} />
                   <Bar dataKey="count" fill="#10b981" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -171,7 +177,7 @@ export default function Attendance() {
         <Card className="shadow-sm">
           <CardHeader className="px-4 pt-4 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-amber-500" />
+              <Trophy className="w-4 h-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
               {t("att.topMembers")}
             </CardTitle>
           </CardHeader>
@@ -182,17 +188,17 @@ export default function Attendance() {
                   <p className="text-sm text-muted-foreground text-center py-4">{t("att.empty")}</p>
                 ) : (
                   (topMembers as any[]).map((m, i) => (
-                    <div key={m.memberId} className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className={cn("w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold",
-                          i === 0 ? "bg-amber-100 text-amber-700" :
-                          i === 1 ? "bg-slate-100 text-slate-600" :
-                          i === 2 ? "bg-orange-100 text-orange-600" :
+                    <div key={m.memberId} className="flex items-center justify-between gap-3 text-sm">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className={cn("w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-xs font-bold",
+                          i === 0 ? "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300" :
+                          i === 1 ? "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300" :
+                          i === 2 ? "bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300" :
                           "bg-muted text-muted-foreground"
                         )}>{i + 1}</span>
-                        <span className="font-medium truncate max-w-[150px]">{m.memberName}</span>
+                        <span className="min-w-0 truncate font-medium">{m.memberName}</span>
                       </div>
-                      <span className="text-muted-foreground font-mono">{m.count} {t("att.visits")}</span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">{m.count} {t("att.visits")}</span>
                     </div>
                   ))
                 )}
@@ -215,9 +221,9 @@ export default function Attendance() {
               <div className="divide-y divide-border max-h-72 overflow-y-auto">
                 {(todayList as any[]).map((c) => (
                   <div key={c.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40">
-                    <CalendarCheck className="w-4 h-4 text-indigo-400 shrink-0" />
-                    <span className="flex-1 text-sm font-medium">{c.memberName}</span>
-                    <span className="text-xs text-muted-foreground">{fmtTime(c.checkedInAt)}</span>
+                    <CalendarCheck className="w-4 h-4 text-indigo-500 shrink-0" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{c.memberName}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{fmtTime(c.checkedInAt)}</span>
                   </div>
                 ))}
               </div>
@@ -239,15 +245,15 @@ export default function Attendance() {
               <div className="divide-y divide-border max-h-72 overflow-y-auto">
                 {(weekList as any[]).slice(0, 100).map((c) => (
                   <div key={c.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40">
-                    <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span className="flex-1 text-sm font-medium">{c.memberName}</span>
-                    <span className="text-xs text-muted-foreground">
+                    <Clock className="w-4 h-4 text-emerald-500 shrink-0" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{c.memberName}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                       {fmtDateTime(c.checkedInAt)}
                     </span>
                   </div>
                 ))}
                 {(weekList as any[]).length > 100 && (
-                  <p className="text-center text-xs text-muted-foreground py-2">Showing 100 of {(weekList as any[]).length}</p>
+                  <p className="text-center text-xs text-muted-foreground py-2">{fmt(t("att.showingOf"), { shown: 100, total: (weekList as any[]).length })}</p>
                 )}
               </div>
             )}
@@ -263,7 +269,7 @@ export default function Attendance() {
 
 function AttendanceReports() {
   const { t } = useI18n();
-  const { fmtDate, fmtDateTime, fmtTime } = useFmtDate();
+  const { fmtDateTime } = useFmtDate();
   const today = new Date().toISOString().slice(0, 10);
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
 
@@ -294,46 +300,46 @@ function AttendanceReports() {
     <Card className="border-border/60 shadow-sm">
       <CardHeader className="px-4 pt-4 pb-3 border-b border-border">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <Filter className="w-4 h-4 text-primary" />
+          <Filter className="w-4 h-4 text-primary" aria-hidden="true" />
           {t("att.reportsTitle")}
         </CardTitle>
       </CardHeader>
       <CardContent className="px-4 pt-4 pb-4 space-y-4">
         {/* Filter bar */}
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1 min-w-[130px]">
-            <label className="text-xs text-muted-foreground">{t("att.dateFrom")}</label>
-            <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="h-8 text-sm" />
+        <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap">
+          <div className="flex min-w-0 flex-col gap-1 lg:w-40">
+            <label htmlFor="att-from" className="text-xs text-muted-foreground">{t("att.dateFrom")}</label>
+            <Input id="att-from" type="date" value={from} onChange={e => setFrom(e.target.value)} className="h-9 text-sm" />
           </div>
-          <div className="flex flex-col gap-1 min-w-[130px]">
-            <label className="text-xs text-muted-foreground">{t("att.dateTo")}</label>
-            <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="h-8 text-sm" />
+          <div className="flex min-w-0 flex-col gap-1 lg:w-40">
+            <label htmlFor="att-to" className="text-xs text-muted-foreground">{t("att.dateTo")}</label>
+            <Input id="att-to" type="date" value={to} onChange={e => setTo(e.target.value)} className="h-9 text-sm" />
           </div>
-          <div className="flex flex-col gap-1 min-w-[160px]">
-            <label className="text-xs text-muted-foreground">{t("att.memberSearch")}</label>
+          <div className="flex min-w-0 flex-col gap-1 lg:w-52">
+            <label htmlFor="att-member" className="text-xs text-muted-foreground">{t("att.memberSearch")}</label>
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <Input value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Name…" className="h-8 text-sm pl-7" />
+              <Search className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
+              <Input id="att-member" type="search" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleApply(); }} placeholder={t("att.namePlaceholder")} className="h-9 text-sm ps-8" />
             </div>
           </div>
-          <div className="flex flex-col gap-1 min-w-[150px]">
-            <label className="text-xs text-muted-foreground">{t("att.planFilter")}</label>
+          <div className="flex min-w-0 flex-col gap-1 lg:w-48">
+            <label htmlFor="att-plan" className="text-xs text-muted-foreground">{t("att.planFilter")}</label>
             <Select value={planName || "_all"} onValueChange={v => setPlanName(v === "_all" ? "" : v)}>
-              <SelectTrigger className="h-8 text-sm">
-                <SelectValue placeholder="All plans" />
+              <SelectTrigger id="att-plan" className="h-9 text-sm">
+                <SelectValue placeholder={t("att.allPlans")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="_all">All plans</SelectItem>
+                <SelectItem value="_all">{t("att.allPlans")}</SelectItem>
                 {(plansData as string[]).map((p) => (
                   <SelectItem key={p} value={p}>{p}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="flex gap-2 pb-0.5">
-            <Button size="sm" className="h-8" onClick={handleApply}>{t("att.applyFilters")}</Button>
-            <Button size="sm" variant="ghost" className="h-8" onClick={handleClear}>
-              <X className="w-3.5 h-3.5 mr-1" />{t("att.clearFilters")}
+          <div className="flex gap-2 sm:col-span-2">
+            <Button size="sm" className="h-9 flex-1 lg:flex-none" onClick={handleApply}>{t("att.applyFilters")}</Button>
+            <Button size="sm" variant="ghost" className="h-9 flex-1 lg:flex-none" onClick={handleClear}>
+              <X className="w-4 h-4" aria-hidden="true" />{t("att.clearFilters")}
             </Button>
           </div>
         </div>
@@ -347,14 +353,25 @@ function AttendanceReports() {
           <div className="text-center py-10 text-muted-foreground text-sm">{t("att.noResults")}</div>
         ) : (
           <>
-            <div className="text-xs text-muted-foreground">{total} result{total !== 1 ? "s" : ""}</div>
-            <div className="rounded-md border border-border overflow-hidden">
+            <div className="text-xs text-muted-foreground" aria-live="polite">{fmt(t("att.resultCount"), { count: total })}</div>
+            <ul className="divide-y divide-border rounded-md border border-border md:hidden">
+              {(items as any[]).map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{r.memberName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{r.planName ?? "—"}</p>
+                  </div>
+                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{fmtDateTime(r.checkedInAt)}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden overflow-hidden rounded-md border border-border md:block">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
                     <TableHead className="text-xs">{t("members.table.name")}</TableHead>
                     <TableHead className="text-xs">{t("att.plan")}</TableHead>
-                    <TableHead className="text-xs">Date / Time</TableHead>
+                    <TableHead className="text-xs">{t("att.dateTime")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -370,15 +387,7 @@ function AttendanceReports() {
                 </TableBody>
               </Table>
             </div>
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="h-7" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Prev</Button>
-                  <Button size="sm" variant="outline" className="h-7" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next</Button>
-                </div>
-              </div>
-            )}
+            <Pager page={page} totalPages={totalPages} onPageChange={setPage} className="pt-1" />
           </>
         )}
       </CardContent>

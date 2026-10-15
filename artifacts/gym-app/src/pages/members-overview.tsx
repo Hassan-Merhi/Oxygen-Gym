@@ -1,22 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "wouter";
+import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import type { Member } from "@workspace/api-client-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Users,
-  UserCheck,
-  Percent,
-  Search,
-  ChevronLeft,
-  ChevronRight,
-  ArrowUpRight,
-  RefreshCw,
-} from "lucide-react";
+import { Pager, EmptyState } from "@/components/ui/pager";
+import { StatusBadge } from "@/lib/status-badge";
+import { useI18n } from "@/lib/i18n";
+import { fmt } from "@/lib/i18n-format";
+import { useFmtDate } from "@/lib/useFmtDate";
+import { Users, UserCheck, Percent, Search, ChevronRight, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
@@ -32,13 +26,7 @@ type MembersResponse = {
   limit: number;
 };
 
-const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "active", label: "Active" },
-  { value: "expired", label: "Expired" },
-  { value: "frozen", label: "Frozen" },
-  { value: "inactive", label: "Inactive" },
-];
+const STATUS_FILTERS: StatusFilter[] = ["all", "active", "expired", "frozen", "inactive"];
 
 function apiBaseUrl() {
   return (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
@@ -75,17 +63,6 @@ async function fetchAllMembers(): Promise<Member[]> {
   return all;
 }
 
-function formatDate(value: string | Date | null | undefined) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
 function todayStart() {
   const date = new Date();
   date.setHours(0, 0, 0, 0);
@@ -105,21 +82,6 @@ function effectiveStatus(member: Member, today: Date): StatusFilter | string {
     if (!Number.isNaN(expiry.getTime()) && expiry < today) return "expired";
   }
   return member.status;
-}
-
-function statusBadge(status: string) {
-  switch (status) {
-    case "active":
-      return <Badge className="border border-emerald-400/20 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/10">Active</Badge>;
-    case "expired":
-      return <Badge className="border border-rose-400/20 bg-rose-400/10 text-rose-400 hover:bg-rose-400/10">Expired</Badge>;
-    case "frozen":
-      return <Badge className="border border-sky-400/20 bg-sky-400/10 text-sky-400 hover:bg-sky-400/10">Frozen</Badge>;
-    case "inactive":
-      return <Badge className="border border-slate-400/20 bg-slate-400/10 text-slate-300 hover:bg-slate-400/10">Inactive</Badge>;
-    default:
-      return <Badge variant="outline">{status || "Unknown"}</Badge>;
-  }
 }
 
 function initials(name: string) {
@@ -159,56 +121,49 @@ function KpiCard({
   progress?: number;
 }) {
   const styles = {
-    violet: {
-      icon: "bg-violet-500/10 text-violet-400 ring-violet-500/20",
-      glow: "from-violet-500/10",
-      bar: "bg-violet-400",
-    },
-    emerald: {
-      icon: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/20",
-      glow: "from-emerald-500/10",
-      bar: "bg-emerald-400",
-    },
-    blue: {
-      icon: "bg-blue-500/10 text-blue-400 ring-blue-500/20",
-      glow: "from-blue-500/10",
-      bar: "bg-blue-400",
-    },
+    violet: { icon: "bg-violet-500/10 text-violet-700 ring-violet-500/20 dark:text-violet-400", bar: "bg-violet-500" },
+    emerald: { icon: "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:text-emerald-400", bar: "bg-emerald-500" },
+    blue: { icon: "bg-blue-500/10 text-blue-700 ring-blue-500/20 dark:text-blue-400", bar: "bg-blue-500" },
   }[tone];
 
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-border/70 bg-card p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-lg">
-      <div className={cn("pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b to-transparent opacity-70", styles.glow)} />
-      <div className="relative">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-            {loading ? (
-              <Skeleton className="mt-3 h-10 w-24" />
-            ) : (
-              <p className="mt-2 text-4xl font-bold tracking-tight text-foreground">{value}</p>
-            )}
-          </div>
-          <div className={cn("rounded-xl p-2.5 ring-1 ring-inset", styles.icon)}>
-            <Icon className="h-5 w-5" />
-          </div>
+    <div className="min-w-0 rounded-2xl border border-border/70 bg-card p-4 shadow-sm md:p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+          {loading ? (
+            <Skeleton className="mt-3 h-10 w-24" />
+          ) : (
+            <p className="mt-2 truncate text-3xl font-bold tracking-tight tabular-nums text-foreground lg:text-4xl">{value}</p>
+          )}
         </div>
-        <p className="mt-3 text-sm leading-5 text-muted-foreground">{sub}</p>
-        {progress !== undefined && (
-          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-muted">
-            <div
-              className={cn("h-full rounded-full transition-all", styles.bar)}
-              style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-            />
-          </div>
-        )}
+        <div className={cn("shrink-0 rounded-xl p-2.5 ring-1 ring-inset", styles.icon)}>
+          <Icon className="h-5 w-5" aria-hidden="true" />
+        </div>
       </div>
+      <p className="mt-3 text-sm leading-5 text-muted-foreground">{sub}</p>
+      {progress !== undefined && (
+        <div
+          className="mt-4 h-1.5 overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-label={label}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress)}
+        >
+          <div
+            className={cn("h-full rounded-full transition-all", styles.bar)}
+            style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
 export default function MembersOverview() {
-  const [, navigate] = useLocation();
+  const { t } = useI18n();
+  const { fmtDate, fmtTime } = useFmtDate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -235,6 +190,7 @@ export default function MembersOverview() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const today = useMemo(() => todayStart(), [dataUpdatedAt]);
 
   const currentActive = useMemo(
@@ -247,14 +203,7 @@ export default function MembersOverview() {
   const retention = totalRegistered > 0 ? (activeMembers / totalRegistered) * 100 : 0;
 
   const statusCounts = useMemo(() => {
-    const counts: Record<StatusFilter, number> = {
-      all: allMembers.length,
-      active: 0,
-      expired: 0,
-      frozen: 0,
-      inactive: 0,
-    };
-
+    const counts: Record<StatusFilter, number> = { all: allMembers.length, active: 0, expired: 0, frozen: 0, inactive: 0 };
     for (const member of allMembers) {
       const effective = effectiveStatus(member, today);
       if (effective === "active" || effective === "expired" || effective === "frozen" || effective === "inactive") {
@@ -282,238 +231,192 @@ export default function MembersOverview() {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const lastUpdated = dataUpdatedAt
-    ? new Date(dataUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    : null;
+  const filterLabel = (f: StatusFilter) => (f === "all" ? t("common.all") : t(`members.status.${f}`));
+  const statusLabel = (s: string) => {
+    const key = `members.status.${s}`;
+    const label = t(key);
+    return label === key ? s : label;
+  };
+  const th = "px-4 py-3 text-start text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <PageHeader
         icon={Users}
-        iconClass="bg-violet-500/10 text-violet-400"
-        title="Member Overview"
-        subtitle="Live membership health, retention, and complete member history"
+        iconClass="bg-violet-500/10 text-violet-700 dark:text-violet-400"
+        title={t("overview.title")}
+        subtitle={t("overview.subtitle")}
         actions={(
-          <div className="hidden items-center gap-2 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs text-muted-foreground sm:flex">
-            <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
-            <span>{isFetching ? "Refreshing" : lastUpdated ? `Updated ${lastUpdated}` : "Live data"}</span>
+          <div className="flex items-center gap-2 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs text-muted-foreground" aria-live="polite">
+            <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} aria-hidden="true" />
+            <span>
+              {isFetching
+                ? t("overview.refreshing")
+                : dataUpdatedAt
+                  ? fmt(t("overview.updatedAt"), { time: fmtTime(new Date(dataUpdatedAt)) })
+                  : t("overview.live")}
+            </span>
           </div>
         )}
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <KpiCard
-          icon={Users}
-          label="Total Registered"
-          value={totalRegistered.toLocaleString()}
-          sub="Every non-deleted member registered since the beginning"
-          loading={isLoading}
-          tone="violet"
-        />
-        <KpiCard
-          icon={UserCheck}
-          label="Currently Active"
-          value={activeMembers.toLocaleString()}
-          sub="Active memberships whose expiry date has not passed"
-          loading={isLoading}
-          tone="emerald"
-        />
-        <KpiCard
-          icon={Percent}
-          label="Retention"
-          value={`${retention.toFixed(1)}%`}
-          sub="Currently active members divided by total registered"
-          loading={isLoading}
-          tone="blue"
-          progress={retention}
-        />
+      <div className="grid gap-3 sm:grid-cols-3 md:gap-4">
+        <KpiCard icon={Users} label={t("overview.kpi.total")} value={totalRegistered.toLocaleString("en-US")} sub={t("overview.kpi.totalSub")} loading={isLoading} tone="violet" />
+        <KpiCard icon={UserCheck} label={t("overview.kpi.active")} value={activeMembers.toLocaleString("en-US")} sub={t("overview.kpi.activeSub")} loading={isLoading} tone="emerald" />
+        <KpiCard icon={Percent} label={t("overview.kpi.retention")} value={`${retention.toFixed(1)}%`} sub={t("overview.kpi.retentionSub")} loading={isLoading} tone="blue" progress={retention} />
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
+      <section className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm" aria-labelledby="overview-members">
         <div className="border-b border-border/60 p-4 sm:p-5">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold tracking-tight">Members</h2>
-                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-                  {filteredTotal.toLocaleString()}
+                <h2 id="overview-members" className="text-lg font-bold tracking-tight">{t("nav.members")}</h2>
+                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold tabular-nums text-muted-foreground">
+                  {filteredTotal.toLocaleString("en-US")}
                 </span>
               </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Search, filter, and open any member profile from one place.
-              </p>
+              <p className="mt-1 text-sm text-muted-foreground">{t("overview.listHint")}</p>
             </div>
 
-            <div className="relative w-full xl:w-[320px]">
-              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <div className="relative w-full lg:w-[320px]">
+              <Search className="pointer-events-none absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <Input
+                type="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search name or phone..."
-                className="h-11 rounded-xl border-border/80 bg-background/70 pl-10"
+                placeholder={t("overview.searchPlaceholder")}
+                aria-label={t("overview.search")}
+                className="h-11 rounded-xl border-border/80 bg-background/70 ps-10"
               />
             </div>
           </div>
 
-          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+          <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label={t("members.table.status")}>
             {STATUS_FILTERS.map((filter) => (
               <button
-                key={filter.value}
+                key={filter}
                 type="button"
+                aria-pressed={status === filter}
                 onClick={() => {
-                  setStatus(filter.value);
+                  setStatus(filter);
                   setPage(1);
                 }}
                 className={cn(
-                  "inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors",
-                  status === filter.value
+                  "inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:h-11",
+                  status === filter
                     ? "border-primary/50 bg-primary/15 text-foreground"
                     : "border-border/70 bg-background/40 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                 )}
               >
-                {filter.label}
+                {filterLabel(filter)}
                 <span className={cn(
-                  "rounded-md px-1.5 py-0.5 text-[11px] tabular-nums",
-                  status === filter.value ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground",
+                  "rounded-md px-1.5 py-0.5 text-xs tabular-nums",
+                  status === filter ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground",
                 )}>
-                  {statusCounts[filter.value].toLocaleString()}
+                  {statusCounts[filter].toLocaleString("en-US")}
                 </span>
               </button>
             ))}
           </div>
         </div>
 
-        <div className="hidden overflow-x-auto md:block">
-          <table className="w-full table-fixed text-sm">
-            <thead>
-              <tr className="border-b border-border/60 bg-muted/25">
-                <th className="w-[23%] px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Member</th>
-                <th className="w-[15%] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Phone</th>
-                <th className="w-[20%] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Plan</th>
-                <th className="w-[12%] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Status</th>
-                <th className="w-[13%] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Joined</th>
-                <th className="w-[13%] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Expires</th>
-                <th className="w-[4%] px-3 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {isLoading ? (
-                Array.from({ length: 8 }).map((_, index) => (
-                  <tr key={index}>
-                    <td colSpan={7} className="px-5 py-4"><Skeleton className="h-9 w-full rounded-lg" /></td>
-                  </tr>
-                ))
-              ) : members.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="h-40 text-center">
-                    <div className="mx-auto max-w-sm">
-                      <Users className="mx-auto h-8 w-8 text-muted-foreground/35" />
-                      <p className="mt-3 font-medium">No members found</p>
-                      <p className="mt-1 text-sm text-muted-foreground">Try another status or search term.</p>
-                    </div>
-                  </td>
+        {isLoading ? (
+          <div className="space-y-2 p-4" aria-busy="true" aria-label={t("common.loading")}>
+            {Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-14 w-full rounded-xl" />)}
+          </div>
+        ) : members.length === 0 ? (
+          <EmptyState icon={Users} title={t("overview.empty")} hint={t("overview.emptyHint")} />
+        ) : (
+          <>
+            {/* Cards below lg */}
+            <ul className="divide-y divide-border/50 lg:hidden">
+              {members.map((member) => {
+                const memberStatus = effectiveStatus(member, today);
+                return (
+                  <li key={member.id}>
+                    <Link
+                      href={`/members/${member.id}`}
+                      className="flex w-full items-center gap-3 p-4 text-start transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:outline-none"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary" aria-hidden="true">
+                        {initials(member.name)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <p className="truncate font-semibold">{member.name}</p>
+                          <StatusBadge status={memberStatus} label={statusLabel(memberStatus)} />
+                        </div>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                          {member.planName || t("overview.noPlan")} · {fmt(t("overview.expires"), { date: fmtDate(member.expiryDate) })}
+                        </p>
+                        {member.phone && <p className="truncate text-xs text-muted-foreground" dir="ltr">{member.phone}</p>}
+                      </div>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground rtl:rotate-180" aria-hidden="true" />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <table className="hidden w-full table-fixed text-sm lg:table">
+              <thead>
+                <tr className="border-b border-border/60 bg-muted/25">
+                  <th scope="col" className={cn(th, "w-[26%] ps-5")}>{t("members.table.name")}</th>
+                  <th scope="col" className={cn(th, "w-[15%]")}>{t("members.table.phone")}</th>
+                  <th scope="col" className={cn(th, "w-[19%]")}>{t("members.table.plan")}</th>
+                  <th scope="col" className={cn(th, "w-[12%]")}>{t("members.table.status")}</th>
+                  <th scope="col" className={cn(th, "w-[12%]")}>{t("overview.col.joined")}</th>
+                  <th scope="col" className={cn(th, "w-[12%]")}>{t("members.table.expiry")}</th>
+                  <th scope="col" className="w-[4%] px-3 py-3"><span className="sr-only">{t("common.actions")}</span></th>
                 </tr>
-              ) : (
-                members.map((member) => {
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {members.map((member) => {
                   const memberStatus = effectiveStatus(member, today);
                   return (
-                    <tr
-                      key={member.id}
-                      className="group cursor-pointer transition-colors hover:bg-muted/30"
-                      onClick={() => navigate(`/members/${member.id}`)}
-                    >
-                      <td className="px-5 py-3.5 align-middle">
+                    <tr key={member.id} className="group relative transition-colors hover:bg-muted/30">
+                      <td className="px-4 py-3 ps-5 align-middle">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary ring-1 ring-inset ring-primary/15">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary ring-1 ring-inset ring-primary/15" aria-hidden="true">
                             {initials(member.name)}
                           </div>
-                          <p className="truncate font-semibold text-foreground" title={member.name}>{member.name}</p>
+                          <Link
+                            href={`/members/${member.id}`}
+                            className="truncate font-semibold text-foreground after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring"
+                            title={member.name}
+                          >
+                            {member.name}
+                          </Link>
                         </div>
                       </td>
-                      <td className="px-4 py-3.5 align-middle text-muted-foreground">{member.phone || "—"}</td>
-                      <td className="px-4 py-3.5 align-middle">
+                      <td className="truncate px-4 py-3 align-middle text-muted-foreground"><span dir="ltr">{member.phone || "—"}</span></td>
+                      <td className="px-4 py-3 align-middle">
                         <p className="truncate" title={member.planName || ""}>{member.planName || "—"}</p>
                       </td>
-                      <td className="px-4 py-3.5 align-middle">{statusBadge(memberStatus)}</td>
-                      <td className="px-4 py-3.5 align-middle whitespace-nowrap tabular-nums text-muted-foreground">{formatDate(member.startDate)}</td>
-                      <td className="px-4 py-3.5 align-middle whitespace-nowrap tabular-nums text-muted-foreground">{formatDate(member.expiryDate)}</td>
-                      <td className="px-3 py-3.5 text-right align-middle">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-all group-hover:bg-primary/10 group-hover:text-primary">
-                          <ArrowUpRight className="h-4 w-4" />
-                        </div>
+                      <td className="px-4 py-3 align-middle"><StatusBadge status={memberStatus} label={statusLabel(memberStatus)} /></td>
+                      <td className="whitespace-nowrap px-4 py-3 align-middle tabular-nums text-muted-foreground">{fmtDate(member.startDate)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 align-middle tabular-nums text-muted-foreground">{fmtDate(member.expiryDate)}</td>
+                      <td className="px-3 py-3 text-end align-middle">
+                        <ChevronRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary rtl:rotate-180" aria-hidden="true" />
                       </td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </tbody>
+            </table>
+          </>
+        )}
 
-        <div className="divide-y divide-border/50 md:hidden">
-          {isLoading ? (
-            Array.from({ length: 6 }).map((_, index) => (
-              <div key={index} className="p-4"><Skeleton className="h-20 w-full rounded-xl" /></div>
-            ))
-          ) : members.length === 0 ? (
-            <div className="px-4 py-14 text-center text-sm text-muted-foreground">No members found for this view.</div>
-          ) : (
-            members.map((member) => {
-              const memberStatus = effectiveStatus(member, today);
-              return (
-                <button
-                  type="button"
-                  key={member.id}
-                  onClick={() => navigate(`/members/${member.id}`)}
-                  className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-muted/30"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary">
-                    {initials(member.name)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate font-semibold">{member.name}</p>
-                      {statusBadge(memberStatus)}
-                    </div>
-                    <p className="mt-1 truncate text-xs text-muted-foreground">{member.planName || "No plan"} · Expires {formatDate(member.expiryDate)}</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </button>
-              );
-            })
-          )}
+        <div className="border-t border-border/60 bg-muted/10 px-3 py-3 sm:px-4">
+          <Pager
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            summary={fmt(t("overview.showing"), { from: firstShown, to: lastShown, total: filteredTotal })}
+          />
         </div>
-
-        <div className="flex flex-col gap-3 border-t border-border/60 bg-muted/10 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-          <p className="text-sm text-muted-foreground">
-            Showing <span className="font-medium text-foreground">{firstShown.toLocaleString()}–{lastShown.toLocaleString()}</span> of{" "}
-            <span className="font-medium text-foreground">{filteredTotal.toLocaleString()}</span>
-          </p>
-          <div className="flex items-center justify-between gap-2 sm:justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 rounded-lg"
-              disabled={page <= 1 || isLoading}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-            >
-              <ChevronLeft className="mr-1 h-4 w-4" /> Previous
-            </Button>
-            <span className="min-w-[88px] text-center text-xs font-medium text-muted-foreground">
-              Page {page} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 rounded-lg"
-              disabled={page >= totalPages || isLoading}
-              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-            >
-              Next <ChevronRight className="ml-1 h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
   );
 }
