@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useEffect } from "react";
+import { accountingAr, accountingEn, accountingFr } from "./i18n-accounting";
 
 type Language = "en" | "fr" | "ar";
 
@@ -2423,7 +2424,11 @@ const ar: Translations = {
   "notif.priority.low": "منخفضة",
 };
 
-const dictionaries: Record<Language, Translations> = { en, fr, ar };
+const dictionaries: Record<Language, Translations> = {
+  en: { ...en, ...accountingEn },
+  fr: { ...fr, ...accountingFr },
+  ar: { ...ar, ...accountingAr },
+};
 
 interface I18nStore {
   language: Language;
