@@ -3,8 +3,12 @@ import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 import { Check, ChevronRight, Circle } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { useDir } from "@/lib/use-dir"
 
-const DropdownMenu = DropdownMenuPrimitive.Root
+function DropdownMenu({ dir, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
+  const appDir = useDir()
+  return <DropdownMenuPrimitive.Root dir={dir ?? appDir} {...props} />
+}
 
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
 

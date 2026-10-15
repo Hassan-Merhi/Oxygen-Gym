@@ -3,8 +3,12 @@ import * as SelectPrimitive from "@radix-ui/react-select"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { useDir } from "@/lib/use-dir"
 
-const Select = SelectPrimitive.Root
+function Select({ dir, ...props }: React.ComponentProps<typeof SelectPrimitive.Root>) {
+  const appDir = useDir()
+  return <SelectPrimitive.Root dir={dir ?? appDir} {...props} />
+}
 
 const SelectGroup = SelectPrimitive.Group
 

@@ -167,11 +167,12 @@ export default function MemberProfile({ id }: { id: number }) {
       <section className="overflow-hidden rounded-xl border border-border bg-card" aria-labelledby="member-name">
         <div className="h-20 bg-gradient-to-r from-indigo-600 to-indigo-700 sm:h-24 rtl:bg-gradient-to-l" aria-hidden="true" />
         <div className="px-4 pb-5 sm:px-6 sm:pb-6">
-          <div className="-mt-10 mb-4 flex items-end gap-4">
+          {/* Avatar overlaps the banner; the name always sits below it on the card surface. */}
+          <div className="-mt-10 mb-4 flex flex-col gap-3">
             <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4 border-card bg-muted shadow-lg">
               <User className="h-9 w-9 text-indigo-500" aria-hidden="true" />
             </div>
-            <div className="mb-1 min-w-0 flex-1">
+            <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 id="member-name" className="min-w-0 break-words text-xl font-bold text-foreground">{member.name}</h1>
                 <MemberStatusBadge status={member.status} label={statusLabel} className="px-2.5" />

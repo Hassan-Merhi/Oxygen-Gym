@@ -282,7 +282,7 @@ export function Topbar() {
           <Button
             variant="ghost"
             size="sm"
-            className="h-9 px-2.5 text-muted-foreground hover:text-foreground"
+            className="h-9 min-w-9 px-2.5 text-muted-foreground hover:text-foreground pointer-coarse:min-w-11 max-lg:min-w-11"
             onClick={handleLogout}
             data-testid="button-logout"
             aria-label={t("nav.logout")}

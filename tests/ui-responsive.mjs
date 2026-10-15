@@ -13,7 +13,7 @@
  *   UI_BASE_URL=http://localhost:8090 UI_USER=admin UI_PASSWORD=admin123 \
  *   UI_SHOTS_DIR=/tmp/ui-shots node tests/ui-responsive.mjs
  *
- * Optional: UI_LANGS=en,ar,fr  UI_PAGES=/dashboard,/sales  UI_VIEWPORTS=390x844,1024x768
+ * Optional: UI_LANGS=en,ar,fr  UI_PAGES=/dashboard,/sales  UI_VIEWPORTS=390x844,1024x768  UI_THEME=dark
  *           CHROMIUM_PATH=/opt/pw-browsers/chromium/chrome-linux/chrome
  */
 import { createRequire } from "node:module";
@@ -33,6 +33,7 @@ const BASE = (process.env.UI_BASE_URL ?? "http://localhost:8090").replace(/\/$/,
 const USER = process.env.UI_USER ?? "admin";
 const PASSWORD = process.env.UI_PASSWORD ?? "admin123";
 const SHOTS = process.env.UI_SHOTS_DIR ?? path.resolve("ui-shots");
+const THEME = process.env.UI_THEME === "dark" ? "dark" : "light";
 const LANGS = (process.env.UI_LANGS ?? "en,ar").split(",").filter(Boolean);
 const VIEWPORTS = (process.env.UI_VIEWPORTS ?? "390x844,768x1024,1024x768,1440x900").split(",").map((v) => {
   const [width, height] = v.split("x").map(Number);
@@ -67,10 +68,11 @@ for (const lang of LANGS) {
       hasTouch: vp.touch,
       isMobile: vp.width < 768,
     });
-    await context.addInitScript(([token, language]) => {
+    await context.addInitScript(([token, language, theme]) => {
+      localStorage.setItem("gym-theme", JSON.stringify({ state: { theme }, version: 0 }));
       localStorage.setItem("gym_token", token);
       localStorage.setItem("gympro-i18n", JSON.stringify({ state: { language }, version: 0 }));
-    }, [login.token, lang]);
+    }, [login.token, lang, THEME]);
     const page = await context.newPage();
     for (const route of PAGES) {
       await page.goto(`${BASE}${route}`, { waitUntil: "networkidle" });
@@ -128,7 +130,7 @@ for (const lang of LANGS) {
         const rendered = (document.getElementById("root")?.childElementCount ?? 0) > 0;
         return { rendered, overflow, offenders, tiny: [...tiny].slice(0, 8), small: small.slice(0, 8), smallCount: small.length, coarse };
       });
-      const name = `${lang}-${vp.width}x${vp.height}-${route.replace(/\W+/g, "_").replace(/^_/, "") || "root"}.png`;
+      const name = `${THEME === "dark" ? "dark-" : ""}${lang}-${vp.width}x${vp.height}-${route.replace(/\W+/g, "_").replace(/^_/, "") || "root"}.png`;
       await page.screenshot({ path: path.join(SHOTS, name), fullPage: true });
       const ok = metrics.rendered && metrics.overflow <= 0;
       results.push({ lang, viewport: `${vp.width}x${vp.height}`, route, ...metrics, ok, shot: name });

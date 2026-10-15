@@ -303,7 +303,7 @@ export default function MembersOverview() {
                   setPage(1);
                 }}
                 className={cn(
-                  "inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:h-11",
+                  "inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-md:h-11 pointer-coarse:h-11",
                   status === filter
                     ? "border-primary/50 bg-primary/15 text-foreground"
                     : "border-border/70 bg-background/40 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -329,8 +329,8 @@ export default function MembersOverview() {
           <EmptyState icon={Users} title={t("overview.empty")} hint={t("overview.emptyHint")} />
         ) : (
           <>
-            {/* Cards below lg */}
-            <ul className="divide-y divide-border/50 lg:hidden">
+            {/* Cards below xl (long localized dates need the room) */}
+            <ul className="divide-y divide-border/50 xl:hidden">
               {members.map((member) => {
                 const memberStatus = effectiveStatus(member, today);
                 return (
@@ -359,7 +359,7 @@ export default function MembersOverview() {
               })}
             </ul>
 
-            <table className="hidden w-full table-fixed text-sm lg:table">
+            <table className="hidden w-full table-fixed text-sm xl:table">
               <thead>
                 <tr className="border-b border-border/60 bg-muted/25">
                   <th scope="col" className={cn(th, "w-[26%] ps-5")}>{t("members.table.name")}</th>
@@ -395,8 +395,8 @@ export default function MembersOverview() {
                         <p className="truncate" title={member.planName || ""}>{member.planName || "—"}</p>
                       </td>
                       <td className="px-4 py-3 align-middle"><StatusBadge status={memberStatus} label={statusLabel(memberStatus)} /></td>
-                      <td className="whitespace-nowrap px-4 py-3 align-middle tabular-nums text-muted-foreground">{fmtDate(member.startDate)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 align-middle tabular-nums text-muted-foreground">{fmtDate(member.expiryDate)}</td>
+                      <td className="px-4 py-3 align-middle tabular-nums text-muted-foreground">{fmtDate(member.startDate)}</td>
+                      <td className="px-4 py-3 align-middle tabular-nums text-muted-foreground">{fmtDate(member.expiryDate)}</td>
                       <td className="px-3 py-3 text-end align-middle">
                         <ChevronRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary rtl:rotate-180" aria-hidden="true" />
                       </td>

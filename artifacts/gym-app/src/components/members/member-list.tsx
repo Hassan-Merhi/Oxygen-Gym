@@ -139,7 +139,7 @@ export function MemberList({ t, fmtDate, items, isLoading, canManage, isAdmin, c
   return (
     <>
       {/* Cards: phones and tablets */}
-      <div className="overflow-hidden rounded-xl border border-border bg-card lg:hidden">
+      <div className="overflow-hidden rounded-xl border border-border bg-card xl:hidden">
         {isLoading ? (
           <ul className="divide-y divide-border/50" aria-busy="true" aria-label={t("common.loading")}>
             {Array.from({ length: 6 }).map((_, i) => (
@@ -193,7 +193,7 @@ export function MemberList({ t, fmtDate, items, isLoading, canManage, isAdmin, c
       </div>
 
       {/* Table: desktop */}
-      <div className="hidden overflow-hidden rounded-xl border border-border bg-card lg:block">
+      <div className="hidden overflow-hidden rounded-xl border border-border bg-card xl:block">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
@@ -231,7 +231,7 @@ export function MemberList({ t, fmtDate, items, isLoading, canManage, isAdmin, c
                     <button
                       type="button"
                       onClick={() => actions.onView(m)}
-                      className="group/btn flex items-center gap-3 rounded-md text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="group/btn flex items-center gap-3 rounded-md text-start pointer-coarse:min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white", avatarColor(m.name))} aria-hidden="true">
                         {initialsOf(m.name)}
