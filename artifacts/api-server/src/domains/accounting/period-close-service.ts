@@ -126,7 +126,9 @@ export async function closePeriod(
 
     // Inventory revaluation: CDF-costed stock is restated at today's rate so the
     // Inventory account equals quantity x cost of the stock on hand.
-    const inventoryLines = await getLedgerLines({ accountNames: [ACCOUNTS.INVENTORY], dateTo: closedThrough }, tx);
+    // Quantities on hand are only known for today, so compare them with the
+    // whole Inventory balance (not the balance at the close date).
+    const inventoryLines = await getLedgerLines({ accountNames: [ACCOUNTS.INVENTORY] }, tx);
     const inventoryBook = addMoney(...inventoryLines.map((line) => subtractMoney(line.debitUsd, line.creditUsd)));
     const inventoryDiff = subtractMoney(await getStockValuation(rate, tx), inventoryBook);
     if (Math.abs(inventoryDiff) >= 0.01) {

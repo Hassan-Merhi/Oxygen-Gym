@@ -132,7 +132,7 @@ BEGIN
       "journal_id", "entry_date", "source_type", "source_id", "source_number", "account_id", "account_name_snapshot",
       "debit_usd", "credit_usd", "debit_cdf", "credit_cdf", "currency", "amount", "exchange_rate", "description", "created_by"
     )
-    SELECT 'cutover:duplicate-voucher:' || r."id", now(), 'voucher_reversal', r."id", r."voucher_number",
+    SELECT 'cutover:duplicate-voucher:' || r."id", r."voucher_date", 'voucher_reversal', r."id", r."voucher_number",
            n."account_id", n."account_name_snapshot",
            CASE WHEN n.net_usd < 0 THEN -n.net_usd ELSE 0 END,
            CASE WHEN n.net_usd > 0 THEN n.net_usd ELSE 0 END,
@@ -237,6 +237,27 @@ BEGIN
       'Supplier Payables', 'liability', COALESCE(NULLIF(r."account", ''), 'cash'), 'asset',
       r."amount", r."currency", rate, 'Ledger cutover: supplier payment');
   END LOOP;
+
+  -- 2b. Stock bought on credit owes a supplier: open its supplier balance (the
+  -- liability itself was posted by the purchase above, so nothing is posted here).
+  -- A manual credit already recorded for the same goods is reused, not duplicated.
+  INSERT INTO "supplier_credits" ("credit_number", "supplier", "description", "product_id", "product_name",
+    "total_amount", "amount_paid", "currency", "exchange_rate", "purchase_date", "notes", "status", "stock_purchase_id")
+  SELECT 'SUP-SP-' || sp."id", COALESCE(NULLIF(TRIM(sp."supplier"), ''), 'Unknown supplier'),
+    'Stock purchase ' || COALESCE(sp."purchase_number", sp."id"::text) || ': ' || COALESCE(sp."product_name", ''),
+    sp."product_id", sp."product_name", sp."total_cost", 0, UPPER(COALESCE(sp."currency", 'USD')),
+    CASE WHEN sp."exchange_rate" >= 10 THEN sp."exchange_rate" ELSE current_rate END,
+    sp."purchase_date", sp."notes", 'open', sp."id"
+  FROM "stock_purchases" sp
+  WHERE sp."paid_from_cash" = 0 AND COALESCE(sp."total_cost", 0) > 0
+    AND NOT EXISTS (SELECT 1 FROM "supplier_credits" sc WHERE sc."stock_purchase_id" = sp."id")
+    AND NOT EXISTS (
+      SELECT 1 FROM "supplier_credits" sc
+      WHERE sc."deleted_at" IS NULL AND sc."product_id" = sp."product_id"
+        AND ROUND(sc."total_amount", 2) = ROUND(sp."total_cost", 2)
+        AND UPPER(sc."currency") = UPPER(COALESCE(sp."currency", 'USD'))
+    )
+  ON CONFLICT ("credit_number") DO NOTHING;
 
   -- 3a. Cash per currency: match the balance the Cash Book showed before the cutover.
   WITH reset_cutoff AS (

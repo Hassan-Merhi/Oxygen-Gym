@@ -119,7 +119,7 @@ const PARTY_JOIN = sql`
       WHEN 'payment' THEN (SELECT COALESCE(NULLIF(TRIM(p.linked_entity_name), ''), NULLIF(TRIM(p.member_name), '')) FROM payments p WHERE p.id = e.source_id)
       WHEN 'voucher' THEN (SELECT COALESCE(NULLIF(TRIM(v.paid_to), ''), NULLIF(TRIM(v.received_from), ''), NULLIF(TRIM(v.linked_entity_name), '')) FROM vouchers v WHERE v.id = e.source_id)
       WHEN 'sale' THEN 'POS'
-      WHEN 'payroll' THEN (SELECT pr.staff_name FROM payroll pr WHERE pr.id = e.source_id)
+      WHEN 'payroll' THEN (SELECT pr.user_name FROM payroll pr WHERE pr.id = e.source_id)
       WHEN 'stock_purchase' THEN (SELECT NULLIF(TRIM(sp.supplier), '') FROM stock_purchases sp WHERE sp.id = e.source_id)
       WHEN 'supplier_credit' THEN (SELECT sc.supplier FROM supplier_credits sc WHERE sc.id = e.source_id)
       WHEN 'supplier_payment' THEN (
