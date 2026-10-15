@@ -1,27 +1,29 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useI18n } from "@/lib/i18n";
+import { fmt } from "@/lib/i18n-format";
 import { useToast } from "@/hooks/use-toast";
+import { useGetMe } from "@/hooks/use-me";
+import { canApproveCorrections } from "@/lib/permissions";
+import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/pager";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Package, TrendingUp, TrendingDown, Wallet, AlertTriangle,
-  Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Undo2,
+  Plus, Pencil, Trash2, ChevronDown, CreditCard, Undo2, PackageOpen,
 } from "lucide-react";
-import { useGetMe } from "@/hooks/use-me";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SupplierCredit {
@@ -83,15 +85,20 @@ interface Summary {
 const API = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
 function h(): Record<string, string> {
   const base: Record<string, string> = { "Content-Type": "application/json" };
-  const t = localStorage.getItem("gym_token");
-  if (t) base["Authorization"] = `Bearer ${t}`;
+  const token = localStorage.getItem("gym_token");
+  if (token) base["Authorization"] = `Bearer ${token}`;
   return base;
 }
+async function parse(r: Response) {
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((body as { error?: string })?.error || r.statusText);
+  return body;
+}
 const api = {
-  get: (path: string) => fetch(`${API}${path}`, { headers: h() }).then(r => r.json()),
-  post: (path: string, body: unknown) => fetch(`${API}${path}`, { method: "POST", headers: h(), body: JSON.stringify(body) }).then(r => r.json()),
-  patch: (path: string, body: unknown) => fetch(`${API}${path}`, { method: "PATCH", headers: h(), body: JSON.stringify(body) }).then(r => r.json()),
-  del: (path: string) => fetch(`${API}${path}`, { method: "DELETE", headers: h() }).then(r => r.json()),
+  get: (path: string) => fetch(`${API}${path}`, { headers: h() }).then(parse),
+  post: (path: string, body: unknown) => fetch(`${API}${path}`, { method: "POST", headers: h(), body: JSON.stringify(body) }).then(parse),
+  patch: (path: string, body: unknown) => fetch(`${API}${path}`, { method: "PATCH", headers: h(), body: JSON.stringify(body) }).then(parse),
+  del: (path: string) => fetch(`${API}${path}`, { method: "DELETE", headers: h() }).then(parse),
 };
 
 // ─── Format helpers ───────────────────────────────────────────────────────────
@@ -99,27 +106,25 @@ function fmtAmt(n: number, cur = "USD") {
   if (cur === "CDF") return `FC ${Math.round(n).toLocaleString("fr-FR")}`;
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
-function fmtDate(d: string) {
-  return new Date(d).toLocaleDateString("fr-FR");
-}
 function pct(paid: number, total: number) {
   if (!total) return 0;
   return Math.min(100, Math.round((paid / total) * 100));
 }
+const profitTone = (n: number) => n >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400";
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 function KpiCard({ label, value, sub, icon: Icon, color }: {
   label: string; value: string; sub?: string; icon: React.ElementType; color: string;
 }) {
   return (
-    <div className={`rounded-xl border bg-card p-4 flex gap-3 items-start shadow-sm`}>
-      <div className={`mt-0.5 h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${color}`}>
-        <Icon className="h-4 w-4" />
+    <div className="flex min-w-0 items-start gap-3 rounded-xl border bg-card p-4 shadow-sm">
+      <div className={cn("mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", color)}>
+        <Icon className="h-4 w-4" aria-hidden="true" />
       </div>
       <div className="min-w-0">
-        <p className="text-xs text-muted-foreground truncate">{label}</p>
-        <p className="text-lg font-bold leading-tight">{value}</p>
-        {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+        <p className="truncate text-xs text-muted-foreground">{label}</p>
+        <p className="truncate text-lg font-bold leading-tight tabular-nums">{value}</p>
+        {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
       </div>
     </div>
   );
@@ -162,7 +167,7 @@ function CreditFormDialog({
     e.preventDefault();
     if (!form.supplier.trim() || !form.totalAmount) return;
     setSaving(true);
-    try { await onSubmit(form); } finally { setSaving(false); }
+    try { await onSubmit(form); } catch { /* toast handled by mutation */ } finally { setSaving(false); }
   }
 
   return (
@@ -170,23 +175,23 @@ function CreditFormDialog({
       <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-2">
-          <div>
-            <Label>{t("supplements.supplier")} *</Label>
-            <Input className="mt-1" value={form.supplier} onChange={e => set("supplier", e.target.value)} required />
+          <div className="space-y-1.5">
+            <Label htmlFor="credit-supplier">{t("supplements.supplier")} *</Label>
+            <Input id="credit-supplier" value={form.supplier} onChange={e => set("supplier", e.target.value)} required />
           </div>
-          <div>
-            <Label>{t("supplements.description")}</Label>
-            <Input className="mt-1" value={form.description} onChange={e => set("description", e.target.value)} placeholder="e.g. Whey Protein 5kg × 10" />
+          <div className="space-y-1.5">
+            <Label htmlFor="credit-description">{t("supplements.description")}</Label>
+            <Input id="credit-description" value={form.description} onChange={e => set("description", e.target.value)} placeholder={t("supplements.descriptionPlaceholder")} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>{t("supplements.totalAmount")} *</Label>
-              <Input className="mt-1" type="number" step="0.01" min="0.01" value={form.totalAmount} onChange={e => set("totalAmount", e.target.value)} required />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="credit-total">{t("supplements.totalAmount")} *</Label>
+              <Input id="credit-total" type="number" inputMode="decimal" step="0.01" min="0.01" value={form.totalAmount} onChange={e => set("totalAmount", e.target.value)} required />
             </div>
-            <div>
-              <Label>{t("common.currency") || "Currency"}</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="credit-currency">{t("common.currency")}</Label>
               <Select value={form.currency} onValueChange={v => set("currency", v)}>
-                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="credit-currency"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="USD">USD ($)</SelectItem>
                   <SelectItem value="CDF">CDF (FC)</SelectItem>
@@ -194,17 +199,17 @@ function CreditFormDialog({
               </Select>
             </div>
           </div>
-          <div>
-            <Label>{t("supplements.purchaseDate")}</Label>
-            <Input className="mt-1" type="date" value={form.purchaseDate} onChange={e => set("purchaseDate", e.target.value)} />
+          <div className="space-y-1.5">
+            <Label htmlFor="credit-date">{t("supplements.purchaseDate")}</Label>
+            <Input id="credit-date" type="date" value={form.purchaseDate} onChange={e => set("purchaseDate", e.target.value)} />
           </div>
-          <div>
-            <Label>{t("supplements.notes")}</Label>
-            <Input className="mt-1" value={form.notes} onChange={e => set("notes", e.target.value)} />
+          <div className="space-y-1.5">
+            <Label htmlFor="credit-notes">{t("supplements.notes")}</Label>
+            <Input id="credit-notes" value={form.notes} onChange={e => set("notes", e.target.value)} />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>{t("common.cancel") || "Cancel"}</Button>
-            <Button type="submit" disabled={saving}>{saving ? "…" : t("common.save") || "Save"}</Button>
+            <Button type="button" variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
+            <Button type="submit" disabled={saving}>{saving ? t("common.saving") : t("common.save")}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -233,7 +238,7 @@ function PayDialog({
     const n = parseFloat(amount);
     if (!n || n <= 0) return;
     setSaving(true);
-    try { await onSubmit(n, date, notes); } finally { setSaving(false); }
+    try { await onSubmit(n, date, notes); } catch { /* toast handled by mutation */ } finally { setSaving(false); }
   }
 
   return (
@@ -241,26 +246,27 @@ function PayDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>{t("supplements.payInstallment")}</DialogTitle>
-          <p className="text-sm text-muted-foreground mt-1">
-            {credit.supplier} — {t("supplements.remainingBalance")}: <span className="font-semibold text-orange-600">{fmtAmt(credit.remaining, credit.currency)}</span>
-          </p>
+          <DialogDescription>
+            {credit.supplier} — {t("supplements.remainingBalance")}:{" "}
+            <span className="font-semibold text-orange-700 dark:text-orange-400">{fmtAmt(credit.remaining, credit.currency)}</span>
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4 py-2">
-          <div>
-            <Label>{t("supplements.payAmount")} *</Label>
-            <Input className="mt-1" type="number" step="0.01" min="0.01" max={credit.remaining} value={amount} onChange={e => setAmount(e.target.value)} required />
+          <div className="space-y-1.5">
+            <Label htmlFor="pay-amount">{t("supplements.payAmount")} *</Label>
+            <Input id="pay-amount" type="number" inputMode="decimal" step="0.01" min="0.01" max={credit.remaining} value={amount} onChange={e => setAmount(e.target.value)} required />
           </div>
-          <div>
-            <Label>{t("supplements.payDate")}</Label>
-            <Input className="mt-1" type="date" value={date} onChange={e => setDate(e.target.value)} />
+          <div className="space-y-1.5">
+            <Label htmlFor="pay-date">{t("supplements.payDate")}</Label>
+            <Input id="pay-date" type="date" value={date} onChange={e => setDate(e.target.value)} />
           </div>
-          <div>
-            <Label>{t("supplements.notes")}</Label>
-            <Input className="mt-1" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
+          <div className="space-y-1.5">
+            <Label htmlFor="pay-notes">{t("supplements.notes")}</Label>
+            <Input id="pay-notes" value={notes} onChange={e => setNotes(e.target.value)} placeholder={t("common.optional")} />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>{t("common.cancel") || "Cancel"}</Button>
-            <Button type="submit" disabled={saving}>{saving ? "…" : t("supplements.payInstallment")}</Button>
+            <Button type="button" variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
+            <Button type="submit" disabled={saving}>{saving ? t("common.saving") : t("supplements.payInstallment")}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -270,20 +276,24 @@ function PayDialog({
 
 // ─── Credit Row ───────────────────────────────────────────────────────────────
 function CreditRow({
-  credit, onEdit, onDelete, onPay, canManage,
+  credit, onEdit, onDelete, onPay, canManage, canCorrect,
 }: {
   credit: SupplierCredit;
   onEdit: () => void;
   onDelete: () => void;
   onPay: () => void;
   canManage: boolean;
+  /** Reversing or rewriting recorded payments needs admin or approveCorrections. */
+  canCorrect: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
+  const locale = language === "ar" ? "ar" : language === "en" ? "en-GB" : "fr-FR";
+  const fmtDate = (d: string) => new Date(d).toLocaleDateString(locale);
 
-  const { data: payments = [] } = useQuery<SupplierPayment[]>({
+  const { data: payments = [], isLoading: paymentsLoading } = useQuery<SupplierPayment[]>({
     queryKey: [`/api/supplier-credits/${credit.id}/payments`],
     queryFn: () => api.get(`/api/supplier-credits/${credit.id}/payments`),
     enabled: expanded,
@@ -295,105 +305,129 @@ function CreditRow({
       qc.invalidateQueries({ queryKey: ["/api/supplier-credits"] });
       qc.invalidateQueries({ queryKey: [`/api/supplier-credits/${credit.id}/payments`] });
       qc.invalidateQueries({ queryKey: ["/api/supplier-credits/summary"] });
-      toast({ title: "Payment reversed" });
+      toast({ title: t("supplements.paymentReversed") });
     },
+    onError: (e: Error) => toast({ title: e.message || t("common.error"), variant: "destructive" }),
   });
 
   const paidPct = pct(credit.amountPaid, credit.totalAmount);
   const isFullyPaid = credit.status === "paid";
+  // A credit that already has payments is a posted record: only correctors may edit or delete it.
+  const canChange = canManage && (credit.amountPaid <= 0 || canCorrect);
+  const historyId = `credit-${credit.id}-payments`;
 
   return (
-    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="p-4 flex flex-wrap gap-3 items-start justify-between">
+    <article className="overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3 p-4">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-sm">{credit.supplier}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-semibold">{credit.supplier}</h3>
             {credit.creditNumber && <span className="text-xs text-muted-foreground">{credit.creditNumber}</span>}
-            <Badge variant={isFullyPaid ? "default" : "secondary"} className={isFullyPaid ? "bg-green-500 text-white" : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"}>
+            <Badge
+              variant={isFullyPaid ? "default" : "secondary"}
+              className={isFullyPaid
+                ? "bg-emerald-600 text-white hover:bg-emerald-600"
+                : "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300"}
+            >
               {isFullyPaid ? t("supplements.status.paid") : t("supplements.status.open")}
             </Badge>
             {credit.productName && <Badge variant="outline" className="text-xs">{credit.productName}</Badge>}
           </div>
-          {credit.description && <p className="text-xs text-muted-foreground mt-1">{credit.description}</p>}
-          <p className="text-xs text-muted-foreground mt-0.5">{fmtDate(credit.purchaseDate)}</p>
+          {credit.description && <p className="mt-1 text-xs text-muted-foreground">{credit.description}</p>}
+          <p className="mt-0.5 text-xs text-muted-foreground">{fmtDate(credit.purchaseDate)}</p>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           {canManage && !isFullyPaid && (
-            <Button size="sm" variant="default" className="h-8 gap-1.5 text-xs" onClick={onPay}>
-              <CreditCard className="h-3.5 w-3.5" />{t("supplements.payInstallment")}
+            <Button size="sm" className="gap-1.5" onClick={onPay}>
+              <CreditCard className="h-4 w-4" aria-hidden="true" />{t("supplements.payInstallment")}
             </Button>
           )}
-          {canManage && (
+          {canChange && (
             <>
-              <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={onEdit}><Pencil className="h-3.5 w-3.5" /></Button>
-              <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-red-500 hover:text-red-600" onClick={onDelete}><Trash2 className="h-3.5 w-3.5" /></Button>
+              <Button size="icon" variant="ghost" onClick={onEdit} aria-label={fmt(t("supplements.aria.edit"), { name: credit.supplier })} title={t("common.edit")}>
+                <Pencil className="h-4 w-4" aria-hidden="true" />
+              </Button>
+              <Button size="icon" variant="ghost" className="text-red-700 hover:text-red-800 dark:text-red-400" onClick={onDelete} aria-label={fmt(t("supplements.aria.delete"), { name: credit.supplier })} title={t("common.delete")}>
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              </Button>
             </>
           )}
         </div>
       </div>
 
-      {/* Progress bar */}
       <div className="px-4 pb-3">
-        <div className="flex justify-between text-xs mb-1.5">
+        <div className="mb-1.5 flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs">
           <span className="text-muted-foreground">{t("supplements.amountPaid")}: <span className="font-medium text-foreground">{fmtAmt(credit.amountPaid, credit.currency)}</span></span>
           <span className="text-muted-foreground">{t("supplements.totalAmount")}: <span className="font-medium text-foreground">{fmtAmt(credit.totalAmount, credit.currency)}</span></span>
         </div>
-        <div className="h-2 rounded-full bg-muted overflow-hidden">
+        <div
+          className="h-2 overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={paidPct}
+          aria-label={t("supplements.amountPaid")}
+        >
           <div
-            className={`h-full rounded-full transition-all ${isFullyPaid ? "bg-green-500" : "bg-orange-400"}`}
+            className={cn("h-full rounded-full transition-all", isFullyPaid ? "bg-emerald-500" : "bg-orange-400")}
             style={{ width: `${paidPct}%` }}
           />
         </div>
-        <div className="flex justify-between text-xs mt-1">
-          <span className="text-muted-foreground">{paidPct}% paid</span>
+        <div className="mt-1 flex flex-wrap justify-between gap-x-4 text-xs">
+          <span className="text-muted-foreground">{fmt(t("supplements.paidPct"), { pct: paidPct })}</span>
           {!isFullyPaid && (
-            <span className="font-semibold text-orange-600">{fmtAmt(credit.remaining, credit.currency)} {t("supplements.remainingBalance")}</span>
+            <span className="font-semibold text-orange-700 dark:text-orange-400">{fmtAmt(credit.remaining, credit.currency)} {t("supplements.remainingBalance")}</span>
           )}
         </div>
       </div>
 
-      {/* Payment history toggle */}
       <button
-        className="w-full flex items-center justify-between px-4 py-2 text-xs text-muted-foreground border-t hover:bg-muted/40 transition-colors"
+        type="button"
+        className="flex min-h-11 w-full items-center justify-between border-t px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         onClick={() => setExpanded(v => !v)}
+        aria-expanded={expanded}
+        aria-controls={historyId}
       >
         <span>{t("supplements.payments")}</span>
-        {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        <ChevronDown className={cn("h-4 w-4 transition-transform", expanded && "rotate-180")} aria-hidden="true" />
       </button>
 
       {expanded && (
-        <div className="border-t bg-muted/20 px-4 py-3">
-          {payments.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-2">{t("supplements.noPayments")}</p>
+        <div id={historyId} className="border-t bg-muted/20 px-4 py-3">
+          {paymentsLoading ? (
+            <Skeleton className="h-6 w-full" />
+          ) : payments.length === 0 ? (
+            <p className="py-2 text-center text-sm text-muted-foreground">{t("supplements.noPayments")}</p>
           ) : (
-            <div className="space-y-2">
+            <ul className="space-y-1">
               {payments.map(p => (
-                <div key={p.id} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                    <span className="font-medium">{fmtAmt(p.amount, p.currency)}</span>
+                <li key={p.id} className="flex items-center justify-between gap-2 text-sm">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-2">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
+                    <span className="font-medium tabular-nums">{fmtAmt(p.amount, p.currency)}</span>
                     <span className="text-xs text-muted-foreground">{fmtDate(p.paymentDate)}</span>
-                    {p.notes && <span className="text-xs text-muted-foreground">— {p.notes}</span>}
+                    {p.notes && <span className="truncate text-xs text-muted-foreground">— {p.notes}</span>}
                   </div>
-                  {canManage && (
+                  {canManage && canCorrect && (
                     <Button
-                      size="sm"
+                      size="icon"
                       variant="ghost"
-                      className="h-6 w-6 p-0 text-muted-foreground hover:text-red-500"
+                      className="text-muted-foreground hover:text-red-700 dark:hover:text-red-400"
                       title={t("supplements.undoPayment")}
+                      aria-label={`${t("supplements.undoPayment")} — ${fmtAmt(p.amount, p.currency)}`}
+                      disabled={undoMut.isPending}
                       onClick={() => undoMut.mutate(p.id)}
                     >
-                      <Undo2 className="h-3 w-3" />
+                      <Undo2 className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   )}
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </div>
       )}
-    </div>
+    </article>
   );
 }
 
@@ -404,8 +438,8 @@ export default function Supplements() {
   const qc = useQueryClient();
   const me = useGetMe();
   const canManage = me?.role === "admin" || me?.role === "manager";
+  const canCorrect = canApproveCorrections(me);
 
-  // ── Queries
   const { data: summary } = useQuery<Summary>({
     queryKey: ["/api/supplier-credits/summary"],
     queryFn: () => api.get("/api/supplier-credits/summary"),
@@ -416,12 +450,11 @@ export default function Supplements() {
     queryFn: () => api.get("/api/supplier-credits"),
   });
 
-  const { data: products = [] } = useQuery<SupplierProduct[]>({
+  const { data: products = [], isLoading: productsLoading } = useQuery<SupplierProduct[]>({
     queryKey: ["/api/supplier-credits/products"],
     queryFn: () => api.get("/api/supplier-credits/products"),
   });
 
-  // ── Dialog state
   const [addOpen, setAddOpen] = useState(false);
   const [editCredit, setEditCredit] = useState<SupplierCredit | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SupplierCredit | null>(null);
@@ -432,216 +465,211 @@ export default function Supplements() {
     qc.invalidateQueries({ queryKey: ["/api/supplier-credits/summary"] });
   };
 
-  // ── Mutations
+  const onError = (e: Error) => toast({ title: e.message || t("common.error"), variant: "destructive" });
+
   const createMut = useMutation({
     mutationFn: (body: unknown) => api.post("/api/supplier-credits", body),
     onSuccess: () => { invalidate(); setAddOpen(false); toast({ title: t("common.success") }); },
-    onError: () => toast({ title: "Error", variant: "destructive" }),
+    onError,
   });
 
   const updateMut = useMutation({
     mutationFn: ({ id, body }: { id: number; body: unknown }) => api.patch(`/api/supplier-credits/${id}`, body),
     onSuccess: () => { invalidate(); setEditCredit(null); toast({ title: t("common.success") }); },
-    onError: () => toast({ title: "Error", variant: "destructive" }),
+    onError,
   });
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => api.del(`/api/supplier-credits/${id}`),
     onSuccess: () => { invalidate(); setDeleteTarget(null); toast({ title: t("common.success") }); },
-    onError: () => toast({ title: "Error", variant: "destructive" }),
+    onError,
   });
 
   const payMut = useMutation({
     mutationFn: ({ id, body }: { id: number; body: unknown }) => api.post(`/api/supplier-credits/${id}/payments`, body),
-    onSuccess: () => { invalidate(); setPayTarget(null); toast({ title: "Payment recorded ✓" }); },
-    onError: (e: Error) => toast({ title: e.message || "Error", variant: "destructive" }),
+    onSuccess: () => { invalidate(); setPayTarget(null); toast({ title: t("supplements.paymentRecorded") }); },
+    onError,
   });
 
   const openCredits = credits.filter(c => c.status === "open");
   const paidCredits = credits.filter(c => c.status === "paid");
+  const totalProfit = products.reduce((s, p) => s + p.totalProfit, 0);
+
+  const creditRow = (c: SupplierCredit) => (
+    <CreditRow
+      key={c.id}
+      credit={c}
+      canManage={canManage}
+      canCorrect={canCorrect}
+      onEdit={() => setEditCredit(c)}
+      onDelete={() => setDeleteTarget(c)}
+      onPay={() => setPayTarget(c)}
+    />
+  );
+
+  const th = "px-4 py-3 text-xs font-medium uppercase text-muted-foreground";
 
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{t("supplements.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{t("supplements.subtitle")}</p>
-        </div>
-        {canManage && (
+    <div className="mx-auto max-w-6xl space-y-6">
+      <PageHeader
+        icon={PackageOpen}
+        iconClass="bg-orange-500/10 text-orange-700 dark:text-orange-400"
+        title={t("supplements.title")}
+        subtitle={t("supplements.subtitle")}
+        actions={canManage ? (
           <Button onClick={() => setAddOpen(true)} className="gap-2">
-            <Plus className="h-4 w-4" />{t("supplements.addCredit")}
+            <Plus className="h-4 w-4" aria-hidden="true" />{t("supplements.addCredit")}
           </Button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KpiCard
-          label={t("supplements.totalOwed")}
-          value={`$${(summary?.totalOwed ?? 0).toFixed(2)}`}
-          icon={Wallet}
-          color="bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
-        />
-        <KpiCard
-          label={t("supplements.totalPaid")}
-          value={`$${(summary?.totalPaid ?? 0).toFixed(2)}`}
-          icon={CreditCard}
-          color="bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
-        />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <KpiCard label={t("supplements.totalOwed")} value={fmtAmt(summary?.totalOwed ?? 0)} icon={Wallet} color="bg-red-500/10 text-red-700 dark:text-red-400" />
+        <KpiCard label={t("supplements.totalPaid")} value={fmtAmt(summary?.totalPaid ?? 0)} icon={CreditCard} color="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" />
         <KpiCard
           label={t("supplements.remaining")}
-          value={`$${(summary?.remaining ?? 0).toFixed(2)}`}
-          sub={openCredits.length ? `${openCredits.length} open` : undefined}
+          value={fmtAmt(summary?.remaining ?? 0)}
+          sub={openCredits.length ? fmt(t("supplements.openCount"), { count: openCredits.length }) : undefined}
           icon={TrendingDown}
-          color="bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400"
+          color="bg-orange-500/10 text-orange-700 dark:text-orange-400"
         />
-        <KpiCard
-          label={t("supplements.totalProfit")}
-          value={`$${(summary?.totalProfitUsd ?? 0).toFixed(2)}`}
-          icon={TrendingUp}
-          color="bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400"
-        />
-        <KpiCard
-          label={t("supplements.productCount")}
-          value={String(summary?.productCount ?? 0)}
-          icon={Package}
-          color="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
-        />
+        <KpiCard label={t("supplements.totalProfit")} value={fmtAmt(summary?.totalProfitUsd ?? 0)} icon={TrendingUp} color="bg-indigo-500/10 text-indigo-700 dark:text-indigo-400" />
+        <KpiCard label={t("supplements.productCount")} value={String(summary?.productCount ?? 0)} icon={Package} color="bg-blue-500/10 text-blue-700 dark:text-blue-400" />
         <KpiCard
           label={t("supplements.lowStock")}
           value={String(summary?.lowStock ?? 0)}
           icon={AlertTriangle}
-          color={(summary?.lowStock ?? 0) > 0 ? "bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400" : "bg-muted text-muted-foreground"}
+          color={(summary?.lowStock ?? 0) > 0 ? "bg-amber-500/10 text-amber-700 dark:text-amber-400" : "bg-muted text-muted-foreground"}
         />
       </div>
 
-      {/* Main tabs */}
       <Tabs defaultValue="credits">
-        <TabsList>
-          <TabsTrigger value="credits">{t("supplements.tabs.credits")}</TabsTrigger>
-          <TabsTrigger value="products">{t("supplements.tabs.products")}</TabsTrigger>
+        <TabsList className="h-auto flex-wrap">
+          <TabsTrigger value="credits" className="pointer-coarse:min-h-11">{t("supplements.tabs.credits")}</TabsTrigger>
+          <TabsTrigger value="products" className="pointer-coarse:min-h-11">{t("supplements.tabs.products")}</TabsTrigger>
         </TabsList>
 
-        {/* ── Supplier Credits Tab ── */}
         <TabsContent value="credits" className="mt-4 space-y-6">
-          {/* Open credits */}
-          <div>
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-orange-400" />
+          <section aria-labelledby="open-credits">
+            <h2 id="open-credits" className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="h-2 w-2 rounded-full bg-orange-400" aria-hidden="true" />
               {t("supplements.status.open")} ({openCredits.length})
             </h2>
             {isLoading ? (
-              <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-28 rounded-xl bg-muted animate-pulse" />)}</div>
+              <div className="space-y-3" aria-busy="true">{[1, 2, 3].map(i => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}</div>
             ) : openCredits.length === 0 ? (
-              <div className="rounded-xl border border-dashed p-10 text-center">
-                <Package className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-                <p className="text-sm font-medium text-muted-foreground">{t("supplements.noCredits")}</p>
-                <p className="text-xs text-muted-foreground/70 mt-1">{t("supplements.noCreditsHint")}</p>
+              <div className="rounded-xl border border-dashed">
+                <EmptyState icon={Package} title={t("supplements.noCredits")} hint={t("supplements.noCreditsHint")} />
               </div>
             ) : (
-              <div className="space-y-3">
-                {openCredits.map(c => (
-                  <CreditRow
-                    key={c.id}
-                    credit={c}
-                    canManage={canManage}
-                    onEdit={() => setEditCredit(c)}
-                    onDelete={() => setDeleteTarget(c)}
-                    onPay={() => setPayTarget(c)}
-                  />
-                ))}
-              </div>
+              <div className="grid gap-3 lg:grid-cols-2">{openCredits.map(creditRow)}</div>
             )}
-          </div>
+          </section>
 
-          {/* Paid credits */}
           {paidCredits.length > 0 && (
-            <div>
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-green-500" />
+            <section aria-labelledby="paid-credits">
+              <h2 id="paid-credits" className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
                 {t("supplements.status.paid")} ({paidCredits.length})
               </h2>
-              <div className="space-y-3">
-                {paidCredits.map(c => (
-                  <CreditRow
-                    key={c.id}
-                    credit={c}
-                    canManage={canManage}
-                    onEdit={() => setEditCredit(c)}
-                    onDelete={() => setDeleteTarget(c)}
-                    onPay={() => setPayTarget(c)}
-                  />
-                ))}
-              </div>
-            </div>
+              <div className="grid gap-3 lg:grid-cols-2">{paidCredits.map(creditRow)}</div>
+            </section>
           )}
         </TabsContent>
 
-        {/* ── Product Profits Tab ── */}
         <TabsContent value="products" className="mt-4">
-          {products.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-10 text-center">
-              <Package className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-              <p className="text-sm text-muted-foreground">No active products found. Add products in the Stock page.</p>
+          {productsLoading ? (
+            <div className="space-y-2" aria-busy="true">{[1, 2, 3].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>
+          ) : products.length === 0 ? (
+            <div className="rounded-xl border border-dashed">
+              <EmptyState icon={Package} title={t("supplements.noProducts")} />
             </div>
           ) : (
-            <div className="rounded-xl border overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="text-left px-4 py-3 font-medium text-xs uppercase text-muted-foreground">{t("supplements.product.name")}</th>
-                    <th className="text-right px-4 py-3 font-medium text-xs uppercase text-muted-foreground">{t("supplements.product.stock")}</th>
-                    <th className="text-right px-4 py-3 font-medium text-xs uppercase text-muted-foreground">{t("supplements.product.sold")}</th>
-                    <th className="text-right px-4 py-3 font-medium text-xs uppercase text-muted-foreground">{t("supplements.product.cost")}</th>
-                    <th className="text-right px-4 py-3 font-medium text-xs uppercase text-muted-foreground">{t("supplements.product.selling")}</th>
-                    <th className="text-right px-4 py-3 font-medium text-xs uppercase text-muted-foreground">{t("supplements.product.profitUnit")}</th>
-                    <th className="text-right px-4 py-3 font-medium text-xs uppercase text-muted-foreground">{t("supplements.product.totalProfit")}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {products.map(p => (
-                    <tr key={p.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="font-medium">{p.name}</div>
-                        {p.supplier && <div className="text-xs text-muted-foreground">{p.supplier}</div>}
-                        {p.isLowStock && (
-                          <Badge className="mt-0.5 text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-                            ⚠ {t("supplements.product.lowStock")}
-                          </Badge>
-                        )}
-                      </td>
-                      <td className={`px-4 py-3 text-right font-medium ${p.isLowStock ? "text-yellow-600" : ""}`}>
-                        {p.quantity}
-                      </td>
-                      <td className="px-4 py-3 text-right text-muted-foreground">{p.qtySold}</td>
-                      <td className="px-4 py-3 text-right text-muted-foreground">{fmtAmt(p.costPrice, p.currency)}</td>
-                      <td className="px-4 py-3 text-right">{fmtAmt(p.sellingPrice, p.currency)}</td>
-                      <td className={`px-4 py-3 text-right font-medium ${p.profitPerUnit >= 0 ? "text-green-600" : "text-red-500"}`}>
-                        {p.profitPerUnit >= 0 ? "+" : ""}{fmtAmt(p.profitPerUnit, "USD")}
-                      </td>
-                      <td className={`px-4 py-3 text-right font-bold ${p.totalProfit >= 0 ? "text-green-600" : "text-red-500"}`}>
-                        {p.totalProfit >= 0 ? "+" : ""}{fmtAmt(p.totalProfit, "USD")}
-                      </td>
+            <>
+              {/* Cards below lg */}
+              <ul className="grid gap-3 md:grid-cols-2 lg:hidden">
+                {products.map(p => (
+                  <li key={p.id} className="rounded-xl border bg-card p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{p.name}</p>
+                        {p.supplier && <p className="truncate text-xs text-muted-foreground">{p.supplier}</p>}
+                      </div>
+                      {p.isLowStock && (
+                        <Badge className="shrink-0 gap-1 bg-amber-100 text-xs text-amber-800 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-300">
+                          <AlertTriangle className="h-3 w-3" aria-hidden="true" />{t("supplements.product.lowStock")}
+                        </Badge>
+                      )}
+                    </div>
+                    <dl className="mt-3 grid grid-cols-3 gap-2 text-sm">
+                      <div><dt className="text-xs text-muted-foreground">{t("supplements.product.stock")}</dt><dd className={cn("font-medium tabular-nums", p.isLowStock && "text-amber-700 dark:text-amber-400")}>{p.quantity}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">{t("supplements.product.sold")}</dt><dd className="tabular-nums">{p.qtySold}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">{t("supplements.product.profitUnit")}</dt><dd className={cn("font-medium tabular-nums", profitTone(p.profitPerUnit))}>{p.profitPerUnit >= 0 ? "+" : ""}{fmtAmt(p.profitPerUnit, "USD")}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">{t("supplements.product.cost")}</dt><dd className="tabular-nums">{fmtAmt(p.costPrice, p.currency)}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">{t("supplements.product.selling")}</dt><dd className="tabular-nums">{fmtAmt(p.sellingPrice, p.currency)}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">{t("supplements.product.totalProfit")}</dt><dd className={cn("font-bold tabular-nums", profitTone(p.totalProfit))}>{p.totalProfit >= 0 ? "+" : ""}{fmtAmt(p.totalProfit, "USD")}</dd></div>
+                    </dl>
+                  </li>
+                ))}
+                <li className="flex items-center justify-between rounded-xl border bg-muted/50 px-4 py-3 text-sm md:col-span-2">
+                  <span className="font-semibold">{t("supplements.product.totalProfit")}</span>
+                  <span className={cn("font-bold tabular-nums", profitTone(totalProfit))}>{fmtAmt(totalProfit, "USD")}</span>
+                </li>
+              </ul>
+
+              <div className="hidden overflow-hidden rounded-xl border lg:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th scope="col" className={cn(th, "text-start")}>{t("supplements.product.name")}</th>
+                      <th scope="col" className={cn(th, "text-end")}>{t("supplements.product.stock")}</th>
+                      <th scope="col" className={cn(th, "text-end")}>{t("supplements.product.sold")}</th>
+                      <th scope="col" className={cn(th, "text-end")}>{t("supplements.product.cost")}</th>
+                      <th scope="col" className={cn(th, "text-end")}>{t("supplements.product.selling")}</th>
+                      <th scope="col" className={cn(th, "text-end")}>{t("supplements.product.profitUnit")}</th>
+                      <th scope="col" className={cn(th, "text-end")}>{t("supplements.product.totalProfit")}</th>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t bg-muted/50">
-                    <td className="px-4 py-3 font-semibold text-xs" colSpan={6}>Total Profit</td>
-                    <td className={`px-4 py-3 text-right font-bold ${products.reduce((s, p) => s + p.totalProfit, 0) >= 0 ? "text-green-600" : "text-red-500"}`}>
-                      {fmtAmt(products.reduce((s, p) => s + p.totalProfit, 0), "USD")}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y">
+                    {products.map(p => (
+                      <tr key={p.id} className="transition-colors hover:bg-muted/30">
+                        <td className="px-4 py-3">
+                          <div className="font-medium">{p.name}</div>
+                          {p.supplier && <div className="text-xs text-muted-foreground">{p.supplier}</div>}
+                          {p.isLowStock && (
+                            <Badge className="mt-0.5 gap-1 bg-amber-100 text-xs text-amber-800 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-300">
+                              <AlertTriangle className="h-3 w-3" aria-hidden="true" />{t("supplements.product.lowStock")}
+                            </Badge>
+                          )}
+                        </td>
+                        <td className={cn("px-4 py-3 text-end font-medium tabular-nums", p.isLowStock && "text-amber-700 dark:text-amber-400")}>{p.quantity}</td>
+                        <td className="px-4 py-3 text-end tabular-nums text-muted-foreground">{p.qtySold}</td>
+                        <td className="px-4 py-3 text-end tabular-nums text-muted-foreground">{fmtAmt(p.costPrice, p.currency)}</td>
+                        <td className="px-4 py-3 text-end tabular-nums">{fmtAmt(p.sellingPrice, p.currency)}</td>
+                        <td className={cn("px-4 py-3 text-end font-medium tabular-nums", profitTone(p.profitPerUnit))}>
+                          {p.profitPerUnit >= 0 ? "+" : ""}{fmtAmt(p.profitPerUnit, "USD")}
+                        </td>
+                        <td className={cn("px-4 py-3 text-end font-bold tabular-nums", profitTone(p.totalProfit))}>
+                          {p.totalProfit >= 0 ? "+" : ""}{fmtAmt(p.totalProfit, "USD")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t bg-muted/50">
+                      <td className="px-4 py-3 text-sm font-semibold" colSpan={6}>{t("supplements.product.totalProfit")}</td>
+                      <td className={cn("px-4 py-3 text-end font-bold tabular-nums", profitTone(totalProfit))}>{fmtAmt(totalProfit, "USD")}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
           )}
         </TabsContent>
       </Tabs>
 
-      {/* Add Dialog */}
       <CreditFormDialog
+        key={addOpen ? "add-open" : "add-closed"}
         open={addOpen}
         title={t("supplements.addCredit")}
         onClose={() => setAddOpen(false)}
@@ -657,7 +685,6 @@ export default function Supplements() {
         }}
       />
 
-      {/* Edit Dialog */}
       {editCredit && (
         <CreditFormDialog
           open
@@ -687,7 +714,6 @@ export default function Supplements() {
         />
       )}
 
-      {/* Delete confirm */}
       <AlertDialog open={!!deleteTarget} onOpenChange={v => !v && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -695,15 +721,14 @@ export default function Supplements() {
             <AlertDialogDescription>{t("supplements.deleteCreditConfirm")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t("common.cancel") || "Cancel"}</AlertDialogCancel>
-            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => deleteTarget && deleteMut.mutate(deleteTarget.id)}>
-              {t("common.delete") || "Delete"}
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 text-white hover:bg-red-700" onClick={() => deleteTarget && deleteMut.mutate(deleteTarget.id)}>
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Pay Dialog */}
       {payTarget && (
         <PayDialog
           open

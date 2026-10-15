@@ -31,7 +31,7 @@ export function PageHeader({
       <div className="flex min-w-0 items-start gap-3 sm:items-center">
         {Icon && (
           <div className={cn("p-2 rounded-xl shrink-0", iconClass)}>
-            <Icon className="w-5 h-5" />
+            <Icon className="w-5 h-5" aria-hidden="true" />
           </div>
         )}
         <div className="min-w-0">
