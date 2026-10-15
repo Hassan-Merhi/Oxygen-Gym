@@ -811,6 +811,25 @@ const en: Translations = {
   "notif.priority.high": "High",
   "notif.priority.medium": "Medium",
   "notif.priority.low": "Low",
+
+  "nav.mainNavigation": "Main navigation",
+  "notFound.title": "Page not found",
+  "notFound.description": "The page you are looking for does not exist or has been moved.",
+  "notFound.back": "Back to dashboard",
+  "common.filters": "Filters",
+  "common.saving": "Saving…",
+  "common.currency": "Currency",
+  "common.pageOf": "Page {page} of {total}",
+  "common.moreActions": "More actions",
+  "notif.filter.readLabel": "Read status",
+  "notif.filter.typeLabel": "Notification type",
+  "notif.filter.allTypes": "All types",
+  "app.noAccessTitle": "No pages accessible",
+  "app.noAccessDesc": "Your account doesn't have access to any pages. Contact your administrator to enable permissions.",
+  "app.signOut": "Sign out",
+  "staff.deleteConfirmTitle": "Delete this staff member?",
+  "staff.deleteConfirmDesc": "This permanently removes the staff member and their access. This cannot be undone.",
+  "perm.approveCorrections": "Approve corrections & voids",
 };
 
 const fr: Translations = {
@@ -1616,6 +1635,25 @@ const fr: Translations = {
   "notif.priority.high": "Élevée",
   "notif.priority.medium": "Moyenne",
   "notif.priority.low": "Faible",
+
+  "nav.mainNavigation": "Navigation principale",
+  "notFound.title": "Page introuvable",
+  "notFound.description": "La page que vous cherchez n'existe pas ou a été déplacée.",
+  "notFound.back": "Retour au tableau de bord",
+  "common.filters": "Filtres",
+  "common.saving": "Enregistrement…",
+  "common.currency": "Devise",
+  "common.pageOf": "Page {page} sur {total}",
+  "common.moreActions": "Plus d'actions",
+  "notif.filter.readLabel": "Statut de lecture",
+  "notif.filter.typeLabel": "Type de notification",
+  "notif.filter.allTypes": "Tous les types",
+  "app.noAccessTitle": "Aucune page accessible",
+  "app.noAccessDesc": "Votre compte n'a accès à aucune page. Contactez votre administrateur pour activer les autorisations.",
+  "app.signOut": "Se déconnecter",
+  "staff.deleteConfirmTitle": "Supprimer ce membre du personnel ?",
+  "staff.deleteConfirmDesc": "Cette action supprime définitivement le membre du personnel et son accès. Elle est irréversible.",
+  "perm.approveCorrections": "Approuver corrections et annulations",
 };
 
 const ar: Translations = {
@@ -2421,6 +2459,25 @@ const ar: Translations = {
   "notif.priority.high": "عالية",
   "notif.priority.medium": "متوسطة",
   "notif.priority.low": "منخفضة",
+
+  "nav.mainNavigation": "التنقل الرئيسي",
+  "notFound.title": "الصفحة غير موجودة",
+  "notFound.description": "الصفحة التي تبحث عنها غير موجودة أو تم نقلها.",
+  "notFound.back": "العودة إلى لوحة التحكم",
+  "common.filters": "عوامل التصفية",
+  "common.saving": "جارٍ الحفظ…",
+  "common.currency": "العملة",
+  "common.pageOf": "صفحة {page} من {total}",
+  "common.moreActions": "المزيد من الإجراءات",
+  "notif.filter.readLabel": "حالة القراءة",
+  "notif.filter.typeLabel": "نوع الإشعار",
+  "notif.filter.allTypes": "كل الأنواع",
+  "app.noAccessTitle": "لا توجد صفحات متاحة",
+  "app.noAccessDesc": "لا يملك حسابك صلاحية الوصول إلى أي صفحة. تواصل مع المسؤول لتفعيل الصلاحيات.",
+  "app.signOut": "تسجيل الخروج",
+  "staff.deleteConfirmTitle": "حذف هذا الموظف؟",
+  "staff.deleteConfirmDesc": "سيؤدي هذا إلى حذف الموظف وصلاحية دخوله نهائياً. لا يمكن التراجع عن ذلك.",
+  "perm.approveCorrections": "اعتماد التصحيحات والإلغاءات",
 };
 
 const dictionaries: Record<Language, Translations> = { en, fr, ar };
