@@ -1,7 +1,6 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
-import "./mobile-phase3.css";
 import { setBaseUrl } from "@workspace/api-client-react";
 import { AUTH_TOKEN_KEY, clientEnv } from "@/config/env";
 
