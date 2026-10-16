@@ -14,5 +14,6 @@ export const GetProfitLossPeriod = {
   month: 'month',
   last_month: 'last_month',
   year: 'year',
+  all: 'all',
   custom: 'custom',
 } as const;

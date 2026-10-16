@@ -1223,42 +1223,30 @@ paths:
     get:
       operationId: listCurrentCashMovements
       tags: [ledger]
-      summary: List current cash movements revalued at the live exchange rate
+      summary: Cash Book for a money account with opening and running balances per currency
+      parameters:
+        - name: account
+          in: query
+          schema: { type: string }
+        - name: dateFrom
+          in: query
+          schema: { type: string }
+        - name: dateTo
+          in: query
+          schema: { type: string }
       responses:
         "200":
-          description: Current cash movements
+          description: Cash book
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  exchangeRate: { type: number }
-                  items:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        sourceType: { type: string }
-                        sourceId: { type: integer, nullable: true }
-                        sourceNumber: { type: string, nullable: true }
-                        date: { type: string, format: date-time }
-                        direction: { type: string, enum: [in, out] }
-                        category: { type: string }
-                        amount: { type: number }
-                        currency: { type: string }
-                        exchangeRate: { type: number }
-                        amountUsd: { type: number }
-                        amountCdf: { type: number }
-                        description: { type: string }
-                        party: { type: string }
-                      required: [sourceType, sourceId, sourceNumber, date, direction, category, amount, currency, exchangeRate, amountUsd, amountCdf, description, party]
-                required: [exchangeRate, items]
+                $ref: "#/components/schemas/CashBook"
 
   /ledger/opening-balance:
     post:
       operationId: setOpeningBalance
       tags: [ledger]
-      summary: Set a cash opening balance (inserts an adjustment entry, no data deleted)
+      summary: Record a physical cash count (differences post to Cash Over/Short; nothing is deleted)
       requestBody:
         required: true
         content:
@@ -1266,13 +1254,15 @@ paths:
             schema:
               type: object
               properties:
-                targetAmountUsd: { type: number }
+                targetAmountUsd: { type: number, description: "Deprecated alias of countedUsd" }
+                countedUsd: { type: number, nullable: true }
+                countedCdf: { type: number, nullable: true }
+                account: { type: string, nullable: true }
                 date: { type: string, nullable: true }
                 notes: { type: string, nullable: true }
-              required: [targetAmountUsd]
       responses:
         "200":
-          description: Balance set
+          description: Cash count recorded
           content:
             application/json:
               schema:
@@ -1280,13 +1270,49 @@ paths:
                 properties:
                   ok: { type: boolean }
                   skipped: { type: boolean }
+                  journalId: { type: string, nullable: true }
+                  adjustments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        currency: { type: string }
+                        expected: { type: number }
+                        counted: { type: number }
+                        difference: { type: number }
+                      required: [currency, expected, counted, difference]
                   balance:
-                    type: object
-                    properties:
-                      balanceUsd: { type: number }
-                      balanceCdf: { type: number }
-                    required: [balanceUsd, balanceCdf]
-                required: [ok, skipped, balance]
+                    $ref: "#/components/schemas/LedgerBalance"
+                required: [ok, skipped, adjustments, balance]
+
+  /ledger/health:
+    get:
+      operationId: getLedgerHealth
+      tags: [ledger]
+      summary: Reconcile the ledger with cash, stock and supplier balances
+      responses:
+        "200":
+          description: Reconciliation checks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  rate: { type: number }
+                  checks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key: { type: string }
+                        ok: { type: boolean }
+                        expected: { type: number }
+                        actual: { type: number }
+                        difference: { type: number }
+                        message: { type: string }
+                      required: [key, ok, expected, actual, difference, message]
+                required: [ok, rate, checks]
 
   /ledger:
     get:
@@ -2264,6 +2290,99 @@ paths:
               schema:
                 $ref: "#/components/schemas/ExpensePage"
 
+  /accounts/trial-balance:
+    get:
+      operationId: getTrialBalance
+      tags: [accounts]
+      summary: Trial balance as of a business date
+      parameters:
+        - name: asOf
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Trial balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrialBalance"
+
+  /accounts/balance-sheet:
+    get:
+      operationId: getBalanceSheet
+      tags: [accounts]
+      summary: Balance sheet as of a business date
+      parameters:
+        - name: asOf
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Balance sheet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BalanceSheet"
+
+  /accounts/periods:
+    get:
+      operationId: listClosedPeriods
+      tags: [accounts]
+      summary: Closed accounting periods
+      responses:
+        "200":
+          description: Closed periods
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lockedThrough: { type: string, nullable: true }
+                  lockedThroughDate: { type: string, nullable: true }
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ClosedPeriod" }
+                required: [lockedThrough, lockedThroughDate, items]
+
+  /accounts/periods/close:
+    post:
+      operationId: closePeriod
+      tags: [accounts]
+      summary: Close the books through a business date (revalue, close to Retained Earnings, lock)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                closedThroughDate: { type: string }
+                confirmation: { type: string }
+                countedUsd: { type: number, nullable: true }
+                countedCdf: { type: number, nullable: true }
+                notes: { type: string, nullable: true }
+              required: [closedThroughDate, confirmation]
+      responses:
+        "200":
+          description: Period closed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  closedThrough: { type: string }
+                  closedThroughDate: { type: string }
+                  journalId: { type: string }
+                  revaluationJournalId: { type: string, nullable: true }
+                  exchangeRate: { type: number }
+                  netIncome: { $ref: "#/components/schemas/AmountPair" }
+                  revenue: { $ref: "#/components/schemas/AmountPair" }
+                  expenses: { $ref: "#/components/schemas/AmountPair" }
+                  fxAdjustment: { $ref: "#/components/schemas/AmountPair" }
+                  periodId: { type: integer }
+                required: [ok, closedThrough, closedThroughDate, journalId, exchangeRate, netIncome, revenue, expenses, fxAdjustment, periodId]
+
   /accounts/profit-loss:
     get:
       operationId: getProfitLoss
@@ -2272,7 +2391,7 @@ paths:
       parameters:
         - name: period
           in: query
-          schema: { type: string, enum: [today, month, last_month, year, custom] }
+          schema: { type: string, enum: [today, month, last_month, year, all, custom] }
         - name: dateFrom
           in: query
           schema: { type: string }
@@ -2480,7 +2599,7 @@ paths:
           name: period
           schema:
             type: string
-            enum: [today, month, last_month, year, custom]
+            enum: [today, month, last_month, year, all, custom]
             default: month
         - in: query
           name: dateFrom
@@ -2497,9 +2616,9 @@ paths:
                 type: object
                 required: [period, dateFrom, dateTo, rate, currency, revenue, expenses, net, categories, months]
                 properties:
-                  period: { type: string, enum: [today, month, last_month, year, custom] }
-                  dateFrom: { type: string }
-                  dateTo: { type: string }
+                  period: { type: string, enum: [today, month, last_month, year, all, custom] }
+                  dateFrom: { type: string, nullable: true }
+                  dateTo: { type: string, nullable: true }
                   rate: { type: number }
                   currency:
                     type: object
@@ -2535,11 +2654,12 @@ paths:
                           type: array
                           items:
                             type: object
-                            required: [id, sourceType, sourceId, reference, date, dateKey, monthKey, kind, category, description, party, amountUsd, amountCdf]
+                            required: [id, journalId, sourceType, sourceId, reference, date, dateKey, monthKey, kind, category, description, party, amountUsd, amountCdf]
                             properties:
                               id: { type: string }
-                              sourceType: { type: string, enum: [payment, voucher, sale_revenue, sale_cogs] }
-                              sourceId: { type: integer }
+                              journalId: { type: string }
+                              sourceType: { type: string }
+                              sourceId: { type: integer, nullable: true }
                               reference: { type: string }
                               date: { type: string }
                               dateKey: { type: string }
@@ -2746,6 +2866,9 @@ components:
         manageInventory: { type: boolean }
         manageMembers: { type: boolean }
         managePlans: { type: boolean }
+        approveCorrections:
+          type: boolean
+          description: May edit or cancel posted payments and vouchers, void sales, cancel paid payroll and reverse supplier records
       required:
         - dashboard
         - members
@@ -3382,6 +3505,7 @@ components:
       type: object
       properties:
         id: { type: integer }
+        journalId: { type: string }
         entryDate: { type: string }
         sourceType: { type: string }
         sourceNumber: { type: string, nullable: true }
@@ -3414,9 +3538,145 @@ components:
     LedgerBalance:
       type: object
       properties:
-        balanceUsd: { type: number }
-        balanceCdf: { type: number }
+        balanceUsd: { type: number, description: "USD and CDF notes valued at today's rate, in USD" }
+        balanceCdf: { type: number, description: "USD and CDF notes valued at today's rate, in CDF" }
+        nativeUsd: { type: number, description: "USD notes expected in the drawer" }
+        nativeCdf: { type: number, description: "CDF notes expected in the drawer" }
+        bookUsd: { type: number, description: "Book value at the rates locked on each entry" }
+        rate: { type: number }
+        lockedThrough: { type: string, nullable: true }
       required: [balanceUsd, balanceCdf]
+
+    CashMovement:
+      type: object
+      properties:
+        entryId: { type: integer }
+        journalId: { type: string }
+        sourceType: { type: string }
+        sourceId: { type: integer, nullable: true }
+        sourceNumber: { type: string, nullable: true }
+        date: { type: string, format: date-time }
+        dateKey: { type: string }
+        direction: { type: string, enum: [in, out] }
+        category: { type: string }
+        amount: { type: number }
+        currency: { type: string }
+        exchangeRate: { type: number }
+        amountUsd: { type: number }
+        amountCdf: { type: number }
+        description: { type: string }
+        party: { type: string }
+        account: { type: string }
+        createdBy: { type: string, nullable: true }
+        balanceUsd: { type: number, description: "Running USD notes after this line" }
+        balanceCdf: { type: number, description: "Running CDF notes after this line" }
+      required: [entryId, journalId, sourceType, sourceId, sourceNumber, date, dateKey, direction, category, amount, currency, exchangeRate, amountUsd, amountCdf, description, party, account, balanceUsd, balanceCdf]
+
+    CashBook:
+      type: object
+      properties:
+        account: { type: string }
+        exchangeRate: { type: number }
+        opening:
+          $ref: "#/components/schemas/AmountPair"
+        closing:
+          $ref: "#/components/schemas/AmountPair"
+        totals:
+          type: object
+          properties:
+            inUsd: { type: number }
+            outUsd: { type: number }
+            inCdf: { type: number }
+            outCdf: { type: number }
+            inBookUsd: { type: number }
+            outBookUsd: { type: number }
+            netBookUsd: { type: number }
+          required: [inUsd, outUsd, inCdf, outCdf, inBookUsd, outBookUsd, netBookUsd]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CashMovement"
+      required: [account, exchangeRate, opening, closing, totals, items]
+
+    LedgerAmountRow:
+      type: object
+      properties:
+        accountId: { type: integer }
+        name: { type: string }
+        usd: { type: number }
+        cdf: { type: number }
+      required: [accountId, name, usd, cdf]
+
+    TrialBalance:
+      type: object
+      properties:
+        asOf: { type: string }
+        balanced: { type: boolean }
+        totals:
+          type: object
+          properties:
+            debitUsd: { type: number }
+            creditUsd: { type: number }
+            debitCdf: { type: number }
+            creditCdf: { type: number }
+          required: [debitUsd, creditUsd, debitCdf, creditCdf]
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              accountId: { type: integer }
+              name: { type: string }
+              type: { type: string }
+              normal: { type: string, enum: [debit, credit] }
+              debitUsd: { type: number }
+              creditUsd: { type: number }
+              debitCdf: { type: number }
+              creditCdf: { type: number }
+              balanceUsd: { type: number }
+              balanceCdf: { type: number }
+            required: [accountId, name, type, normal, debitUsd, creditUsd, debitCdf, creditCdf, balanceUsd, balanceCdf]
+      required: [asOf, balanced, totals, rows]
+
+    BalanceSheet:
+      type: object
+      properties:
+        asOf: { type: string }
+        balanced: { type: boolean }
+        assets:
+          type: array
+          items: { $ref: "#/components/schemas/LedgerAmountRow" }
+        liabilities:
+          type: array
+          items: { $ref: "#/components/schemas/LedgerAmountRow" }
+        equity:
+          type: array
+          items: { $ref: "#/components/schemas/LedgerAmountRow" }
+        currentEarnings:
+          $ref: "#/components/schemas/AmountPair"
+        totals:
+          type: object
+          properties:
+            assets: { $ref: "#/components/schemas/AmountPair" }
+            liabilities: { $ref: "#/components/schemas/AmountPair" }
+            equity: { $ref: "#/components/schemas/AmountPair" }
+            liabilitiesAndEquity: { $ref: "#/components/schemas/AmountPair" }
+          required: [assets, liabilities, equity, liabilitiesAndEquity]
+      required: [asOf, balanced, assets, liabilities, equity, currentEarnings, totals]
+
+    ClosedPeriod:
+      type: object
+      properties:
+        id: { type: integer }
+        closedThrough: { type: string }
+        closedThroughDate: { type: string }
+        journalId: { type: string, nullable: true }
+        netIncomeUsd: { type: number }
+        netIncomeCdf: { type: number }
+        notes: { type: string, nullable: true }
+        closedBy: { type: string, nullable: true }
+        closedAt: { type: string }
+      required: [id, closedThrough, closedThroughDate, netIncomeUsd, netIncomeCdf, closedAt]
 
     AccountCard:
       type: object
@@ -3432,6 +3692,8 @@ components:
       properties:
         balanceUsd: { type: number }
         balanceCdf: { type: number }
+        nativeUsd: { type: number }
+        nativeCdf: { type: number }
         todayInUsd: { type: number }
         todayOutUsd: { type: number }
         monthInUsd: { type: number }
@@ -3441,6 +3703,7 @@ components:
     AccountSummary:
       type: object
       properties:
+        rate: { type: number }
         cash:
           $ref: "#/components/schemas/CashCard"
         sales:
@@ -3454,20 +3717,19 @@ components:
     SalesEntry:
       type: object
       properties:
-        id: { type: integer }
-        paymentNumber: { type: string, nullable: true }
-        direction: { type: string }
-        category: { type: string }
-        memberName: { type: string, nullable: true }
-        linkedEntityName: { type: string, nullable: true }
-        planName: { type: string, nullable: true }
+        id: { type: string }
+        sourceType: { type: string }
+        sourceNumber: { type: string, nullable: true }
+        date: { type: string }
+        description: { type: string, nullable: true }
+        party: { type: string, nullable: true }
+        category: { type: string, nullable: true }
         amount: { type: number }
         currency: { type: string }
-        amountUsd: { type: number, nullable: true }
-        amountCdf: { type: number, nullable: true }
-        paymentDate: { type: string }
+        amountUsd: { type: number }
+        amountCdf: { type: number }
         createdBy: { type: string, nullable: true }
-      required: [id, direction, category, amount, currency, paymentDate]
+      required: [id, sourceType, date, amount, currency, amountUsd, amountCdf]
 
     SalesPage:
       type: object
@@ -3604,6 +3866,7 @@ components:
         sellingPrice: { type: number }
         currency: { type: string, enum: [USD, CDF] }
         status: { type: string }
+        adjustmentReason: { type: string, description: "Why quantity or cost changed; posted with the stock adjustment" }
 
     StockPurchaseRecord:
       type: object

@@ -9,6 +9,7 @@ import type { AccountCard } from './accountCard';
 import type { CashCard } from './cashCard';
 
 export interface AccountSummary {
+  rate?: number;
   cash: CashCard;
   sales: AccountCard;
   expenses: AccountCard;

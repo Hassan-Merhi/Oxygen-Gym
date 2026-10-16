@@ -20,4 +20,6 @@ export interface UpdateProductBody {
   sellingPrice?: number;
   currency?: UpdateProductBodyCurrency;
   status?: string;
+  /** Why quantity or cost changed; posted with the stock adjustment */
+  adjustmentReason?: string;
 }

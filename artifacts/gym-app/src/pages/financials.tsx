@@ -4,6 +4,7 @@ import { useI18n } from "@/lib/i18n";
 import { useFmtDate } from "@/lib/useFmtDate";
 import { useGetMe } from "@/hooks/use-me";
 import { PageHeader } from "@/components/ui/page-header";
+import { accountLabel, apiRequest, businessDateKey, errorMessage } from "@/lib/accounting-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -78,13 +79,6 @@ type FinancialReport = {
   months: FinancialMonth[];
 };
 
-const PERIOD_LABELS: Record<Period, string> = {
-  today: "Today",
-  month: "This Month",
-  last_month: "Last Month",
-  year: "This Year",
-  custom: "Custom Range",
-};
 
 export default function Financials() {
   const { t } = useI18n();
@@ -121,28 +115,18 @@ export default function Financials() {
     setLoading(true);
     setError(null);
 
-    fetch(`/api/financials?${params.toString()}`, {
-      credentials: "include",
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          const body = await response.json().catch(() => ({})) as { error?: string };
-          throw new Error(body.error || "Unable to load financials.");
-        }
-        return response.json() as Promise<FinancialReport>;
-      })
+    apiRequest<FinancialReport>(`/api/financials?${params.toString()}`, { signal: controller.signal })
       .then((body) => setReport(body))
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Unable to load financials.");
+        setError(errorMessage(err, t));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
 
     return () => controller.abort();
-  }, [canView, canViewProfit, period, dateFrom, dateTo]);
+  }, [canView, canViewProfit, period, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedRange = useMemo(() => {
     if (!report) return "";
@@ -166,7 +150,7 @@ export default function Financials() {
         <PageHeader
           icon={BarChart3}
           iconClass="bg-violet-500/10 text-violet-600"
-          title="Financials"
+          title={t("fin.title")}
         />
         <div className="rounded-xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">
           {t("acc.profitRestricted")}
@@ -180,36 +164,24 @@ export default function Financials() {
     setSharingWA(true);
     try {
       const lines = report.categories
-        .map((category) => `${category.category}: $${fmtUsd(category.usd)} / FC ${fmtFc(category.cdf)}`)
+        .map((category) => `${accountLabel(category.category, t)}: $${fmtUsd(category.usd)} / FC ${fmtFc(category.cdf)}`)
         .join("\n");
       const message = [
-        `📊 *Oxygen Gym Financials*`,
+        `📊 *${t("fin.title")}*`,
         selectedRange,
         "",
-        `Revenue: $${fmtUsd(report.revenue.usd)} / FC ${fmtFc(report.revenue.cdf)}`,
-        `Expenses: $${fmtUsd(report.expenses.usd)} / FC ${fmtFc(report.expenses.cdf)}`,
-        `Net: $${fmtUsd(report.net.usd)} / FC ${fmtFc(report.net.cdf)}`,
+        `${t("acc.pl.revenue")}: $${fmtUsd(report.revenue.usd)} / FC ${fmtFc(report.revenue.cdf)}`,
+        `${t("acc.pl.expenses")}: $${fmtUsd(report.expenses.usd)} / FC ${fmtFc(report.expenses.cdf)}`,
+        `${t("fin.net")}: $${fmtUsd(report.net.usd)} / FC ${fmtFc(report.net.cdf)}`,
         "",
-        "*Breakdown*",
+        `*${t("acc.pl.breakdown")}*`,
         lines,
       ].join("\n");
 
-      const response = await fetch("/api/whatsapp/broadcast", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error || "Unable to send WhatsApp report.");
-      }
-      toast({ title: "Financial report sent on WhatsApp ✓" });
+      await apiRequest("/api/whatsapp/broadcast", { method: "POST", body: JSON.stringify({ message }) });
+      toast({ title: t("fin.toast.sent") });
     } catch (err) {
-      toast({
-        title: err instanceof Error ? err.message : "Unable to send WhatsApp report.",
-        variant: "destructive",
-      });
+      toast({ title: errorMessage(err, t), variant: "destructive" });
     } finally {
       setSharingWA(false);
     }
@@ -220,21 +192,20 @@ export default function Financials() {
       <PageHeader
         icon={BarChart3}
         iconClass="bg-violet-500/10 text-violet-600"
-        title="Financials"
+        title={t("fin.title")}
+        subtitle={t("fin.subtitle")}
       />
 
       <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <p className="text-sm font-semibold">Financial period</p>
-            <p className="text-xs text-muted-foreground">
-              Revenue, expenses and profit update from the selected period only.
-            </p>
+            <p className="text-sm font-semibold">{t("fin.periodTitle")}</p>
+            <p className="text-xs text-muted-foreground">{t("fin.periodHint")}</p>
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Select value={period} onValueChange={(value) => setPeriod(value as Period)}>
-              <SelectTrigger className="w-full sm:w-[190px]">
+              <SelectTrigger className="h-10 max-md:h-11 pointer-coarse:h-11 w-full sm:w-[190px]" aria-label={t("acc.period")}>
                 <span className="flex items-center gap-2">
                   <CalendarRange className="h-4 w-4 text-muted-foreground" />
                   <SelectValue />
@@ -242,25 +213,25 @@ export default function Financials() {
               </SelectTrigger>
               <SelectContent>
                 {PERIODS.map((item) => (
-                  <SelectItem key={item} value={item}>{PERIOD_LABELS[item]}</SelectItem>
+                  <SelectItem key={item} value={item}>{t(`cb.preset.${item}`)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
             {period === "custom" && (
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                 <Input
                   type="date"
-                  aria-label="Start date"
-                  className="w-[150px]"
+                  aria-label={t("acc.dateFrom")}
+                  className="h-10 max-md:h-11 pointer-coarse:h-11 sm:w-[150px]"
                   value={dateFrom}
                   onChange={(event) => setDateFrom(event.target.value)}
                 />
-                <span className="text-xs text-muted-foreground">to</span>
+                <span className="text-xs text-muted-foreground">→</span>
                 <Input
                   type="date"
-                  aria-label="End date"
-                  className="w-[150px]"
+                  aria-label={t("acc.dateTo")}
+                  className="h-10 max-md:h-11 pointer-coarse:h-11 sm:w-[150px]"
                   value={dateTo}
                   min={dateFrom || undefined}
                   onChange={(event) => setDateTo(event.target.value)}
@@ -270,10 +241,9 @@ export default function Financials() {
 
             <Button
               variant="outline"
-              size="sm"
               onClick={shareOnWhatsApp}
               disabled={!report || sharingWA}
-              className="gap-2"
+              className="h-10 max-md:h-11 pointer-coarse:h-11 gap-2"
             >
               {sharingWA ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               WhatsApp
@@ -285,15 +255,15 @@ export default function Financials() {
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border/60 pt-3 text-xs text-muted-foreground">
             <span>{selectedRange}</span>
             <span className="hidden h-3 w-px bg-border sm:block" />
-            <span>Reporting currency: USD</span>
+            <span>{t("fin.reportingCurrency")}</span>
             <span className="hidden h-3 w-px bg-border sm:block" />
-            <span>Taux: 1 USD = FC {fmtFc(report.rate)}</span>
+            <span>1 USD = FC {fmtFc(report.rate)}</span>
           </div>
         )}
       </div>
 
       {period === "custom" && (!dateFrom || !dateTo) ? (
-        <EmptyState message="Choose a start and end date to view the report." />
+        <EmptyState message={t("fin.chooseDates")} />
       ) : loading ? (
         <div className="flex min-h-44 items-center justify-center rounded-xl border border-border bg-card">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -306,19 +276,19 @@ export default function Financials() {
         <>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <MetricCard
-              label="Revenue"
+              label={t("acc.pl.revenue")}
               icon={<TrendingUp className="h-4 w-4" />}
               value={report.revenue}
               tone="positive"
             />
             <MetricCard
-              label="Expenses"
+              label={t("acc.pl.expenses")}
               icon={<TrendingDown className="h-4 w-4" />}
               value={report.expenses}
               tone="negative"
             />
             <MetricCard
-              label={report.net.usd >= 0 ? "Net Profit" : "Net Loss"}
+              label={report.net.usd >= 0 ? t("fin.netProfit") : t("fin.netLoss")}
               icon={<WalletCards className="h-4 w-4" />}
               value={report.net}
               tone={report.net.usd >= 0 ? "positive" : "negative"}
@@ -330,13 +300,13 @@ export default function Financials() {
             <div className="border-b border-border px-4 py-4 sm:px-5">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <h2 className="font-semibold">Breakdown by category</h2>
+                  <h2 className="font-semibold">{t("acc.pl.breakdown")}</h2>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Every transaction below follows the period filter above. FC is converted from USD using the current taux.
+                    {t("fin.breakdownHint")}
                   </p>
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {report.months.reduce((sum, month) => sum + month.transactions.length, 0)} accounting lines
+                  {t("fin.lines").replace("{count}", String(report.months.reduce((sum, month) => sum + month.transactions.length, 0)))}
                 </span>
               </div>
             </div>
@@ -347,19 +317,19 @@ export default function Financials() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-muted/35 text-xs text-muted-foreground">
-                        <th className="px-5 py-2.5 text-left font-medium">Category</th>
-                        <th className="px-4 py-2.5 text-left font-medium">Type</th>
-                        <th className="px-4 py-2.5 text-right font-medium">USD</th>
-                        <th className="px-5 py-2.5 text-right font-medium">FC</th>
+                        <th scope="col" className="px-5 py-2.5 text-start font-medium">{t("acc.col.category")}</th>
+                        <th scope="col" className="px-4 py-2.5 text-start font-medium">{t("ab.type")}</th>
+                        <th scope="col" className="px-4 py-2.5 text-end font-medium">USD</th>
+                        <th scope="col" className="px-5 py-2.5 text-end font-medium">FC</th>
                       </tr>
                     </thead>
                     <tbody>
                       {report.categories.map((category) => (
                         <tr key={`${category.kind}-${category.category}`} className="border-t border-border/50 first:border-t-0">
-                          <td className="px-5 py-3 font-medium">{category.category}</td>
-                          <td className="px-4 py-3"><KindBadge kind={category.kind} /></td>
-                          <td className="px-4 py-3 text-right font-semibold tabular-nums">${fmtUsd(category.usd)}</td>
-                          <td className="px-5 py-3 text-right text-muted-foreground tabular-nums">FC {fmtFc(category.cdf)}</td>
+                          <td className="px-5 py-3 font-medium">{accountLabel(category.category, t)}</td>
+                          <td className="px-4 py-3"><KindBadge kind={category.kind} t={t} /></td>
+                          <td className="px-4 py-3 text-end font-semibold tabular-nums">${fmtUsd(category.usd)}</td>
+                          <td className="px-5 py-3 text-end text-muted-foreground tabular-nums">FC {fmtFc(category.cdf)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -370,10 +340,10 @@ export default function Financials() {
                   {report.categories.map((category) => (
                     <div key={`${category.kind}-${category.category}`} className="flex items-center justify-between gap-3 px-4 py-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{category.category}</p>
-                        <div className="mt-1"><KindBadge kind={category.kind} /></div>
+                        <p className="truncate text-sm font-medium">{accountLabel(category.category, t)}</p>
+                        <div className="mt-1"><KindBadge kind={category.kind} t={t} /></div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-end">
                         <p className="text-sm font-semibold tabular-nums">${fmtUsd(category.usd)}</p>
                         <p className="text-xs text-muted-foreground tabular-nums">FC {fmtFc(category.cdf)}</p>
                       </div>
@@ -382,18 +352,18 @@ export default function Financials() {
                 </div>
 
                 <div className="bg-muted/15 px-4 py-3 sm:px-5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Transactions by date</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t("fin.byDate")}</p>
                 </div>
 
                 <div className="divide-y divide-border">
                   {report.months.map((month) => (
-                    <MonthSection key={month.key} month={month} locale={locale} />
+                    <MonthSection key={month.key} month={month} locale={locale} t={t} />
                   ))}
                 </div>
               </>
             ) : (
               <div className="px-5 py-12 text-center text-sm text-muted-foreground">
-                No financial transactions were found for this period.
+                {t("fin.empty")}
               </div>
             )}
           </div>
@@ -439,7 +409,7 @@ function MetricCard({
   );
 }
 
-function MonthSection({ month, locale }: { month: FinancialMonth; locale: string }) {
+function MonthSection({ month, locale, t }: { month: FinancialMonth; locale: string; t: (key: string) => string }) {
   const dayGroups = useMemo(() => {
     const grouped = new Map<string, FinancialTransaction[]>();
     for (const transaction of month.transactions) {
@@ -455,29 +425,44 @@ function MonthSection({ month, locale }: { month: FinancialMonth; locale: string
       <div className="flex flex-col gap-3 bg-muted/25 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div>
           <p className="text-sm font-semibold">{month.label}</p>
-          <p className="text-xs text-muted-foreground">{month.transactions.length} accounting lines</p>
+          <p className="text-xs text-muted-foreground">{t("fin.lines").replace("{count}", String(month.transactions.length))}</p>
         </div>
-        <div className="grid grid-cols-3 gap-4 text-right text-xs sm:gap-6">
-          <MonthTotal label="Revenue" value={month.revenue} />
-          <MonthTotal label="Expenses" value={month.expenses} />
-          <MonthTotal label="Net" value={month.net} strong />
+        <div className="grid grid-cols-3 gap-4 text-end text-xs sm:gap-6">
+          <MonthTotal label={t("acc.pl.revenue")} value={month.revenue} />
+          <MonthTotal label={t("acc.pl.expenses")} value={month.expenses} />
+          <MonthTotal label={t("fin.net")} value={month.net} strong />
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-sm">
+      <ul className="divide-y divide-border/50 md:hidden">
+        {dayGroups.flatMap(([, transactions]) => transactions).map((transaction) => (
+          <li key={transaction.id} className="flex items-start justify-between gap-3 px-4 py-3 text-sm">
+            <div className="min-w-0">
+              <p className="truncate font-medium">{transaction.description || accountLabel(transaction.category, t)}</p>
+              <p className="truncate text-xs text-muted-foreground">{formatDateKey(transaction.dateKey, locale)} · {accountLabel(transaction.category, t)}{transaction.reference ? ` · ${transaction.reference}` : ""}</p>
+            </div>
+            <div className={`shrink-0 text-end tabular-nums ${transaction.kind === "expense" ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+              <p className="font-semibold">{transaction.kind === "expense" ? "−" : "+"}${fmtUsd(transaction.amountUsd)}</p>
+              <p className="text-xs">{transaction.kind === "expense" ? "−" : "+"}FC {fmtFc(transaction.amountCdf)}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full text-sm">
           <thead>
             <tr className="border-y border-border/60 bg-background text-xs text-muted-foreground">
-              <th className="w-[140px] px-5 py-2.5 text-left font-medium">Reference</th>
-              <th className="w-[165px] px-4 py-2.5 text-left font-medium">Category</th>
-              <th className="px-4 py-2.5 text-left font-medium">Transaction</th>
-              <th className="w-[130px] px-4 py-2.5 text-right font-medium">USD</th>
-              <th className="w-[155px] px-5 py-2.5 text-right font-medium">FC</th>
+              <th scope="col" className="w-[140px] px-5 py-2.5 text-start font-medium">{t("acc.col.number")}</th>
+              <th scope="col" className="w-[165px] px-4 py-2.5 text-start font-medium">{t("acc.col.category")}</th>
+              <th scope="col" className="px-4 py-2.5 text-start font-medium">{t("acc.col.description")}</th>
+              <th scope="col" className="w-[130px] px-4 py-2.5 text-end font-medium">USD</th>
+              <th scope="col" className="w-[155px] px-5 py-2.5 text-end font-medium">FC</th>
             </tr>
           </thead>
           <tbody>
             {dayGroups.map(([dateKey, transactions]) => (
-              <DayRows key={dateKey} dateKey={dateKey} transactions={transactions} locale={locale} />
+              <DayRows key={dateKey} dateKey={dateKey} transactions={transactions} locale={locale} t={t} />
             ))}
           </tbody>
         </table>
@@ -490,10 +475,12 @@ function DayRows({
   dateKey,
   transactions,
   locale,
+  t,
 }: {
   dateKey: string;
   transactions: FinancialTransaction[];
   locale: string;
+  t: (key: string) => string;
 }) {
   return (
     <>
@@ -511,8 +498,8 @@ function DayRows({
           <tr key={transaction.id} className="border-t border-border/40 hover:bg-muted/15">
             <td className="px-5 py-3 text-xs text-muted-foreground">{transaction.reference}</td>
             <td className="px-4 py-3">
-              <p className="font-medium">{transaction.category}</p>
-              <div className="mt-1"><KindBadge kind={transaction.kind} /></div>
+              <p className="font-medium">{accountLabel(transaction.category, t)}</p>
+              <div className="mt-1"><KindBadge kind={transaction.kind} t={t} /></div>
             </td>
             <td className="px-4 py-3">
               <p className="font-medium">{transaction.description || "—"}</p>
@@ -520,10 +507,10 @@ function DayRows({
                 <p className="mt-0.5 text-xs text-muted-foreground">{transaction.party}</p>
               )}
             </td>
-            <td className={`px-4 py-3 text-right font-semibold tabular-nums ${amountClass}`}>
+            <td className={`px-4 py-3 text-end font-semibold tabular-nums ${amountClass}`}>
               {sign}${fmtUsd(transaction.amountUsd)}
             </td>
-            <td className={`px-5 py-3 text-right tabular-nums ${amountClass}`}>
+            <td className={`px-5 py-3 text-end tabular-nums ${amountClass}`}>
               {sign}FC {fmtFc(transaction.amountCdf)}
             </td>
           </tr>
@@ -533,14 +520,14 @@ function DayRows({
   );
 }
 
-function KindBadge({ kind }: { kind: Kind }) {
+function KindBadge({ kind, t }: { kind: Kind; t: (key: string) => string }) {
   return (
-    <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+    <span className={`inline-flex rounded-md px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${
       kind === "revenue"
         ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
         : "bg-rose-500/10 text-rose-700 dark:text-rose-400"
     }`}>
-      {kind}
+      {t(kind === "revenue" ? "acc.pl.revenue" : "acc.pl.expenses")}
     </span>
   );
 }
@@ -548,9 +535,9 @@ function KindBadge({ kind }: { kind: Kind }) {
 function MonthTotal({ label, value, strong = false }: { label: string; value: Money; strong?: boolean }) {
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className={`${strong ? "font-bold" : "font-semibold"} tabular-nums`}>{formatSignedMoney(value.usd, "$", fmtUsd)}</p>
-      <p className="text-[10px] text-muted-foreground tabular-nums">{formatSignedMoney(value.cdf, "FC ", fmtFc)}</p>
+      <p className="text-xs text-muted-foreground tabular-nums">{formatSignedMoney(value.cdf, "FC ", fmtFc)}</p>
     </div>
   );
 }
@@ -564,9 +551,7 @@ function EmptyState({ message }: { message: string }) {
 }
 
 function toDateKey(iso: string): string {
-  const date = new Date(iso);
-  const local = new Date(date.getTime() + 2 * 60 * 60 * 1000);
-  return local.toISOString().slice(0, 10);
+  return businessDateKey(iso);
 }
 
 function formatDateKey(dateKey: string, locale: string): string {

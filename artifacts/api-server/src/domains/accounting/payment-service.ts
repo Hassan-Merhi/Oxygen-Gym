@@ -6,16 +6,15 @@ import {
   plansTable,
   salesTable,
   settingsTable,
-  vouchersTable,
 } from "@workspace/db/schema";
-import { and, asc, count, desc, eq, gte, ilike, inArray, lte, not, or, sum } from "drizzle-orm";
-import { appendLedgerEntry } from "../../lib/ledger";
-import { categoryAccountNames, postDoubleEntry, reverseEntries } from "../../lib/accounting";
+import { and, asc, count, desc, eq, gte, ilike, inArray, lte, not, or } from "drizzle-orm";
+import { getCashMovements, getCurrentBalance, summarizeMovements } from "../../lib/ledger";
+import { assertPeriodOpen, categoryAccountNames, newJournalId, postDoubleEntry, reverseEntries } from "../../lib/accounting";
 import { getNextNumber } from "../../lib/numbering";
 import { formatReceiptMessage, lookupPhoneOnWhatsApp, sendDirectMessage } from "../../lib/whatsapp";
 import { lubumbashiTodayEnd, lubumbashiTodayStart } from "../../lib/timezone";
 import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
-import { addMoney, fxRate, money, subtractMoney } from "../../shared/accounting/decimal";
+import { fxRate, money, subtractMoney } from "../../shared/accounting/decimal";
 import { withTransaction } from "../../shared/db/transaction";
 import { badRequest, notFound } from "../../shared/http/errors";
 
@@ -77,45 +76,52 @@ function assertCurrency(value: string): asserts value is "USD" | "CDF" {
   if (value !== "USD" && value !== "CDF") throw badRequest("currency must be USD or CDF");
 }
 
+/** Payments that belong to another document and must be corrected from it. */
+const DOCUMENT_LINKED = new Set(["sale", "payroll", "supplier_payment", "stock_purchase"]);
+
+function assertStandalone(payment: { linkedEntity: string | null; paymentNumber: string | null }, action: string) {
+  if (payment.linkedEntity && DOCUMENT_LINKED.has(payment.linkedEntity)) {
+    const screen = payment.linkedEntity === "sale" ? "Sales" : payment.linkedEntity === "payroll" ? "Payroll" : "Inventory";
+    throw badRequest(`Payment ${payment.paymentNumber ?? ""} belongs to a ${payment.linkedEntity.replace("_", " ")}. ${action} it from the ${screen} screen so stock, payroll and supplier balances stay correct.`, {
+      code: "LINKED_PAYMENT",
+      linkedEntity: payment.linkedEntity,
+    });
+  }
+}
+
+/** A payment may be dated in the past (backdated receipts) but never after today's business day. */
+export function assertNotFutureDated(date: Date | undefined, what = "A payment") {
+  if (date && date.getTime() > lubumbashiTodayEnd().getTime()) throw badRequest(`${what} cannot be dated in the future`);
+}
+
+/** Today's money in/out and the drawer balance, read from the ledger (Cash account). */
 export async function getPaymentSummary() {
-  const [settings] = await db.select({ rate: settingsTable.usdToCdfRate, currency: settingsTable.defaultCurrency }).from(settingsTable);
-  const rate = Number(settings?.rate ?? 2800);
-  const currency = settings?.currency ?? "USD";
-  const todayStart = lubumbashiTodayStart();
-  const todayEnd = lubumbashiTodayEnd();
-
-  const [payTodayIn, payTodayOut, payAllIn, payAllOut, vchTodayIn, vchTodayOut, vchAllIn, vchAllOut] = await Promise.all([
-    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) }).from(paymentsTable).where(and(eq(paymentsTable.direction, "in"), eq(paymentsTable.status, "completed"), gte(paymentsTable.paymentDate, todayStart), lte(paymentsTable.paymentDate, todayEnd))),
-    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) }).from(paymentsTable).where(and(eq(paymentsTable.direction, "out"), eq(paymentsTable.status, "completed"), gte(paymentsTable.paymentDate, todayStart), lte(paymentsTable.paymentDate, todayEnd))),
-    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) }).from(paymentsTable).where(and(eq(paymentsTable.direction, "in"), eq(paymentsTable.status, "completed"))),
-    db.select({ usd: sum(paymentsTable.amountUsd), cdf: sum(paymentsTable.amountCdf) }).from(paymentsTable).where(and(eq(paymentsTable.direction, "out"), eq(paymentsTable.status, "completed"))),
-    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) }).from(vouchersTable).where(and(eq(vouchersTable.direction, "in"), eq(vouchersTable.status, "recorded"), gte(vouchersTable.voucherDate, todayStart), lte(vouchersTable.voucherDate, todayEnd))),
-    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) }).from(vouchersTable).where(and(eq(vouchersTable.direction, "out"), eq(vouchersTable.status, "recorded"), gte(vouchersTable.voucherDate, todayStart), lte(vouchersTable.voucherDate, todayEnd))),
-    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) }).from(vouchersTable).where(and(eq(vouchersTable.direction, "in"), eq(vouchersTable.status, "recorded"))),
-    db.select({ usd: sum(vouchersTable.amountUsd), cdf: sum(vouchersTable.amountCdf) }).from(vouchersTable).where(and(eq(vouchersTable.direction, "out"), eq(vouchersTable.status, "recorded"))),
+  const [settings] = await db.select({ currency: settingsTable.defaultCurrency }).from(settingsTable);
+  const [today, balance] = await Promise.all([
+    getCashMovements({ dateFrom: lubumbashiTodayStart(), dateTo: lubumbashiTodayEnd() }),
+    getCurrentBalance(),
   ]);
-
-  const n = (value: unknown) => money(Number(value ?? 0));
-  const cashInToday = addMoney(n(payTodayIn[0]?.usd), n(vchTodayIn[0]?.usd));
-  const cashOutToday = addMoney(n(payTodayOut[0]?.usd), n(vchTodayOut[0]?.usd));
-  const cashInTodayCdf = addMoney(n(payTodayIn[0]?.cdf), n(vchTodayIn[0]?.cdf));
-  const cashOutTodayCdf = addMoney(n(payTodayOut[0]?.cdf), n(vchTodayOut[0]?.cdf));
-  const totalIn = addMoney(n(payAllIn[0]?.usd), n(vchAllIn[0]?.usd));
-  const totalOut = addMoney(n(payAllOut[0]?.usd), n(vchAllOut[0]?.usd));
-  const totalInCdf = addMoney(n(payAllIn[0]?.cdf), n(vchAllIn[0]?.cdf));
-  const totalOutCdf = addMoney(n(payAllOut[0]?.cdf), n(vchAllOut[0]?.cdf));
+  const summary = summarizeMovements(today);
+  const inCdf = money(today.filter((movement) => movement.direction === "in").reduce((total, movement) => total + movement.amountCdf, 0));
+  const outCdf = money(today.filter((movement) => movement.direction === "out").reduce((total, movement) => total + movement.amountCdf, 0));
 
   return {
-    cashInToday,
-    cashOutToday,
-    cashInTodayCdf,
-    cashOutTodayCdf,
-    netCashToday: subtractMoney(cashInToday, cashOutToday),
-    netCashTodayCdf: subtractMoney(cashInTodayCdf, cashOutTodayCdf),
-    balanceUsd: subtractMoney(totalIn, totalOut),
-    balanceCdf: subtractMoney(totalInCdf, totalOutCdf),
-    currency,
-    rate,
+    cashInToday: summary.inBookUsd,
+    cashOutToday: summary.outBookUsd,
+    cashInTodayCdf: inCdf,
+    cashOutTodayCdf: outCdf,
+    netCashToday: summary.netBookUsd,
+    netCashTodayCdf: subtractMoney(inCdf, outCdf),
+    nativeInUsd: summary.inUsd,
+    nativeOutUsd: summary.outUsd,
+    nativeInCdf: summary.inCdf,
+    nativeOutCdf: summary.outCdf,
+    balanceUsd: balance.balanceUsd,
+    balanceCdf: balance.balanceCdf,
+    nativeUsd: balance.nativeUsd,
+    nativeCdf: balance.nativeCdf,
+    currency: settings?.currency ?? "USD",
+    rate: balance.rate,
   };
 }
 
@@ -171,8 +177,10 @@ export async function createPayment(input: CreatePaymentInput, actor: string) {
   if ((input.discount ?? 0) < 0) throw badRequest("Discount cannot be negative");
   const currency = input.currency.toUpperCase();
   assertCurrency(currency);
+  assertNotFutureDated(input.paymentDate);
 
   return withTransaction(async (tx) => {
+    await assertPeriodOpen(tx, input.paymentDate ?? new Date(), "This payment");
     const rate = fxRate(input.exchangeRate ?? await getExchangeRate(tx));
     const amount = money(input.amount);
     const discount = money(input.discount ?? 0);
@@ -205,18 +213,6 @@ export async function createPayment(input: CreatePaymentInput, actor: string) {
 
     if (amount > 0) {
       const description = `${input.category} — ${input.linkedEntityName ?? input.memberName ?? ""}`;
-      await appendLedgerEntry({
-        entryDate: input.paymentDate,
-        sourceType: "payment",
-        sourceNumber: paymentNumber,
-        sourceId: payment.id,
-        direction: input.direction,
-        amount,
-        currency,
-        exchangeRate: rate,
-        description,
-        createdBy: actor,
-      }, tx);
       const names = categoryAccountNames(input.category, input.direction, input.account ?? "cash");
       await postDoubleEntry({
         entryDate: input.paymentDate,
@@ -254,6 +250,7 @@ export async function createPayment(input: CreatePaymentInput, actor: string) {
             amount: commissionAmount,
             currency,
             status: "pending",
+            paymentId: payment!.id,
             note: `Payment ${paymentNumber}`,
           });
         }
@@ -272,6 +269,9 @@ export async function updatePayment(id: number, input: UpdatePaymentInput, actor
   return withTransaction(async (tx) => {
     const [existing] = await tx.select().from(paymentsTable).where(eq(paymentsTable.id, id)).for("update");
     if (!existing) throw notFound("Payment not found");
+    if (existing.status === "cancelled") throw badRequest("A cancelled payment cannot be edited. Record a new payment instead.");
+    assertStandalone(existing, "Correct");
+    assertNotFutureDated(input.paymentDate);
 
     const storedRate = Number(existing.exchangeRate ?? 0);
     if (input.exchangeRate !== undefined && storedRate > 0 && fxRate(input.exchangeRate) !== fxRate(storedRate)) {
@@ -317,38 +317,21 @@ export async function updatePayment(id: number, input: UpdatePaymentInput, actor
       || (input.paymentDate !== undefined && input.paymentDate.getTime() !== existing.paymentDate.getTime());
 
     if (financialsChanged) {
-      if (money(existing.amount ?? 0) > 0) {
-        await appendLedgerEntry({
-          sourceType: "payment_correction",
-          sourceNumber: existing.paymentNumber ?? undefined,
-          sourceId: id,
-          direction: oldDirection === "in" ? "out" : "in",
-          amount: existing.amount ?? 0,
-          currency: existing.currency,
-          exchangeRate: rate,
-          description: `Correction: reversed payment ${existing.paymentNumber ?? id}`,
-          createdBy: actor,
-        }, tx);
-      }
-      if (amount > 0) {
-        await appendLedgerEntry({
-          sourceType: "payment_correction",
-          sourceNumber: existing.paymentNumber ?? undefined,
-          sourceId: id,
-          direction,
-          amount,
-          currency,
-          exchangeRate: rate,
-          description: `Correction: updated payment ${existing.paymentNumber ?? id}`,
-          createdBy: actor,
-          entryDate: input.paymentDate ?? existing.paymentDate,
-        }, tx);
-      }
-
-      await reverseEntries("payment", id, "payment_correction", actor, tx);
+      // The original posting is reversed and the corrected one posted together,
+      // both inside the open period, so every report agrees on the new figure.
+      await assertPeriodOpen(tx, existing.paymentDate, "The original payment");
+      await assertPeriodOpen(tx, input.paymentDate ?? existing.paymentDate, "The corrected payment");
+      const journalId = newJournalId();
+      await reverseEntries("payment", id, "payment_correction", actor, tx, {
+        journalId,
+        // Restate the original day; the corrected posting lands on its (new) date.
+        entryDate: existing.paymentDate,
+        description: `Correction: reversed payment ${existing.paymentNumber ?? id}`,
+      });
       if (amount > 0) {
         const names = categoryAccountNames(category || "other", direction, account);
         await postDoubleEntry({
+          journalId,
           sourceType: "payment_correction",
           sourceId: id,
           sourceNumber: existing.paymentNumber ?? undefined,
@@ -373,83 +356,25 @@ export async function cancelPayment(id: number, actor: string) {
     const [existing] = await tx.select().from(paymentsTable).where(eq(paymentsTable.id, id)).for("update");
     if (!existing) throw notFound("Payment not found");
     if (existing.status === "cancelled") return existing;
+    assertStandalone(existing, "Cancel");
 
     const [payment] = await tx.update(paymentsTable).set({ status: "cancelled" }).where(eq(paymentsTable.id, id)).returning();
     if (existing.status === "completed" && money(existing.amount ?? 0) > 0) {
-      const storedRate = Number(existing.exchangeRate ?? 0);
-      const rate = fxRate(storedRate > 0 ? storedRate : await getExchangeRate(tx));
-      const direction = existing.direction as "in" | "out";
-      await appendLedgerEntry({
-        sourceType: "payment_reversal",
-        sourceNumber: existing.paymentNumber ?? undefined,
-        sourceId: id,
-        direction: direction === "in" ? "out" : "in",
-        amount: existing.amount ?? 0,
-        currency: existing.currency,
-        exchangeRate: rate,
+      await reverseEntries("payment", id, "payment_reversal", actor, tx, {
         description: `Cancelled payment ${existing.paymentNumber ?? id}`,
-        createdBy: actor,
-      }, tx);
-      await reverseEntries("payment", id, "payment_reversal", actor, tx);
+      });
     }
+
+    // Commissions earned by this payment and not yet paid out go with it.
+    await tx.update(commissionsTable)
+      .set({ status: "cancelled" })
+      .where(and(eq(commissionsTable.paymentId, id), eq(commissionsTable.status, "pending")));
 
     if (existing.category === "membership" && existing.memberId) {
       await tx.update(membersTable).set({ status: "archived", deletedAt: new Date() }).where(eq(membersTable.id, existing.memberId));
     }
     return payment;
   });
-}
-
-export async function cashCleanup(dryRun: boolean) {
-  const memberVouchers = await db.select({
-    id: vouchersTable.id,
-    name: vouchersTable.linkedEntityName,
-    amountUsd: vouchersTable.amountUsd,
-    amountCdf: vouchersTable.amountCdf,
-    voucherDate: vouchersTable.voucherDate,
-  }).from(vouchersTable).where(and(
-    eq(vouchersTable.linkedEntity, "member"),
-    eq(vouchersTable.voucherType, "cash_receipt"),
-    eq(vouchersTable.status, "recorded"),
-    inArray(
-      vouchersTable.linkedEntityId,
-      db.select({ id: paymentsTable.memberId }).from(paymentsTable).where(and(
-        eq(paymentsTable.type, "membership"),
-        eq(paymentsTable.status, "completed"),
-        not(eq(paymentsTable.memberId, 0)),
-      )) as never,
-    ),
-  ));
-
-  const salePayments = await db.select({
-    id: paymentsTable.id,
-    notes: paymentsTable.notes,
-    amountUsd: paymentsTable.amountUsd,
-    amountCdf: paymentsTable.amountCdf,
-    paymentDate: paymentsTable.paymentDate,
-  }).from(paymentsTable).where(and(
-    eq(paymentsTable.category, "product_sale"),
-    eq(paymentsTable.status, "completed"),
-  ));
-
-  if (!dryRun) {
-    await withTransaction(async (tx) => {
-      if (memberVouchers.length > 0) {
-        await tx.update(vouchersTable).set({ status: "cancelled" }).where(inArray(vouchersTable.id, memberVouchers.map((voucher) => voucher.id)));
-      }
-      if (salePayments.length > 0) {
-        await tx.update(paymentsTable).set({ status: "cancelled" }).where(inArray(paymentsTable.id, salePayments.map((payment) => payment.id)));
-      }
-    });
-  }
-
-  return {
-    dry_run: dryRun,
-    member_vouchers_affected: memberVouchers.length,
-    sale_payments_affected: salePayments.length,
-    member_vouchers_preview: memberVouchers.slice(0, 20),
-    sale_payments_preview: salePayments.slice(0, 20),
-  };
 }
 
 export async function sendPaymentReceipt(paymentId: number) {

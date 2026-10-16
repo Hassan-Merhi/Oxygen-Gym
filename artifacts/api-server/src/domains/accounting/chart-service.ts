@@ -1,34 +1,15 @@
 import { db } from "@workspace/db";
 import { chartOfAccountsTable } from "@workspace/db/schema";
 import { asc, eq, ilike } from "drizzle-orm";
-import { ACCOUNTS, normalizeName, type AccountType } from "../../lib/accounting";
+import { sql } from "drizzle-orm";
+import { ACCOUNTS, canonicalTypeFor, normalizeName, type AccountType } from "../../lib/accounting";
 import { badRequest, conflict, notFound } from "../../shared/http/errors";
 
 const VALID_TYPES = new Set<AccountType>(["asset", "liability", "income", "expense", "equity"]);
-const CANONICAL_TYPES = new Map<string, AccountType>([
-  [ACCOUNTS.CASH, "asset"],
-  [ACCOUNTS.BANK, "asset"],
-  [ACCOUNTS.MOBILE_MONEY, "asset"],
-  [ACCOUNTS.PETTY_CASH, "asset"],
-  [ACCOUNTS.INVENTORY, "asset"],
-  [ACCOUNTS.SUPPLIER_PAYABLES, "liability"],
-  [ACCOUNTS.MEMBERSHIP_REVENUE, "income"],
-  [ACCOUNTS.SALES_REVENUE, "income"],
-  [ACCOUNTS.OTHER_INCOME, "income"],
-  [ACCOUNTS.COGS, "expense"],
-  [ACCOUNTS.PAYROLL_EXPENSE, "expense"],
-  [ACCOUNTS.GENERAL_EXPENSE, "expense"],
-  [ACCOUNTS.OTHER_EXPENSE, "expense"],
-]);
-
-// Keep the detailed Phase-2 accounts available internally for correct double-entry
-// posting, but do not expose those implementation accounts in the simple gym UI.
-// The Accounts page historically had these three user-facing ledgers.
-const USER_FACING_CANONICAL_ACCOUNTS = new Set<string>([
-  ACCOUNTS.CASH,
-  ACCOUNTS.GENERAL_EXPENSE,
-  ACCOUNTS.SALES_REVENUE,
-]);
+/** System accounts the ledger posts to. They are always listed, never renamed or retyped. */
+const CANONICAL_TYPES = new Map<string, AccountType>(
+  Object.values(ACCOUNTS).map((name) => [name, canonicalTypeFor(name)!] as const),
+);
 
 function accountType(value: string): AccountType {
   const normalized = value.toLowerCase() as AccountType;
@@ -40,17 +21,12 @@ export function canonicalAccountType(name: string): AccountType | undefined {
   return CANONICAL_TYPES.get(normalizeName(name));
 }
 
-function isUserFacingAccount(name: string) {
-  const normalized = normalizeName(name);
-  return !CANONICAL_TYPES.has(normalized) || USER_FACING_CANONICAL_ACCOUNTS.has(normalized);
-}
-
 /**
  * Production databases can contain canonical accounts created before the type
  * guard existed (for example Cash persisted as income). Repair those rows on
- * read so every downstream accounting consumer agrees. Detailed canonical
- * accounts remain internal; only Cash, General Expense, Sales Revenue, and any
- * explicitly user-created custom accounts are returned to the Accounts UI.
+ * read so every downstream accounting consumer agrees. Every account is listed
+ * with its book balance in its normal direction, so Inventory, Supplier
+ * Payables and the equity accounts are visible instead of hidden.
  */
 export async function listChartAccounts() {
   const rows = await db.select().from(chartOfAccountsTable).orderBy(asc(chartOfAccountsTable.type), asc(chartOfAccountsTable.name));
@@ -66,12 +42,27 @@ export async function listChartAccounts() {
   });
   if (repairs.length > 0) await Promise.all(repairs);
 
-  return rows
-    .map((row) => {
-      const requiredType = canonicalAccountType(row.name);
-      return requiredType ? { ...row, type: requiredType, isActive: true } : row;
-    })
-    .filter((row) => isUserFacingAccount(row.name));
+  const balances = await db.execute(sql`
+    SELECT account_id, SUM(debit_usd - credit_usd) AS net_usd, SUM(debit_cdf - credit_cdf) AS net_cdf, COUNT(*) AS lines
+    FROM accounting_entries GROUP BY account_id
+  `);
+  const byAccount = new Map((balances.rows as Array<Record<string, unknown>>).map((row) => [Number(row.account_id), row]));
+
+  return rows.map((row) => {
+    const requiredType = canonicalAccountType(row.name);
+    const type = requiredType ?? (row.type as AccountType);
+    const totals = byAccount.get(row.id);
+    const sign = type === "asset" || type === "expense" ? 1 : -1;
+    return {
+      ...row,
+      type,
+      isActive: requiredType ? true : row.isActive,
+      isSystem: !!requiredType,
+      balanceUsd: Math.round(sign * Number(totals?.net_usd ?? 0) * 1e6) / 1e6,
+      balanceCdf: Math.round(sign * Number(totals?.net_cdf ?? 0) * 1e6) / 1e6,
+      entryCount: Number(totals?.lines ?? 0),
+    };
+  });
 }
 
 export async function createChartAccount(name: string, type: string, description?: string) {
@@ -132,6 +123,12 @@ export async function deactivateChartAccount(id: number) {
   const [existing] = await db.select().from(chartOfAccountsTable).where(eq(chartOfAccountsTable.id, id)).limit(1);
   if (!existing) throw notFound("Account not found");
   if (canonicalAccountType(existing.name)) throw badRequest(`Canonical account ${existing.name} cannot be deactivated`);
+  const [usage] = (await db.execute(sql`
+    SELECT COALESCE(SUM(debit_usd - credit_usd), 0) AS net FROM accounting_entries WHERE account_id = ${id}
+  `)).rows as Array<{ net: string | number }>;
+  if (Math.abs(Number(usage?.net ?? 0)) > 0.000001) {
+    throw badRequest(`${existing.name} still has a balance. Close it to another account before deactivating it.`);
+  }
   await db.update(chartOfAccountsTable).set({ isActive: false }).where(eq(chartOfAccountsTable.id, id));
   return { ok: true, deactivated: true };
 }

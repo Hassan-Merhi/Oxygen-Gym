@@ -2,6 +2,9 @@ import { Router, type Request, type Response } from "express";
 import { sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
+import { getCurrentBalance } from "../lib/ledger";
+import { getLedgerHealth } from "../domains/accounting/ledger-health";
+import { getProfitAndLoss } from "../domains/accounting/ledger-reports";
 
 const router = Router();
 router.use(requireAuth());
@@ -19,66 +22,40 @@ interface AuditSection {
   issues: AuditIssue[];
 }
 
+/** Headline figures straight from the general ledger (all time, locked FX rates). */
 async function getAccountingSummary() {
-  const [rev, exp, payroll, inv, balance] = await Promise.all([
-    db.execute(sql`SELECT COALESCE(SUM(amount_usd),0) AS total FROM cash_ledger WHERE direction='in'`),
-    db.execute(sql`SELECT COALESCE(SUM(amount_usd),0) AS total FROM cash_ledger WHERE direction='out' AND source_type NOT IN ('payroll','stock_purchase')`),
-    db.execute(sql`SELECT COALESCE(SUM(amount_usd),0) AS total FROM cash_ledger WHERE direction='out' AND source_type='payroll'`),
-    db.execute(sql`SELECT COALESCE(SUM(total_cost_usd),0) AS total FROM stock_purchases`),
-    db.execute(sql`SELECT COALESCE(balance_usd,0) AS bal_usd, COALESCE(balance_cdf,0) AS bal_cdf FROM cash_ledger ORDER BY id DESC LIMIT 1`),
+  const [pnl, balance, inventory] = await Promise.all([
+    getProfitAndLoss(),
+    getCurrentBalance(),
+    db.execute(sql`
+      SELECT COALESCE(SUM(e.debit_usd - e.credit_usd), 0) AS total
+      FROM accounting_entries e JOIN chart_of_accounts a ON a.id = e.account_id
+      WHERE lower(a.name) = 'inventory'
+    `),
   ]);
-
-  const totalRevenue = Number((rev.rows[0] as Record<string, unknown> | undefined)?.total ?? 0);
-  const totalExpenses = Number((exp.rows[0] as Record<string, unknown> | undefined)?.total ?? 0);
-  const totalPayroll = Number((payroll.rows[0] as Record<string, unknown> | undefined)?.total ?? 0);
-  const totalInventoryCost = Number((inv.rows[0] as Record<string, unknown> | undefined)?.total ?? 0);
-  const cashBalanceUsd = Number((balance.rows[0] as Record<string, unknown> | undefined)?.bal_usd ?? 0);
-  const cashBalanceCdf = Number((balance.rows[0] as Record<string, unknown> | undefined)?.bal_cdf ?? 0);
+  const payroll = pnl.categories.find((row) => row.category === "Payroll Expense")?.usd ?? 0;
 
   return {
-    totalRevenue,
-    totalExpenses,
-    totalPayroll,
-    totalInventoryCost,
-    totalProfit: totalRevenue - totalExpenses - totalPayroll - totalInventoryCost,
-    cashBalanceUsd,
-    cashBalanceCdf,
+    totalRevenue: pnl.revenue.usd,
+    totalExpenses: pnl.expenses.usd - payroll,
+    totalPayroll: payroll,
+    totalInventoryCost: Number((inventory.rows[0] as Record<string, unknown> | undefined)?.total ?? 0),
+    totalProfit: pnl.net.usd,
+    cashBalanceUsd: balance.nativeUsd,
+    cashBalanceCdf: balance.nativeCdf,
   };
 }
 
+/** Ledger reconciliation: journals balance, cash is not negative, stock and payables agree. */
 async function cashReconciliation(): Promise<AuditSection> {
-  const [computed, actual] = await Promise.all([
-    db.execute(sql`
-      SELECT
-        COALESCE(SUM(CASE WHEN direction='in' THEN amount_usd ELSE -amount_usd END), 0) AS expected_usd,
-        COALESCE(SUM(CASE WHEN direction='in' THEN amount_cdf ELSE -amount_cdf END), 0) AS expected_cdf
-      FROM cash_ledger
-    `),
-    db.execute(sql`SELECT COALESCE(balance_usd,0) AS bal_usd, COALESCE(balance_cdf,0) AS bal_cdf FROM cash_ledger ORDER BY id DESC LIMIT 1`),
-  ]);
-
-  const expectedUsd = Number((computed.rows[0] as Record<string, unknown> | undefined)?.expected_usd ?? 0);
-  const expectedCdf = Number((computed.rows[0] as Record<string, unknown> | undefined)?.expected_cdf ?? 0);
-  const actualUsd = Number((actual.rows[0] as Record<string, unknown> | undefined)?.bal_usd ?? 0);
-  const actualCdf = Number((actual.rows[0] as Record<string, unknown> | undefined)?.bal_cdf ?? 0);
-  const diffUsd = Math.abs(expectedUsd - actualUsd);
-  const diffCdf = Math.abs(expectedCdf - actualCdf);
-  const issues: AuditIssue[] = [];
-
-  if (diffUsd > 0.01) {
-    issues.push({
-      description: `USD balance mismatch: expected $${expectedUsd.toFixed(2)}, actual $${actualUsd.toFixed(2)}, difference $${diffUsd.toFixed(2)}`,
-      severity: "error",
-    });
-  }
-  if (diffCdf > 0.01) {
-    issues.push({
-      description: `CDF balance mismatch: expected ${expectedCdf.toFixed(2)}, actual ${actualCdf.toFixed(2)}, difference ${diffCdf.toFixed(2)}`,
-      severity: "error",
-    });
-  }
-
-  return { name: "Cash Reconciliation", pass: issues.length === 0, issueCount: issues.length, issues };
+  const health = await getLedgerHealth();
+  const issues: AuditIssue[] = health.checks
+    .filter((check) => !check.ok)
+    .map((check) => ({
+      description: `${check.message} Expected ${check.expected.toFixed(2)}, books ${check.actual.toFixed(2)}.`,
+      severity: check.key === "inventory" ? "warning" : "error",
+    }));
+  return { name: "Ledger Reconciliation", pass: issues.length === 0, issueCount: issues.length, issues };
 }
 
 async function salesAudit(): Promise<AuditSection> {
@@ -86,7 +63,7 @@ async function salesAudit(): Promise<AuditSection> {
     db.execute(sql`
       SELECT s.id, s.sale_number FROM sales s
       WHERE s.status = 'completed'
-      AND NOT EXISTS (SELECT 1 FROM cash_ledger cl WHERE cl.source_type = 'sale' AND cl.source_id = s.id)
+      AND NOT EXISTS (SELECT 1 FROM accounting_entries ae WHERE ae.source_type IN ('sale', 'sale_correction') AND ae.source_id = s.id)
     `),
     db.execute(sql`
       SELECT id, sale_number FROM sales
@@ -124,8 +101,9 @@ async function voidedSalesAudit(): Promise<AuditSection> {
     SELECT s.id, s.sale_number FROM sales s
     WHERE s.status = 'voided'
     AND NOT EXISTS (
-      SELECT 1 FROM cash_ledger cl WHERE cl.source_id = s.id AND cl.direction = 'out'
+      SELECT 1 FROM accounting_entries ae WHERE ae.source_id = s.id AND ae.source_type IN ('void_sale', 'sale_void')
     )
+    AND EXISTS (SELECT 1 FROM accounting_entries ae WHERE ae.source_id = s.id AND ae.source_type = 'sale')
   `);
 
   const issues: AuditIssue[] = (result.rows as Array<Record<string, unknown>>).map((row) => ({
@@ -148,6 +126,10 @@ async function inventoryAudit(): Promise<{ section: AuditSection; rows: Array<Re
       WHERE status = 'completed'
       GROUP BY (item->>'productId')::int
     ),
+    adjustments AS (
+      SELECT product_id, COALESCE(SUM(quantity_after - quantity_before), 0) AS total_adjusted
+      FROM stock_adjustments GROUP BY product_id
+    ),
     voided_sold AS (
       SELECT (item->>'productId')::int AS pid, COALESCE(SUM((item->>'quantity')::int), 0) AS total_restored
       FROM sales, jsonb_array_elements(items) AS item
@@ -156,14 +138,15 @@ async function inventoryAudit(): Promise<{ section: AuditSection; rows: Array<Re
     )
     SELECT
       p.id, p.name, p.product_number AS "productNumber", p.quantity AS actual,
-      COALESCE(pur.total_purchased, 0) - COALESCE(cs.total_sold, 0) + COALESCE(vs.total_restored, 0) AS expected,
-      (COALESCE(pur.total_purchased, 0) - COALESCE(cs.total_sold, 0) + COALESCE(vs.total_restored, 0)) - p.quantity AS diff
+      COALESCE(pur.total_purchased, 0) + COALESCE(adj.total_adjusted, 0) - COALESCE(cs.total_sold, 0) + COALESCE(vs.total_restored, 0) AS expected,
+      (COALESCE(pur.total_purchased, 0) + COALESCE(adj.total_adjusted, 0) - COALESCE(cs.total_sold, 0) + COALESCE(vs.total_restored, 0)) - p.quantity AS diff
     FROM products p
     LEFT JOIN purchases pur ON p.id = pur.product_id
     LEFT JOIN completed_sold cs ON p.id = cs.pid
     LEFT JOIN voided_sold vs ON p.id = vs.pid
+    LEFT JOIN adjustments adj ON p.id = adj.product_id
     WHERE p.status != 'deleted'
-    ORDER BY ABS((COALESCE(pur.total_purchased, 0) - COALESCE(cs.total_sold, 0) + COALESCE(vs.total_restored, 0)) - p.quantity) DESC
+    ORDER BY ABS((COALESCE(pur.total_purchased, 0) + COALESCE(adj.total_adjusted, 0) - COALESCE(cs.total_sold, 0) + COALESCE(vs.total_restored, 0)) - p.quantity) DESC
   `);
 
   const rows = result.rows as Array<Record<string, unknown>>;
@@ -186,7 +169,7 @@ async function payrollAudit(): Promise<AuditSection> {
     db.execute(sql`
       SELECT id, payroll_number FROM payroll
       WHERE status = 'paid'
-      AND NOT EXISTS (SELECT 1 FROM cash_ledger cl WHERE cl.source_type = 'payroll' AND cl.source_id = payroll.id)
+      AND NOT EXISTS (SELECT 1 FROM accounting_entries ae WHERE ae.source_type = 'payroll' AND ae.source_id = payroll.id)
     `),
     db.execute(sql`SELECT id, payroll_number FROM payroll WHERE status = 'paid' AND payment_id IS NULL`),
   ]);
@@ -232,7 +215,7 @@ async function membershipAudit(): Promise<AuditSection> {
 
 async function currencyAudit(): Promise<AuditSection> {
   const [ledger, payments] = await Promise.all([
-    db.execute(sql`SELECT COUNT(*) AS cnt FROM cash_ledger WHERE exchange_rate IS NULL OR amount_usd IS NULL OR amount_cdf IS NULL`),
+    db.execute(sql`SELECT COUNT(*) AS cnt FROM accounting_entries WHERE exchange_rate IS NULL OR exchange_rate <= 0`),
     db.execute(sql`SELECT COUNT(*) AS cnt FROM payments WHERE exchange_rate IS NULL OR amount_usd IS NULL`),
   ]);
 
@@ -270,14 +253,15 @@ async function accountingEntriesAudit(): Promise<AuditSection> {
   ] = await Promise.all([
     db.execute(sql`
       SELECT id, payment_number FROM payments
-      WHERE status = 'completed'
-      AND NOT EXISTS (SELECT 1 FROM accounting_entries ae WHERE ae.source_type = 'payment' AND ae.source_id = payments.id)
+      WHERE status = 'completed' AND amount > 0
+      AND COALESCE(linked_entity, '') NOT IN ('sale', 'payroll', 'supplier_payment', 'stock_purchase')
+      AND NOT EXISTS (SELECT 1 FROM accounting_entries ae WHERE ae.source_type IN ('payment', 'payment_correction') AND ae.source_id = payments.id)
       LIMIT 20
     `),
     db.execute(sql`
       SELECT id, voucher_number FROM vouchers
-      WHERE status = 'recorded'
-      AND NOT EXISTS (SELECT 1 FROM accounting_entries ae WHERE ae.source_type = 'voucher' AND ae.source_id = vouchers.id)
+      WHERE status = 'recorded' AND amount > 0
+      AND NOT EXISTS (SELECT 1 FROM accounting_entries ae WHERE ae.source_type IN ('voucher', 'voucher_correction') AND ae.source_id = vouchers.id)
       LIMIT 20
     `),
     db.execute(sql`
@@ -294,7 +278,7 @@ async function accountingEntriesAudit(): Promise<AuditSection> {
     `),
     db.execute(sql`
       SELECT id, purchase_number FROM stock_purchases
-      WHERE paid_from_cash = 1
+      WHERE total_cost > 0
       AND NOT EXISTS (SELECT 1 FROM accounting_entries ae WHERE ae.source_type = 'stock_purchase' AND ae.source_id = stock_purchases.id)
       LIMIT 20
     `),
@@ -498,14 +482,8 @@ router.post("/fix/dashboard", async (_req: Request, res: Response) => {
 });
 
 router.post("/fix/accounts", async (_req: Request, res: Response) => {
-  const result = await db.execute(sql`
-    SELECT
-      COALESCE(SUM(CASE WHEN direction='in' THEN amount_usd ELSE -amount_usd END), 0) AS balance_usd,
-      COALESCE(SUM(CASE WHEN direction='in' THEN amount_cdf ELSE -amount_cdf END), 0) AS balance_cdf,
-      COUNT(*) AS entries
-    FROM cash_ledger
-  `);
-  res.json({ summary: result.rows[0] });
+  // Read-only: the ledger cannot be "fixed" from the UI. Report its health instead.
+  res.json({ summary: await getLedgerHealth() });
 });
 
 export default router;

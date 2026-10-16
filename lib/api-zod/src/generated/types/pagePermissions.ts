@@ -30,4 +30,6 @@ export interface PagePermissions {
   manageInventory: boolean;
   manageMembers: boolean;
   managePlans: boolean;
+  /** May edit or cancel posted payments and vouchers, void sales, cancel paid payroll and reverse supplier records */
+  approveCorrections?: boolean;
 }

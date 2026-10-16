@@ -1,19 +1,32 @@
 import * as React from "react"
 
-const MOBILE_BREAKPOINT = 768
+/** Phones: below Tailwind's `md` breakpoint. */
+export const MOBILE_BREAKPOINT = 768
+/** Phones and tablets (iPad portrait/landscape mini): below Tailwind's `lg` breakpoint. */
+export const TABLET_BREAKPOINT = 1024
 
-export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
+function useMaxWidth(breakpoint: number) {
+  const [matches, setMatches] = React.useState<boolean>(() =>
+    typeof window === "undefined" ? false : window.innerWidth < breakpoint,
+  )
 
   React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
+    const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`)
+    const onChange = () => setMatches(mql.matches)
     mql.addEventListener("change", onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+    setMatches(mql.matches)
     return () => mql.removeEventListener("change", onChange)
-  }, [])
+  }, [breakpoint])
 
-  return !!isMobile
+  return matches
+}
+
+/** True on phones (< 768px). */
+export function useIsMobile() {
+  return useMaxWidth(MOBILE_BREAKPOINT)
+}
+
+/** True on phones and tablets (< 1024px), where the sidebar is a rail/overlay. */
+export function useIsBelowDesktop() {
+  return useMaxWidth(TABLET_BREAKPOINT)
 }

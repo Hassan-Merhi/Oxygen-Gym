@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth-context";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { LogOut, Bell, Check, CheckCheck, AlertCircle, Package, DollarSign, UserX, Snowflake, Sun, Moon, Menu, MoreVertical, Languages } from "lucide-react";
 import {
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   useGetNotificationCount,
   useListNotifications,
@@ -44,7 +45,7 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
 
 const PRIORITY_DOT: Record<string, string> = {
   high: "bg-red-500",
-  medium: "bg-amber-400",
+  medium: "bg-amber-500",
   low: "bg-slate-400",
 };
 
@@ -55,7 +56,6 @@ function NotificationBell() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const unreadQueryKey = getListNotificationsQueryKey({ read: "unread" } as any);
 
   // Notifications are useful, but they do not need to create a database-backed
@@ -101,79 +101,65 @@ function NotificationBell() {
     markAllRead.mutate(undefined, { onSuccess: invalidate });
   };
 
-  useEffect(() => {
-    const handlePointerDown = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-
-    if (open) {
-      document.addEventListener("mousedown", handlePointerDown);
-      document.addEventListener("keydown", handleKeyDown);
-    }
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open]);
-
   return (
-    <div className="relative" ref={dropdownRef}>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="relative h-11 w-11 text-muted-foreground hover:text-foreground md:h-9 md:w-9"
-        onClick={() => setOpen(v => !v)}
-        aria-label={t("notif.bell")}
-        aria-expanded={open}
-        data-testid="btn-notifications"
-      >
-        <Bell className="h-4 w-4" />
-        {unread > 0 && (
-          <span className="absolute -top-0.5 end-[-2px] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-background">
-            {unread > 99 ? "99+" : unread}
-          </span>
-        )}
-      </Button>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative h-11 w-11 text-muted-foreground hover:text-foreground md:h-9 md:w-9"
+          aria-label={unread > 0 ? `${t("notif.bell")} (${unread} ${t("notif.unread")})` : t("notif.bell")}
+          data-testid="btn-notifications"
+        >
+          <Bell className="h-4 w-4" aria-hidden="true" />
+          {unread > 0 && (
+            <span aria-hidden="true" className="absolute -top-1 -end-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-xs font-bold leading-none text-white ring-2 ring-background">
+              {unread > 99 ? "99+" : unread}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
 
-      {open && (
-        <div className="absolute end-0 z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-border bg-popover shadow-xl sm:w-80">
-          <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-sm font-semibold">{t("notif.title")}</span>
-              {unread > 0 && (
-                <Badge className="rounded-full border-0 bg-rose-500 px-1.5 py-0 text-xs text-white">
-                  {unread}
-                </Badge>
-              )}
-            </div>
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        collisionPadding={8}
+        className="w-80 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl p-0 shadow-xl"
+        aria-label={t("notif.title")}
+      >
+        <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/30 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="truncate text-sm font-semibold">{t("notif.title")}</h2>
             {unread > 0 && (
-              <Button variant="ghost" size="sm" className="h-11 shrink-0 px-2 text-xs text-primary hover:text-primary md:h-7" onClick={handleMarkAll}>
-                <CheckCheck className="me-1 h-3 w-3" />
-                {t("notif.markAllRead")}
-              </Button>
+              <Badge className="rounded-full border-0 bg-rose-600 px-1.5 py-0 text-xs text-white">
+                {unread}
+              </Badge>
             )}
           </div>
+          {unread > 0 && (
+            <Button variant="ghost" size="sm" className="h-11 shrink-0 px-2 text-xs text-primary hover:text-primary md:h-8" onClick={handleMarkAll}>
+              <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
+              {t("notif.markAllRead")}
+            </Button>
+          )}
+        </div>
 
-          <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto overscroll-contain sm:max-h-80">
-            {recent.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-2 py-10 text-muted-foreground">
-                <Bell className="h-7 w-7 opacity-20" />
-                <p className="text-xs">{t("notif.empty")}</p>
-              </div>
-            ) : (
-              recent.map((n) => {
+        <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto overscroll-contain sm:max-h-80">
+          {recent.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-10 text-muted-foreground">
+              <Bell className="h-7 w-7 opacity-20" aria-hidden="true" />
+              <p className="text-xs">{t("notif.empty")}</p>
+            </div>
+          ) : (
+            <ul>
+              {recent.map((n) => {
                 const Icon = TYPE_ICONS[n.type] ?? Bell;
                 return (
-                  <div key={n.key} className="flex items-start gap-3 border-b border-border/40 px-4 py-3 transition-colors last:border-0 hover:bg-muted/40 focus-within:bg-muted/40">
-                    <div className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", PRIORITY_DOT[n.priority] ?? "bg-slate-400")} />
+                  <li key={n.key} className="flex items-start gap-3 border-b border-border/40 px-4 py-3 transition-colors last:border-0 hover:bg-muted/40 focus-within:bg-muted/40">
+                    <div className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", PRIORITY_DOT[n.priority] ?? "bg-slate-400")} aria-hidden="true" />
                     <div className="min-w-0 flex-1">
                       <div className="mb-0.5 flex items-center gap-1.5">
-                        <Icon className="h-3 w-3 shrink-0 text-muted-foreground" />
+                        <Icon className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
                         <span className="truncate text-xs font-medium text-muted-foreground">
                           {t(`notif.type.${n.type}`)}
                         </span>
@@ -182,31 +168,31 @@ function NotificationBell() {
                     </div>
                     <button
                       type="button"
-                      className="-my-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className="-my-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:hover:text-emerald-400"
                       onClick={(e) => handleMarkRead(n.key, e)}
                       title={t("notif.markRead")}
                       aria-label={t("notif.markRead")}
                     >
-                      <Check className="h-3.5 w-3.5" />
+                      <Check className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
-                  </div>
+                  </li>
                 );
-              })
-            )}
-          </div>
-
-          <div className="border-t border-border bg-muted/20 px-4 py-2.5">
-            <a
-              href="/notifications"
-              className="block min-h-11 w-full rounded-md py-3 text-center text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:min-h-0 sm:py-2"
-              onClick={() => setOpen(false)}
-            >
-              {t("notif.viewAll")}
-            </a>
-          </div>
+              })}
+            </ul>
+          )}
         </div>
-      )}
-    </div>
+
+        <div className="border-t border-border bg-muted/20 px-4 py-2">
+          <Link
+            href="/notifications"
+            className="flex min-h-11 w-full items-center justify-center rounded-md text-center text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary md:min-h-9"
+            onClick={() => setOpen(false)}
+          >
+            {t("notif.viewAll")}
+          </Link>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -227,6 +213,8 @@ export function Topbar() {
   const initials = user?.name
     ? user.name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()
     : user?.username?.charAt(0).toUpperCase() ?? "U";
+
+  const roleLabel = user?.role ? t(`staff.role.${user.role}`) : "";
 
   const nextThemeLabel = theme === "dark" ? copy.lightMode : copy.darkMode;
 
@@ -251,7 +239,7 @@ export function Topbar() {
         {/* Desktop language selector */}
         <div className="hidden md:block">
           <Select value={language} onValueChange={(val) => setLanguage(val as NavigationLanguage)}>
-            <SelectTrigger className="h-8 w-28 border-border/60 bg-muted/50 text-xs" data-testid="select-language">
+            <SelectTrigger className="h-9 w-32 border-border/60 bg-muted/50 text-xs" data-testid="select-language" aria-label={copy.languageLabel}>
               <SelectValue placeholder={copy.languageLabel} />
             </SelectTrigger>
             <SelectContent>
@@ -265,18 +253,18 @@ export function Topbar() {
         <Button
           variant="ghost"
           size="icon"
-          className="hidden h-8 w-8 text-muted-foreground hover:text-foreground md:inline-flex"
+          className="hidden text-muted-foreground hover:text-foreground md:inline-flex"
           onClick={toggle}
           aria-label={nextThemeLabel}
         >
-          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          {theme === "dark" ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
         </Button>
 
-        <div className="mx-1 hidden h-6 w-px bg-border md:block" />
+        <div className="mx-1 hidden h-6 w-px bg-border md:block" aria-hidden="true" />
 
         <NotificationBell />
 
-        <div className="mx-1 hidden h-6 w-px bg-border md:block" />
+        <div className="mx-1 hidden h-6 w-px bg-border md:block" aria-hidden="true" />
 
         {/* Desktop user area */}
         <div className="hidden min-w-0 items-center gap-2.5 md:flex">
@@ -288,19 +276,19 @@ export function Topbar() {
 
           <div className="flex min-w-0 flex-col leading-tight">
             <span className="max-w-32 truncate text-sm font-semibold text-foreground">{user?.name ?? user?.username}</span>
-            <span className="text-[11px] capitalize text-muted-foreground">{user?.role}</span>
+            <span className="text-xs text-muted-foreground">{roleLabel}</span>
           </div>
 
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 px-2.5 text-muted-foreground hover:text-foreground"
+            className="h-9 min-w-9 px-2.5 text-muted-foreground hover:text-foreground pointer-coarse:min-w-11 max-lg:min-w-11"
             onClick={handleLogout}
             data-testid="button-logout"
             aria-label={t("nav.logout")}
           >
-            <LogOut className="me-1.5 h-4 w-4" />
-            <span className="text-sm">{t("nav.logout")}</span>
+            <LogOut className="h-4 w-4 rtl:-scale-x-100" aria-hidden="true" />
+            <span className="text-sm max-lg:sr-only">{t("nav.logout")}</span>
           </Button>
         </div>
 
@@ -320,10 +308,10 @@ export function Topbar() {
           <DropdownMenuContent align="end" className="w-60">
             <div className="px-2 py-2">
               <p className="truncate text-sm font-semibold text-foreground">{user?.name ?? user?.username}</p>
-              <p className="text-xs capitalize text-muted-foreground">{user?.role}</p>
+              <p className="text-xs text-muted-foreground">{roleLabel}</p>
             </div>
             <DropdownMenuSeparator />
-            <div className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="px-2 pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <span className="inline-flex items-center gap-1.5"><Languages className="h-3.5 w-3.5" />{copy.languageLabel}</span>
             </div>
             {NAVIGATION_LANGUAGE_OPTIONS.map((option) => (

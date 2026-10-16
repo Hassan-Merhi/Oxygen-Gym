@@ -1,12 +1,7 @@
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import { useGetMe } from "@/hooks/use-me";
-import {
-  useRunAudit,
-  useFixAuditInventory,
-  useFixAuditDashboard,
-  useFixAuditAccounts,
-} from "@workspace/api-client-react";
+import { useRunAudit } from "@workspace/api-client-react";
+import { useApi } from "@/lib/accounting-client";
 import type { AuditReport, AuditSection } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,7 +14,7 @@ import {
   ShieldCheck, ShieldAlert, PlayCircle, Printer, ChevronDown, ChevronRight,
   CheckCircle2, XCircle, AlertTriangle, DollarSign, TrendingUp,
   TrendingDown, Package, Banknote, Activity, Database,
-  Users, Receipt, Wallet, Wrench, Clock, AlertCircle,
+  Users, Receipt, Wallet, Clock, AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFmtDate } from "@/lib/useFmtDate";
@@ -113,6 +108,36 @@ interface ChecklistItem {
   pass: boolean;
 }
 
+type LedgerHealth = { ok: boolean; checks: Array<{ key: string; ok: boolean; message: string; expected: number; actual: number; difference: number }> };
+
+/** The ledger's own reconciliation: trial balance, journals, cash, inventory and supplier balances. */
+function LedgerHealthCard({ t }: { t: (k: string) => string }) {
+  const health = useApi<LedgerHealth>("/api/ledger/health");
+  return (
+    <section aria-labelledby="ledger-health">
+      <h2 id="ledger-health" className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">{t("audit.ledgerHealth")}</h2>
+      <Card className="shadow-sm">
+        <CardContent className="divide-y divide-border/40 px-4 py-2">
+          {(health.data?.checks ?? []).map((check) => {
+            const label = t(`health.${check.key}`);
+            return (
+              <div key={check.key} className="flex items-start gap-3 py-2.5 text-sm">
+                {check.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-hidden="true" />}
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{label === `health.${check.key}` ? check.key : label}</p>
+                  <p className="text-xs text-muted-foreground">{check.message}</p>
+                </div>
+                {!check.ok && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{fmt$(check.expected)} / {check.actual < 0 ? "-" : ""}{fmt$(check.actual)}</span>}
+              </div>
+            );
+          })}
+          {health.isLoading && <Skeleton className="my-2 h-10" />}
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
 function GoLiveChecklist({ items, t }: { items: ChecklistItem[]; t: (k: string) => string }) {
   const allPass = items.every(i => i.pass);
   return (
@@ -144,50 +169,15 @@ function GoLiveChecklist({ items, t }: { items: ChecklistItem[]; t: (k: string) 
   );
 }
 
-function FixTool({ label, running, done, onRun, warning }: {
-  label: string; running: boolean; done: boolean; onRun: () => void; warning: string;
-}) {
-  const [confirm, setConfirm] = useState(false);
-  return (
-    <div className="flex items-center justify-between gap-4 py-3 border-b border-border/40 last:border-0">
-      <div>
-        <p className="text-sm font-medium">{label}</p>
-        {confirm && <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">{warning}</p>}
-      </div>
-      <div className="flex gap-2 shrink-0">
-        {done ? (
-          <Badge className="bg-emerald-500 text-white border-0 text-xs">Done ✓</Badge>
-        ) : confirm ? (
-          <>
-            <Button size="sm" variant="destructive" className="h-7 text-xs" disabled={running}
-              onClick={() => { onRun(); setConfirm(false); }}>
-              {running ? "Running…" : "Confirm"}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setConfirm(false)}>Cancel</Button>
-          </>
-        ) : (
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setConfirm(true)}>
-            <Wrench className="w-3 h-3 mr-1" /> Run
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export default function AuditPage() {
   const { t } = useI18n();
   const { fmtDateTime } = useFmtDate();
-  const me = useGetMe();
-  const isAdmin = me?.role === "admin";
 
   const { data, isLoading, isFetching, refetch } = useRunAudit({
     query: { enabled: false, staleTime: Infinity } as any,
   });
 
-  const fixInventory = useFixAuditInventory();
-  const fixDashboard = useFixAuditDashboard();
-  const fixAccounts = useFixAuditAccounts();
 
   const report = data as AuditReport | undefined;
 
@@ -197,15 +187,15 @@ export default function AuditPage() {
 
   const checklistItems: ChecklistItem[] = report
     ? [
-        { label: "Members module validated", pass: sectionMap["Membership Audit"]?.pass ?? false },
-        { label: "Payments validated", pass: sectionMap["Sales Audit"]?.pass ?? false },
-        { label: "Vouchers validated", pass: sectionMap["Data Integrity"]?.pass ?? false },
-        { label: "Inventory validated", pass: sectionMap["Inventory Audit"]?.pass ?? false },
-        { label: "Sales validated", pass: (sectionMap["Sales Audit"]?.pass ?? false) && (sectionMap["Void Sales Audit"]?.pass ?? false) },
-        { label: "Payroll validated", pass: sectionMap["Payroll Audit"]?.pass ?? false },
-        { label: "Accounting reconciled", pass: sectionMap["Cash Reconciliation"]?.pass ?? false },
-        { label: "Permissions validated", pass: sectionMap["Permission Audit"]?.pass ?? false },
-        { label: "Multi-currency validated", pass: sectionMap["Multi-Currency Audit"]?.pass ?? false },
+        { label: t("audit.check.members"), pass: sectionMap["Membership Audit"]?.pass ?? false },
+        { label: t("audit.check.payments"), pass: sectionMap["Sales Audit"]?.pass ?? false },
+        { label: t("audit.check.vouchers"), pass: sectionMap["Data Integrity"]?.pass ?? false },
+        { label: t("audit.check.inventory"), pass: sectionMap["Inventory Audit"]?.pass ?? false },
+        { label: t("audit.check.sales"), pass: (sectionMap["Sales Audit"]?.pass ?? false) && (sectionMap["Void Sales Audit"]?.pass ?? false) },
+        { label: t("audit.check.payroll"), pass: sectionMap["Payroll Audit"]?.pass ?? false },
+        { label: t("audit.check.accounting"), pass: (sectionMap["Ledger Reconciliation"]?.pass ?? false) && (sectionMap["Accounting Entries Audit"]?.pass ?? false) },
+        { label: t("audit.check.permissions"), pass: sectionMap["Permission Audit"]?.pass ?? false },
+        { label: t("audit.check.currency"), pass: sectionMap["Multi-Currency Audit"]?.pass ?? false },
       ]
     : [];
 
@@ -228,12 +218,12 @@ export default function AuditPage() {
         <div className="flex gap-2 print:hidden">
           {report && (
             <Button variant="outline" size="sm" onClick={() => window.print()}>
-              <Printer className="w-4 h-4 mr-2" />
+              <Printer className="w-4 h-4 me-2" />
               {t("audit.print")}
             </Button>
           )}
           <Button onClick={() => refetch()} disabled={isLoading || isFetching} size="sm">
-            <PlayCircle className="w-4 h-4 mr-2" />
+            <PlayCircle className="w-4 h-4 me-2" />
             {(isLoading || isFetching) ? t("audit.running") : t("audit.runAudit")}
           </Button>
         </div>
@@ -246,7 +236,7 @@ export default function AuditPage() {
             <ShieldCheck className="w-14 h-14 text-muted-foreground/30" />
             <p className="text-muted-foreground text-sm text-center max-w-sm">{t("audit.empty")}</p>
             <Button onClick={() => refetch()}>
-              <PlayCircle className="w-4 h-4 mr-2" />
+              <PlayCircle className="w-4 h-4 me-2" />
               {t("audit.runAudit")}
             </Button>
           </CardContent>
@@ -283,7 +273,7 @@ export default function AuditPage() {
               <p className={cn("font-bold text-base", report.totalIssues === 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400")}>
                 {report.totalIssues === 0 ? t("audit.checklist.ready") : `${report.totalIssues} ${t("audit.totalIssues")}`}
               </p>
-              <p className="text-xs text-muted-foreground">{report.sections.filter(s => s.pass).length}/{report.sections.length} sections passing</p>
+              <p className="text-xs text-muted-foreground">{report.sections.filter(s => s.pass).length}/{report.sections.length} {t("audit.sectionsPassing")}</p>
             </div>
           </div>
 
@@ -366,13 +356,13 @@ export default function AuditPage() {
           <section>
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">{t("audit.health.title")}</h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <SummaryCard icon={Users} label="Members" value={String(report.systemHealth.records.members)} color="text-blue-500" />
-              <SummaryCard icon={Users} label="Staff" value={String(report.systemHealth.records.staff)} color="text-indigo-500" />
-              <SummaryCard icon={Package} label="Products" value={String(report.systemHealth.records.products)} color="text-orange-500" />
-              <SummaryCard icon={Receipt} label="Sales" value={String(report.systemHealth.records.sales)} color="text-cyan-500" />
-              <SummaryCard icon={DollarSign} label="Payments" value={String(report.systemHealth.records.payments)} color="text-emerald-500" />
-              <SummaryCard icon={Banknote} label="Payroll" value={String(report.systemHealth.records.payroll)} color="text-violet-500" />
-              <SummaryCard icon={Activity} label="Check-ins" value={String(report.systemHealth.records.checkIns)} color="text-rose-500" />
+              <SummaryCard icon={Users} label={t("audit.records.members")} value={String(report.systemHealth.records.members)} color="text-blue-500" />
+              <SummaryCard icon={Users} label={t("audit.records.staff")} value={String(report.systemHealth.records.staff)} color="text-indigo-500" />
+              <SummaryCard icon={Package} label={t("audit.records.products")} value={String(report.systemHealth.records.products)} color="text-orange-500" />
+              <SummaryCard icon={Receipt} label={t("audit.records.sales")} value={String(report.systemHealth.records.sales)} color="text-cyan-500" />
+              <SummaryCard icon={DollarSign} label={t("audit.records.payments")} value={String(report.systemHealth.records.payments)} color="text-emerald-500" />
+              <SummaryCard icon={Banknote} label={t("audit.records.payroll")} value={String(report.systemHealth.records.payroll)} color="text-violet-500" />
+              <SummaryCard icon={Activity} label={t("audit.records.checkIns")} value={String(report.systemHealth.records.checkIns)} color="text-rose-500" />
               <SummaryCard icon={Database} label={t("audit.health.dbSize")} value={report.systemHealth.dbSize} color="text-slate-500" />
             </div>
 
@@ -405,44 +395,8 @@ export default function AuditPage() {
           {/* ── Go-Live Checklist ── */}
           <GoLiveChecklist items={checklistItems} t={t} />
 
-          {/* ── Auto-Fix Tools (admin only) ── */}
-          {isAdmin && (
-            <section className="print:hidden">
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-2">
-                {t("audit.fixes.title")}
-                <Badge variant="outline" className="text-xs">{t("audit.fixes.adminOnly")}</Badge>
-              </h2>
-              <Card className="shadow-sm border-amber-200 dark:border-amber-800">
-                <CardContent className="px-4 py-4">
-                  <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2 mb-4">
-                    <AlertTriangle className="w-4 h-4 shrink-0" />
-                    {t("audit.fixes.warning")}
-                  </p>
-                  <FixTool
-                    label={t("audit.fixes.inventory")}
-                    running={fixInventory.isPending}
-                    done={fixInventory.isSuccess}
-                    onRun={() => fixInventory.mutate(undefined)}
-                    warning={t("audit.fixes.warning")}
-                  />
-                  <FixTool
-                    label={t("audit.fixes.dashboard")}
-                    running={fixDashboard.isPending}
-                    done={fixDashboard.isSuccess}
-                    onRun={() => fixDashboard.mutate(undefined)}
-                    warning={t("audit.fixes.warning")}
-                  />
-                  <FixTool
-                    label={t("audit.fixes.accounts")}
-                    running={fixAccounts.isPending}
-                    done={fixAccounts.isSuccess}
-                    onRun={() => fixAccounts.mutate(undefined)}
-                    warning={t("audit.fixes.warning")}
-                  />
-                </CardContent>
-              </Card>
-            </section>
-          )}
+          {/* ── Ledger health ── */}
+          <LedgerHealthCard t={t} />
         </>
       )}
     </div>

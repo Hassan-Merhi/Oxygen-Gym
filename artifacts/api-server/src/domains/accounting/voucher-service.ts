@@ -1,8 +1,8 @@
 import { db } from "@workspace/db";
 import { vouchersTable } from "@workspace/db/schema";
 import { and, count, desc, eq, gte, ilike, isNull, lte, or } from "drizzle-orm";
-import { appendLedgerEntry } from "../../lib/ledger";
-import { categoryAccountNames, postDoubleEntry, reverseEntries } from "../../lib/accounting";
+import { assertPeriodOpen, categoryAccountNames, newJournalId, postDoubleEntry, reverseEntries } from "../../lib/accounting";
+import { assertNotFutureDated } from "./payment-service";
 import { getNextNumber } from "../../lib/numbering";
 import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
 import { fxRate, money } from "../../shared/accounting/decimal";
@@ -100,8 +100,10 @@ export async function getVoucher(id: number) {
 export async function createVoucher(input: CreateVoucherInput, actor: string) {
   if (input.amount < 0) throw badRequest("Amount cannot be negative");
   const currency = normalizedCurrency(input.currency);
+  assertNotFutureDated(input.voucherDate, "A voucher");
 
   return withTransaction(async (tx) => {
+    await assertPeriodOpen(tx, input.voucherDate ?? new Date(), "This voucher");
     const rate = fxRate(input.exchangeRate ?? await getExchangeRate(tx));
     const amount = money(input.amount);
     const voucherNumber = await getNextNumber("VCH", tx);
@@ -130,19 +132,6 @@ export async function createVoucher(input: CreateVoucherInput, actor: string) {
     }).returning();
 
     if (amount > 0) {
-      await appendLedgerEntry({
-        sourceType: "voucher",
-        sourceNumber: voucherNumber,
-        sourceId: voucher.id,
-        direction,
-        amount,
-        currency,
-        exchangeRate: rate,
-        description: input.description,
-        createdBy: actor,
-        entryDate: input.voucherDate,
-      }, tx);
-
       const voucherCategory = direction === "in" ? "other" : "expense";
       const names = categoryAccountNames(voucherCategory, direction, input.account ?? "cash", input.category);
       await postDoubleEntry({
@@ -174,6 +163,8 @@ export async function updateVoucher(id: number, input: UpdateVoucherInput, actor
       isNull(vouchersTable.deletedAt),
     )).for("update");
     if (!existing) throw notFound("Voucher not found");
+    if (existing.status !== "recorded") throw badRequest("A cancelled voucher cannot be edited. Record a new voucher instead.");
+    assertNotFutureDated(input.voucherDate, "A voucher");
 
     const storedRate = Number(existing.exchangeRate ?? 0);
     if (input.exchangeRate !== undefined && storedRate > 0 && fxRate(input.exchangeRate) !== fxRate(storedRate)) {
@@ -218,39 +209,19 @@ export async function updateVoucher(id: number, input: UpdateVoucherInput, actor
     );
 
     if (financialsChanged) {
-      if (money(existing.amount ?? 0) > 0) {
-        await appendLedgerEntry({
-          sourceType: "voucher_correction",
-          sourceNumber: existing.voucherNumber ?? undefined,
-          sourceId: id,
-          direction: oldDirection === "in" ? "out" : "in",
-          amount: existing.amount ?? 0,
-          currency: existing.currency,
-          exchangeRate: rate,
-          description: `Correction: reversed voucher ${existing.voucherNumber ?? id}`,
-          createdBy: actor,
-        }, tx);
-      }
-      if (amount > 0) {
-        await appendLedgerEntry({
-          sourceType: "voucher_correction",
-          sourceNumber: existing.voucherNumber ?? undefined,
-          sourceId: id,
-          direction,
-          amount,
-          currency,
-          exchangeRate: rate,
-          description: `Correction: updated voucher ${existing.voucherNumber ?? id}`,
-          createdBy: actor,
-          entryDate: input.voucherDate ?? existing.voucherDate,
-        }, tx);
-      }
-
-      await reverseEntries("voucher", id, "voucher_correction", actor, tx);
+      await assertPeriodOpen(tx, existing.voucherDate, "The original voucher");
+      await assertPeriodOpen(tx, input.voucherDate ?? existing.voucherDate, "The corrected voucher");
+      const journalId = newJournalId();
+      await reverseEntries("voucher", id, "voucher_correction", actor, tx, {
+        journalId,
+        entryDate: existing.voucherDate,
+        description: `Correction: reversed voucher ${existing.voucherNumber ?? id}`,
+      });
       if (amount > 0) {
         const voucherCategory = direction === "in" ? "other" : "expense";
         const names = categoryAccountNames(voucherCategory, direction, account, category ?? undefined);
         await postDoubleEntry({
+          journalId,
           sourceType: "voucher_correction",
           sourceId: id,
           sourceNumber: existing.voucherNumber ?? undefined,
@@ -277,6 +248,7 @@ export async function cancelVoucher(id: number, actor: string) {
       isNull(vouchersTable.deletedAt),
     )).for("update");
     if (!existing) throw notFound("Voucher not found");
+    if (existing.status !== "recorded") return existing;
 
     const [voucher] = await tx.update(vouchersTable)
       .set({ status: "cancelled", deletedAt: new Date() })
@@ -284,21 +256,9 @@ export async function cancelVoucher(id: number, actor: string) {
       .returning();
 
     if (existing.status === "recorded" && money(existing.amount ?? 0) > 0) {
-      const storedRate = Number(existing.exchangeRate ?? 0);
-      const rate = fxRate(storedRate > 0 ? storedRate : await getExchangeRate(tx));
-      const direction = existing.direction as "in" | "out";
-      await appendLedgerEntry({
-        sourceType: "voucher_reversal",
-        sourceNumber: existing.voucherNumber ?? undefined,
-        sourceId: id,
-        direction: direction === "in" ? "out" : "in",
-        amount: existing.amount ?? 0,
-        currency: existing.currency,
-        exchangeRate: rate,
+      await reverseEntries("voucher", id, "voucher_reversal", actor, tx, {
         description: `Cancelled voucher ${existing.voucherNumber ?? id}`,
-        createdBy: actor,
-      }, tx);
-      await reverseEntries("voucher", id, "voucher_reversal", actor, tx);
+      });
     }
 
     return voucher;

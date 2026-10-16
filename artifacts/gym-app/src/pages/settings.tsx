@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { fmt } from "@/lib/i18n-format";
 import {
   useGetSettings, useUpdateSettings, getGetSettingsQueryKey,
   useListWhatsappChats, useCreateWhatsappChat, useUpdateWhatsappChat,
@@ -28,7 +29,7 @@ import {
   Plus, Trash2, Send, Eye, EyeOff, Search, MessageSquare, Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { LoginUsersTab } from "@/pages/staff";
+import { LoginUsersTab } from "@/components/staff/login-users";
 import { useGetMe } from "@/hooks/use-me";
 import { AlertTriangle, CheckCircle2, ShieldAlert } from "lucide-react";
 
@@ -82,18 +83,18 @@ function LogoUpload({
           value ? "border-border" : "border-muted-foreground/30"
         )}>
           {value
-            ? <img src={value} alt="logo" className="w-full h-full object-contain" />
+            ? <img src={value} alt={label} className="w-full h-full object-contain" />
             : <ImageIcon className="w-8 h-8 text-muted-foreground/40" />}
         </div>
         <div className="flex flex-col gap-2">
           <Button type="button" variant="outline" size="sm" disabled={uploading}
             onClick={() => inputRef.current?.click()}>
-            {uploading ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Upload className="w-3 h-3 mr-1" />}
+            {uploading ? <Loader2 className="w-3 h-3 me-1 animate-spin" /> : <Upload className="w-3 h-3 me-1" />}
             {t("settings.upload")}
           </Button>
           {value && (
             <Button type="button" variant="ghost" size="sm" onClick={() => onChange(null)}>
-              <X className="w-3 h-3 mr-1" />{t("settings.remove")}
+              <X className="w-3 h-3 me-1" />{t("settings.remove")}
             </Button>
           )}
         </div>
@@ -176,10 +177,10 @@ function WhatsAppTab() {
         setContacts(Array.isArray(data) ? data : []);
       } else {
         const body = await res.json().catch(() => ({}));
-        setContactsError(body?.error ?? `Server error ${res.status}`);
+        setContactsError(body?.error ?? fmt(t("settings.serverError"), { status: res.status }));
       }
     } catch (err) {
-      setContactsError("Network error — could not reach the server");
+      setContactsError(t("settings.networkError"));
     } finally {
       setContactsFetching(false);
     }
@@ -318,12 +319,12 @@ function WhatsAppTab() {
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
                   placeholder={t("settings.greenApiTokenPlaceholder")}
-                  className="pr-10"
+                  className="pe-10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowToken((v) => !v)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  className="absolute end-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
                   {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -332,7 +333,7 @@ function WhatsAppTab() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button onClick={saveCreds} disabled={credsSaving} size="sm">
-              {credsSaving && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+              {credsSaving && <Loader2 className="w-3.5 h-3.5 me-1.5 animate-spin" />}
               {t("settings.save")}
             </Button>
             <Button
@@ -342,9 +343,9 @@ function WhatsAppTab() {
               disabled={stateChecking || !instanceId || !token}
             >
               {stateChecking
-                ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                : <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />}
-              Check Connection
+                ? <Loader2 className="w-3.5 h-3.5 me-1.5 animate-spin" />
+                : <CheckCircle2 className="w-3.5 h-3.5 me-1.5" />}
+              {t("settings.checkConnection")}
             </Button>
             <Button
               variant="outline"
@@ -353,8 +354,8 @@ function WhatsAppTab() {
               disabled={testConnection.isPending || !instanceId || !token}
             >
               {testConnection.isPending
-                ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                : <Send className="w-3.5 h-3.5 mr-1.5" />}
+                ? <Loader2 className="w-3.5 h-3.5 me-1.5 animate-spin" />
+                : <Send className="w-3.5 h-3.5 me-1.5" />}
               {t("settings.sendTest")}
             </Button>
             {instanceState && (
@@ -387,13 +388,14 @@ function WhatsAppTab() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <label className="text-sm font-medium">{t("settings.dailySummaryEnabled")}</label>
+          <label htmlFor="daily-summary-enabled" className="flex min-h-11 cursor-pointer items-center justify-between rounded-lg border p-3">
+            <span className="text-sm font-medium">{t("settings.dailySummaryEnabled")}</span>
             <Switch
+              id="daily-summary-enabled"
               checked={dailyEnabled}
               onCheckedChange={setDailyEnabled}
             />
-          </div>
+          </label>
           {dailyEnabled && (
             <div className="space-y-1.5 max-w-[200px]">
               <label className="text-sm font-medium">{t("settings.dailySummaryHour")}</label>
@@ -413,7 +415,7 @@ function WhatsAppTab() {
           )}
           <div className="flex gap-2">
             <Button size="sm" onClick={saveDailySettings} disabled={dailySaving}>
-              {dailySaving && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+              {dailySaving && <Loader2 className="w-3.5 h-3.5 me-1.5 animate-spin" />}
               {t("settings.save")}
             </Button>
             <Button
@@ -423,8 +425,8 @@ function WhatsAppTab() {
               disabled={sendingNow || !instanceId || !token}
             >
               {sendingNow
-                ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                : <Send className="w-3.5 h-3.5 mr-1.5" />}
+                ? <Loader2 className="w-3.5 h-3.5 me-1.5 animate-spin" />
+                : <Send className="w-3.5 h-3.5 me-1.5" />}
               {t("settings.sendSummaryNow")}
             </Button>
           </div>
@@ -440,7 +442,7 @@ function WhatsAppTab() {
               <CardDescription className="mt-1">{t("settings.whatsappChatsDesc")}</CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={() => setAddingChat((v) => !v)}>
-              <Plus className="w-3.5 h-3.5 mr-1.5" />{t("settings.addChat")}
+              <Plus className="w-3.5 h-3.5 me-1.5" />{t("settings.addChat")}
             </Button>
           </div>
         </CardHeader>
@@ -483,7 +485,7 @@ function WhatsAppTab() {
               </div>
               <div className="flex gap-2">
                 <Button size="sm" onClick={handleAddChat} disabled={createChat.isPending || !newLabel || !newChatId}>
-                  {createChat.isPending && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                  {createChat.isPending && <Loader2 className="w-3 h-3 me-1 animate-spin" />}
                   {t("common.save")}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => { setAddingChat(false); setNewLabel(""); setNewChatId(""); }}>
@@ -495,7 +497,7 @@ function WhatsAppTab() {
 
           {/* Contacts picker dialog */}
           <Dialog open={contactsOpen} onOpenChange={setContactsOpen}>
-            <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
+            <DialogContent className="flex max-w-md flex-col">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <MessageSquare className="w-4 h-4" />
@@ -503,9 +505,11 @@ function WhatsAppTab() {
                 </DialogTitle>
               </DialogHeader>
               <div className="relative mt-1 shrink-0">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Search className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
                 <Input
-                  className="pl-9 h-9"
+                  type="search"
+                  aria-label={t("settings.searchChats")}
+                  className="ps-9 h-9"
                   placeholder={t("settings.searchChats")}
                   value={contactSearch}
                   onChange={(e) => setContactSearch(e.target.value)}
@@ -519,14 +523,14 @@ function WhatsAppTab() {
                 ) : contactsError ? (
                   <div className="flex flex-col items-center gap-3 py-10 px-4 text-center">
                     <p className="text-sm font-medium text-destructive">{contactsError}</p>
-                    <p className="text-xs text-muted-foreground">Check that your Green API Instance ID and Token are saved correctly in settings.</p>
-                    <Button size="sm" variant="outline" onClick={refetchContacts}>Retry</Button>
+                    <p className="text-xs text-muted-foreground">{t("settings.contactsErrorHint")}</p>
+                    <Button size="sm" variant="outline" onClick={refetchContacts}>{t("common.retry")}</Button>
                   </div>
                 ) : contacts.length === 0 ? (
                   <div className="flex flex-col items-center gap-3 py-10 px-4 text-center">
                     <p className="text-sm text-muted-foreground">{t("settings.noContactsFound")}</p>
-                    <p className="text-xs text-muted-foreground">Make sure your WhatsApp is connected in Green API and has existing chats.</p>
-                    <Button size="sm" variant="outline" onClick={refetchContacts}>Retry</Button>
+                    <p className="text-xs text-muted-foreground">{t("settings.noContactsHint")}</p>
+                    <Button size="sm" variant="outline" onClick={refetchContacts}>{t("common.retry")}</Button>
                   </div>
                 ) : (() => {
                   const filtered = contacts.filter((c) => {
@@ -538,7 +542,8 @@ function WhatsAppTab() {
                   ) : filtered.map((c) => (
                     <button
                       key={c.id}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted text-left transition-colors"
+                      type="button"
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       onClick={() => {
                         setNewChatId(c.id);
                         if (!newLabel) setNewLabel(c.name);
@@ -580,18 +585,20 @@ function WhatsAppTab() {
                     <p className="text-xs text-muted-foreground font-mono truncate">{chat.chatId}</p>
                   </div>
                   <Badge variant={chat.enabled ? "default" : "secondary"} className="text-xs shrink-0">
-                    {chat.enabled ? "ON" : "OFF"}
+                    {chat.enabled ? t("settings.chatOn") : t("settings.chatOff")}
                   </Badge>
                   <Switch
                     checked={chat.enabled ?? true}
                     onCheckedChange={() => handleToggle(chat)}
+                    aria-label={chat.label}
                     className="shrink-0"
                   />
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-destructive/70 hover:text-destructive shrink-0"
+                    className="h-9 w-9 shrink-0 text-destructive/70 hover:text-destructive max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
                     onClick={() => handleDelete(chat.id)}
+                    aria-label={`${t("common.delete")} ${chat.label}`}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>
@@ -617,7 +624,7 @@ export default function Settings() {
   const isAdmin = me?.role === "admin";
 
   const formSchema = z.object({
-    gymName: z.string().min(1, "Gym name is required"),
+    gymName: z.string().min(1, t("settings.gymNameRequired")),
     phone: z.string().optional(),
     address: z.string().optional(),
     logoUrl: z.string().nullable().optional(),
@@ -681,18 +688,18 @@ export default function Settings() {
         icon={Settings2}
         iconClass="bg-slate-500/10 text-slate-600 dark:text-slate-400"
         title={t("settings.title")}
-        subtitle="Manage your gym configuration and users"
+        subtitle={t("settings.subtitle")}
       />
 
       <Tabs defaultValue="general">
-        <TabsList className="h-10 w-full overflow-x-auto flex-nowrap justify-start md:justify-center">
+        <TabsList className="h-auto min-h-10 w-full flex-wrap justify-start md:justify-center">
           <TabsTrigger value="general" className="gap-2">
             <Settings2 className="w-3.5 h-3.5" />
-            General
+            {t("settings.tabGeneral")}
           </TabsTrigger>
           <TabsTrigger value="users" className="gap-2">
             <Users className="w-3.5 h-3.5" />
-            Users
+            {t("settings.tabUsers")}
           </TabsTrigger>
           <TabsTrigger value="whatsapp" className="gap-2">
             <MessageCircle className="w-3.5 h-3.5" />
@@ -809,7 +816,7 @@ export default function Settings() {
 
               <div className="flex justify-end">
                 <Button type="submit" size="lg" disabled={updateSettings.isPending} data-testid="button-save-settings">
-                  {updateSettings.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {updateSettings.isPending && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
                   {t("settings.save")}
                 </Button>
               </div>

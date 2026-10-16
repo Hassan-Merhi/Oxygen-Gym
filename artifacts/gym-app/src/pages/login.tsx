@@ -152,7 +152,7 @@ export default function LoginPage() {
                   placeholder="••••••••"
                   disabled={loading}
                   required
-                  className="h-10 pr-10"
+                  className="h-10 pe-10"
                 />
                 <button
                   type="button"

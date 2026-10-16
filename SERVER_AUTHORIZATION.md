@@ -68,21 +68,26 @@ The feature-permission keys are `dashboard`, `members`, `plans`, `staff`, `payro
 | GET | `/payments/admin/cash-cleanup` | admin |
 | POST | `/payments/admin/cash-cleanup` | admin |
 | POST | `/payments/:id/send-receipt` | `payments` |
-| PATCH | `/payments/:id` | `payments` |
-| DELETE | `/payments/:id` | `payments` |
+| PATCH | `/payments/:id` | `payments + approveCorrections` (maker-checker) |
+| DELETE | `/payments/:id` | `payments + approveCorrections` (maker-checker) |
 | GET | `/vouchers` | `vouchers` |
 | POST | `/vouchers` | `vouchers` |
 | GET | `/vouchers/:id` | `vouchers` |
-| PATCH | `/vouchers/:id` | `vouchers` |
-| DELETE | `/vouchers/:id` | `vouchers` |
+| PATCH | `/vouchers/:id` | `vouchers + approveCorrections` (maker-checker) |
+| DELETE | `/vouchers/:id` | `vouchers + approveCorrections` (maker-checker) |
 | GET | `/ledger/balance` | `viewAccounting` |
 | GET | `/ledger/movements` | `viewAccounting` |
-| POST | `/ledger/opening-balance` | admin |
+| POST | `/ledger/opening-balance` | admin (records a physical cash count) |
+| GET | `/ledger/health` | `viewAccounting` |
 | GET | `/ledger` | `viewAccounting` |
 | GET | `/accounts/summary` | `viewAccounting` |
 | GET | `/accounts/sales` | `viewAccounting` |
 | GET | `/accounts/expenses` | `viewAccounting` |
 | GET | `/accounts/profit-loss` | `viewAccounting + viewProfit` |
+| GET | `/accounts/trial-balance` | `viewAccounting` |
+| GET | `/accounts/balance-sheet` | `viewAccounting + viewProfit` |
+| GET | `/accounts/periods` | `viewAccounting` |
+| POST | `/accounts/periods/close` | admin |
 | GET | `/accounts/chart` | `viewAccounting` |
 | POST | `/accounts/chart` | admin |
 | PUT | `/accounts/chart/:id` | admin |
@@ -102,16 +107,16 @@ The feature-permission keys are `dashboard`, `members`, `plans`, `staff`, `payro
 | GET | `/supplier-credits` | `stock + viewCost` |
 | POST | `/supplier-credits` | `manageInventory` |
 | PATCH | `/supplier-credits/:id` | `manageInventory` |
-| DELETE | `/supplier-credits/:id` | `manageInventory` |
+| DELETE | `/supplier-credits/:id` | `manageInventory + approveCorrections` (maker-checker) |
 | GET | `/supplier-credits/:id/payments` | `stock + viewCost` |
 | POST | `/supplier-credits/:id/payments` | `manageInventory` |
-| DELETE | `/supplier-credits/:id/payments/:paymentId` | `manageInventory` |
+| DELETE | `/supplier-credits/:id/payments/:paymentId` | `manageInventory + approveCorrections` (maker-checker) |
 | GET | `/sales/lookup-barcode` | `sales`; cost/profit fields redacted without their visibility permissions |
 | GET | `/sales` | `sales`; cost/profit fields redacted without their visibility permissions |
 | GET | `/sales/:id` | `sales`; cost/profit fields redacted without their visibility permissions |
 | POST | `/sales` | `sales`; response is redacted without `viewCost`/`viewProfit` |
 | PATCH | `/sales/:id` | admin |
-| PATCH | `/sales/:id/void` | `sales`; response is redacted without `viewCost`/`viewProfit` |
+| PATCH | `/sales/:id/void` | `sales + approveCorrections` (maker-checker); response is redacted without `viewCost`/`viewProfit` |
 | GET | `/staff-employees` | `staff + payroll` |
 | GET | `/staff-employees/:id` | `staff + payroll` |
 | POST | `/staff-employees` | `manageStaff` |
@@ -121,7 +126,7 @@ The feature-permission keys are `dashboard`, `members`, `plans`, `staff`, `payro
 | GET | `/payroll/:id` | `payroll` |
 | POST | `/payroll` | `managePayroll` |
 | PATCH | `/payroll/:id/pay` | `managePayroll` |
-| PATCH | `/payroll/:id/cancel` | `managePayroll` |
+| PATCH | `/payroll/:id/cancel` | `managePayroll`; reversing a **paid** record also needs `approveCorrections` (checked in the handler) |
 | GET | `/commissions/summary` | `payroll` |
 | GET | `/attendance/summary` | `members` |
 | GET | `/attendance/daily` | `members` |

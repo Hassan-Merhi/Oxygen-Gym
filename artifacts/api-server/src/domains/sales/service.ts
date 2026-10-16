@@ -2,8 +2,8 @@ import { db } from "@workspace/db";
 import { paymentsTable, productsTable, salesTable } from "@workspace/db/schema";
 import type { SaleItem, DbExecutor } from "@workspace/db";
 import { and, count, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
-import { appendLedgerEntry } from "../../lib/ledger";
-import { ACCOUNTS, postDoubleEntry, reverseEntries } from "../../lib/accounting";
+import { ACCOUNTS, assertPeriodOpen, newJournalId, postDoubleEntry, reverseEntries } from "../../lib/accounting";
+import { lubumbashiTodayEnd } from "../../lib/timezone";
 import { getNextNumber } from "../../lib/numbering";
 import { convertCurrencyAmount, getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
 import { addMoney, fxRate, money, multiplyMoney, subtractMoney } from "../../shared/accounting/decimal";
@@ -56,8 +56,10 @@ function validateSaleLine(item: SaleLineInput): void {
   if (money(item.discount) > money(item.unitPrice)) throw badRequest("Discount cannot exceed unit price");
 }
 
+/** Revenue and cost of goods sold for one sale, posted as a single journal. */
 async function postSaleAccounting(input: {
   executor: DbExecutor;
+  journalId?: string;
   sourceType: string;
   sourceId: number;
   sourceNumber?: string | null;
@@ -70,8 +72,10 @@ async function postSaleAccounting(input: {
   description: string;
   actor: string;
 }): Promise<void> {
+  const journalId = input.journalId ?? newJournalId();
   const revenueConverted = toUsdCdf(input.revenue, input.currency, input.exchangeRate);
   await postDoubleEntry({
+    journalId,
     sourceType: input.sourceType,
     sourceId: input.sourceId,
     sourceNumber: input.sourceNumber ?? undefined,
@@ -91,6 +95,7 @@ async function postSaleAccounting(input: {
   if (money(input.cogs) > 0) {
     const costConverted = toUsdCdf(input.cogs, input.currency, input.exchangeRate);
     await postDoubleEntry({
+      journalId,
       sourceType: input.sourceType,
       sourceId: input.sourceId,
       sourceNumber: input.sourceNumber ?? undefined,
@@ -150,6 +155,7 @@ export async function createSale(input: CreateSaleInput, actor: string) {
   if (currency !== "USD" && currency !== "CDF") throw badRequest("currency must be USD or CDF");
 
   return withTransaction(async (tx) => {
+    await assertPeriodOpen(tx, new Date(), "This sale");
     const rate = fxRate(await getExchangeRate(tx));
     const saleNumber = await getNextNumber("sale", tx);
     const paymentNumber = await getNextNumber("PAY", tx);
@@ -249,19 +255,6 @@ export async function createSale(input: CreateSaleInput, actor: string) {
       createdBy: actor,
     });
 
-    await appendLedgerEntry({
-      entryDate: sale.saleDate,
-      sourceType: "sale",
-      sourceNumber: saleNumber,
-      sourceId: sale.id,
-      direction: "in",
-      amount: totalAmount,
-      currency,
-      exchangeRate: rate,
-      description: `Sale ${saleNumber}`,
-      createdBy: actor,
-    }, tx);
-
     await postSaleAccounting({
       executor: tx,
       sourceType: "sale",
@@ -285,6 +278,7 @@ export async function patchSale(id: number, patch: PatchSaleInput, actor: string
     const [existing] = await tx.select().from(salesTable).where(eq(salesTable.id, id)).for("update");
     if (!existing) throw notFound("Sale not found");
     if (existing.status === "voided") throw badRequest("Cannot edit a voided sale");
+    if (patch.saleDate && patch.saleDate.getTime() > lubumbashiTodayEnd().getTime()) throw badRequest("A sale cannot be dated in the future");
 
     const lockedRate = fxRate(Number(existing.exchangeRate ?? await getExchangeRate(tx)));
     const oldCurrency = existing.currency.toUpperCase();
@@ -370,37 +364,17 @@ export async function patchSale(id: number, patch: PatchSaleInput, actor: string
 
     const financialChanged = patch.currency !== undefined || patch.items !== undefined || patch.saleDate !== undefined;
     if (financialChanged) {
-      if (money(existing.totalAmount ?? 0) > 0) {
-        await appendLedgerEntry({
-          sourceType: "sale_correction",
-          sourceNumber: existing.saleNumber ?? undefined,
-          sourceId: existing.id,
-          direction: "out",
-          amount: existing.totalAmount ?? 0,
-          currency: existing.currency,
-          exchangeRate: lockedRate,
-          description: `Correction: reverse sale ${existing.saleNumber}`,
-          createdBy: actor,
-        }, tx);
-      }
-      if (totalAmount > 0) {
-        await appendLedgerEntry({
-          sourceType: "sale_correction",
-          sourceNumber: existing.saleNumber ?? undefined,
-          sourceId: existing.id,
-          direction: "in",
-          amount: totalAmount,
-          currency: targetCurrency,
-          exchangeRate: lockedRate,
-          entryDate: patch.saleDate ?? existing.saleDate,
-          description: `Correction: update sale ${existing.saleNumber}`,
-          createdBy: actor,
-        }, tx);
-      }
-
-      await reverseEntries("sale", existing.id, "sale_correction", actor, tx);
+      await assertPeriodOpen(tx, existing.saleDate, "The original sale");
+      await assertPeriodOpen(tx, patch.saleDate ?? existing.saleDate, "The corrected sale");
+      const journalId = newJournalId();
+      await reverseEntries("sale", existing.id, "sale_correction", actor, tx, {
+        journalId,
+        entryDate: existing.saleDate,
+        description: `Correction: reverse sale ${existing.saleNumber}`,
+      });
       await postSaleAccounting({
         executor: tx,
+        journalId,
         sourceType: "sale_correction",
         sourceId: existing.id,
         sourceNumber: existing.saleNumber,
@@ -425,7 +399,6 @@ export async function voidSale(id: number, reason: string, actor: string) {
     const [sale] = await tx.select().from(salesTable).where(eq(salesTable.id, id)).for("update");
     if (!sale) throw notFound("Sale not found");
     if (sale.status === "voided") throw badRequest("Sale is already voided");
-    const lockedRate = fxRate(Number(sale.exchangeRate ?? await getExchangeRate(tx)));
 
     const saleItems = (sale.items ?? []) as SaleItem[];
     for (const item of saleItems) {
@@ -441,25 +414,12 @@ export async function voidSale(id: number, reason: string, actor: string) {
       voidReason: reason,
     }).where(eq(salesTable.id, id)).returning();
 
-    await reverseEntries("sale", sale.id, "void_sale", actor, tx);
+    // Revenue and cost are reversed today (cash leaves the drawer today); stock returns at the cost it left.
+    await reverseEntries("sale", sale.id, "void_sale", actor, tx, { description: `Void sale ${sale.saleNumber}: ${reason}` });
     await tx.update(paymentsTable).set({ status: "cancelled" }).where(and(
       eq(paymentsTable.linkedEntity, "sale"),
       eq(paymentsTable.linkedEntityId, id),
     ));
-
-    if (money(sale.totalAmount ?? 0) > 0) {
-      await appendLedgerEntry({
-        sourceType: "sale_void",
-        sourceNumber: sale.saleNumber ?? undefined,
-        sourceId: sale.id,
-        direction: "out",
-        amount: sale.totalAmount ?? 0,
-        currency: sale.currency ?? "USD",
-        exchangeRate: lockedRate,
-        description: `Void Sale ${sale.saleNumber}`,
-        createdBy: actor,
-      }, tx);
-    }
 
     return voided;
   });

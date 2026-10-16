@@ -13,8 +13,8 @@ import type { MoneyPair } from './moneyPair';
 
 export type GetFinancials200 = {
   period: GetFinancials200Period;
-  dateFrom: string;
-  dateTo: string;
+  dateFrom: string | null;
+  dateTo: string | null;
   rate: number;
   currency: GetFinancials200Currency;
   revenue: MoneyPair;

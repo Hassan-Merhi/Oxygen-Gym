@@ -6,7 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type SetOpeningBalance200Balance = {
-  balanceUsd: number;
-  balanceCdf: number;
-};
+export interface LedgerAmountRow {
+  accountId: number;
+  name: string;
+  usd: number;
+  cdf: number;
+}

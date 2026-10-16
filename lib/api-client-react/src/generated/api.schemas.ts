@@ -108,6 +108,8 @@ export interface PagePermissions {
   manageInventory: boolean;
   manageMembers: boolean;
   managePlans: boolean;
+  /** May edit or cancel posted payments and vouchers, void sales, cancel paid payroll and reverse supplier records */
+  approveCorrections?: boolean;
 }
 
 export type CurrentUserRole = typeof CurrentUserRole[keyof typeof CurrentUserRole];
@@ -751,6 +753,7 @@ export interface VouchersPage {
 
 export interface LedgerEntry {
   id: number;
+  journalId?: string;
   entryDate: string;
   sourceType: string;
   sourceNumber?: string | null;
@@ -776,8 +779,146 @@ export interface LedgerPage {
 }
 
 export interface LedgerBalance {
+  /** USD and CDF notes valued at today's rate, in USD */
+  balanceUsd: number;
+  /** USD and CDF notes valued at today's rate, in CDF */
+  balanceCdf: number;
+  /** USD notes expected in the drawer */
+  nativeUsd?: number;
+  /** CDF notes expected in the drawer */
+  nativeCdf?: number;
+  /** Book value at the rates locked on each entry */
+  bookUsd?: number;
+  rate?: number;
+  lockedThrough?: string | null;
+}
+
+export type CashMovementDirection = typeof CashMovementDirection[keyof typeof CashMovementDirection];
+
+
+export const CashMovementDirection = {
+  in: 'in',
+  out: 'out',
+} as const;
+
+export interface CashMovement {
+  entryId: number;
+  journalId: string;
+  sourceType: string;
+  sourceId: number | null;
+  sourceNumber: string | null;
+  date: string;
+  dateKey: string;
+  direction: CashMovementDirection;
+  category: string;
+  amount: number;
+  currency: string;
+  exchangeRate: number;
+  amountUsd: number;
+  amountCdf: number;
+  description: string;
+  party: string;
+  account: string;
+  createdBy?: string | null;
+  /** Running USD notes after this line */
+  balanceUsd: number;
+  /** Running CDF notes after this line */
+  balanceCdf: number;
+}
+
+export type CashBookTotals = {
+  inUsd: number;
+  outUsd: number;
+  inCdf: number;
+  outCdf: number;
+  inBookUsd: number;
+  outBookUsd: number;
+  netBookUsd: number;
+};
+
+export interface AmountPair {
+  usd: number;
+  cdf: number;
+}
+
+export interface CashBook {
+  account: string;
+  exchangeRate: number;
+  opening: AmountPair;
+  closing: AmountPair;
+  totals: CashBookTotals;
+  items: CashMovement[];
+}
+
+export interface LedgerAmountRow {
+  accountId: number;
+  name: string;
+  usd: number;
+  cdf: number;
+}
+
+export type TrialBalanceTotals = {
+  debitUsd: number;
+  creditUsd: number;
+  debitCdf: number;
+  creditCdf: number;
+};
+
+export type TrialBalanceRowsItemNormal = typeof TrialBalanceRowsItemNormal[keyof typeof TrialBalanceRowsItemNormal];
+
+
+export const TrialBalanceRowsItemNormal = {
+  debit: 'debit',
+  credit: 'credit',
+} as const;
+
+export type TrialBalanceRowsItem = {
+  accountId: number;
+  name: string;
+  type: string;
+  normal: TrialBalanceRowsItemNormal;
+  debitUsd: number;
+  creditUsd: number;
+  debitCdf: number;
+  creditCdf: number;
   balanceUsd: number;
   balanceCdf: number;
+};
+
+export interface TrialBalance {
+  asOf: string;
+  balanced: boolean;
+  totals: TrialBalanceTotals;
+  rows: TrialBalanceRowsItem[];
+}
+
+export type BalanceSheetTotals = {
+  assets: AmountPair;
+  liabilities: AmountPair;
+  equity: AmountPair;
+  liabilitiesAndEquity: AmountPair;
+};
+
+export interface BalanceSheet {
+  asOf: string;
+  balanced: boolean;
+  assets: LedgerAmountRow[];
+  liabilities: LedgerAmountRow[];
+  equity: LedgerAmountRow[];
+  currentEarnings: AmountPair;
+  totals: BalanceSheetTotals;
+}
+
+export interface ClosedPeriod {
+  id: number;
+  closedThrough: string;
+  closedThroughDate: string;
+  journalId?: string | null;
+  netIncomeUsd: number;
+  netIncomeCdf: number;
+  notes?: string | null;
+  closedBy?: string | null;
+  closedAt: string;
 }
 
 export interface AccountCard {
@@ -790,6 +931,8 @@ export interface AccountCard {
 export interface CashCard {
   balanceUsd: number;
   balanceCdf: number;
+  nativeUsd?: number;
+  nativeCdf?: number;
   todayInUsd: number;
   todayOutUsd: number;
   monthInUsd: number;
@@ -797,6 +940,7 @@ export interface CashCard {
 }
 
 export interface AccountSummary {
+  rate?: number;
   cash: CashCard;
   sales: AccountCard;
   expenses: AccountCard;
@@ -804,18 +948,17 @@ export interface AccountSummary {
 }
 
 export interface SalesEntry {
-  id: number;
-  paymentNumber?: string | null;
-  direction: string;
-  category: string;
-  memberName?: string | null;
-  linkedEntityName?: string | null;
-  planName?: string | null;
+  id: string;
+  sourceType: string;
+  sourceNumber?: string | null;
+  date: string;
+  description?: string | null;
+  party?: string | null;
+  category?: string | null;
   amount: number;
   currency: string;
-  amountUsd?: number | null;
-  amountCdf?: number | null;
-  paymentDate: string;
+  amountUsd: number;
+  amountCdf: number;
   createdBy?: string | null;
 }
 
@@ -846,11 +989,6 @@ export interface ExpensePage {
   total: number;
   page: number;
   limit: number;
-}
-
-export interface AmountPair {
-  usd: number;
-  cdf: number;
 }
 
 export type ProfitLossBreakdown = {[key: string]: AmountPair};
@@ -939,6 +1077,8 @@ export interface UpdateProductBody {
   sellingPrice?: number;
   currency?: UpdateProductBodyCurrency;
   status?: string;
+  /** Why quantity or cost changed; posted with the stock adjustment */
+  adjustmentReason?: string;
 }
 
 export interface StockPurchaseRecord {
@@ -1428,50 +1568,50 @@ dateFrom?: string;
 dateTo?: string;
 };
 
-export type ListCurrentCashMovements200ItemsItemDirection = typeof ListCurrentCashMovements200ItemsItemDirection[keyof typeof ListCurrentCashMovements200ItemsItemDirection];
-
-
-export const ListCurrentCashMovements200ItemsItemDirection = {
-  in: 'in',
-  out: 'out',
-} as const;
-
-export type ListCurrentCashMovements200ItemsItem = {
-  sourceType: string;
-  sourceId: number | null;
-  sourceNumber: string | null;
-  date: string;
-  direction: ListCurrentCashMovements200ItemsItemDirection;
-  category: string;
-  amount: number;
-  currency: string;
-  exchangeRate: number;
-  amountUsd: number;
-  amountCdf: number;
-  description: string;
-  party: string;
-};
-
-export type ListCurrentCashMovements200 = {
-  exchangeRate: number;
-  items: ListCurrentCashMovements200ItemsItem[];
+export type ListCurrentCashMovementsParams = {
+account?: string;
+dateFrom?: string;
+dateTo?: string;
 };
 
 export type SetOpeningBalanceBody = {
-  targetAmountUsd: number;
+  /** Deprecated alias of countedUsd */
+  targetAmountUsd?: number;
+  countedUsd?: number | null;
+  countedCdf?: number | null;
+  account?: string | null;
   date?: string | null;
   notes?: string | null;
 };
 
-export type SetOpeningBalance200Balance = {
-  balanceUsd: number;
-  balanceCdf: number;
+export type SetOpeningBalance200AdjustmentsItem = {
+  currency: string;
+  expected: number;
+  counted: number;
+  difference: number;
 };
 
 export type SetOpeningBalance200 = {
   ok: boolean;
   skipped: boolean;
-  balance: SetOpeningBalance200Balance;
+  journalId?: string | null;
+  adjustments: SetOpeningBalance200AdjustmentsItem[];
+  balance: LedgerBalance;
+};
+
+export type GetLedgerHealth200ChecksItem = {
+  key: string;
+  ok: boolean;
+  expected: number;
+  actual: number;
+  difference: number;
+  message: string;
+};
+
+export type GetLedgerHealth200 = {
+  ok: boolean;
+  rate: number;
+  checks: GetLedgerHealth200ChecksItem[];
 };
 
 export type ListLedgerParams = {
@@ -1588,6 +1728,42 @@ dateFrom?: string;
 dateTo?: string;
 };
 
+export type GetTrialBalanceParams = {
+asOf?: string;
+};
+
+export type GetBalanceSheetParams = {
+asOf?: string;
+};
+
+export type ListClosedPeriods200 = {
+  lockedThrough: string | null;
+  lockedThroughDate: string | null;
+  items: ClosedPeriod[];
+};
+
+export type ClosePeriodBody = {
+  closedThroughDate: string;
+  confirmation: string;
+  countedUsd?: number | null;
+  countedCdf?: number | null;
+  notes?: string | null;
+};
+
+export type ClosePeriod200 = {
+  ok: boolean;
+  closedThrough: string;
+  closedThroughDate: string;
+  journalId: string;
+  revaluationJournalId?: string | null;
+  exchangeRate: number;
+  netIncome: AmountPair;
+  revenue: AmountPair;
+  expenses: AmountPair;
+  fxAdjustment: AmountPair;
+  periodId: number;
+};
+
 export type GetProfitLossParams = {
 period?: GetProfitLossPeriod;
 dateFrom?: string;
@@ -1602,6 +1778,7 @@ export const GetProfitLossPeriod = {
   month: 'month',
   last_month: 'last_month',
   year: 'year',
+  all: 'all',
   custom: 'custom',
 } as const;
 
@@ -1673,6 +1850,7 @@ export const GetFinancialsPeriod = {
   month: 'month',
   last_month: 'last_month',
   year: 'year',
+  all: 'all',
   custom: 'custom',
 } as const;
 
@@ -1684,6 +1862,7 @@ export const GetFinancials200Period = {
   month: 'month',
   last_month: 'last_month',
   year: 'year',
+  all: 'all',
   custom: 'custom',
 } as const;
 
@@ -1721,16 +1900,6 @@ export type GetFinancials200CategoriesItem = {
   cdf: number;
 };
 
-export type GetFinancials200MonthsItemTransactionsItemSourceType = typeof GetFinancials200MonthsItemTransactionsItemSourceType[keyof typeof GetFinancials200MonthsItemTransactionsItemSourceType];
-
-
-export const GetFinancials200MonthsItemTransactionsItemSourceType = {
-  payment: 'payment',
-  voucher: 'voucher',
-  sale_revenue: 'sale_revenue',
-  sale_cogs: 'sale_cogs',
-} as const;
-
 export type GetFinancials200MonthsItemTransactionsItemKind = typeof GetFinancials200MonthsItemTransactionsItemKind[keyof typeof GetFinancials200MonthsItemTransactionsItemKind];
 
 
@@ -1741,8 +1910,9 @@ export const GetFinancials200MonthsItemTransactionsItemKind = {
 
 export type GetFinancials200MonthsItemTransactionsItem = {
   id: string;
-  sourceType: GetFinancials200MonthsItemTransactionsItemSourceType;
-  sourceId: number;
+  journalId: string;
+  sourceType: string;
+  sourceId: number | null;
   reference: string;
   date: string;
   dateKey: string;
@@ -1766,8 +1936,8 @@ export type GetFinancials200MonthsItem = {
 
 export type GetFinancials200 = {
   period: GetFinancials200Period;
-  dateFrom: string;
-  dateTo: string;
+  dateFrom: string | null;
+  dateTo: string | null;
   rate: number;
   currency: GetFinancials200Currency;
   revenue: MoneyPair;

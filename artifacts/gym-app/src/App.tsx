@@ -4,11 +4,12 @@ import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/reac
 import { ApiError } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useI18nDirection } from "@/lib/i18n";
+import { useI18n, useI18nDirection } from "@/lib/i18n";
 import { AuthProvider } from "@/lib/auth";
 import { useAuth } from "@/lib/auth-context";
 import { useGetMe } from "@/hooks/use-me";
 import { AppLayout } from "@/components/layout/app-layout";
+import { Lock } from "lucide-react";
 
 // Route-level code splitting keeps large feature pages out of the initial bundle.
 // Only the page the user actually opens is downloaded and evaluated.
@@ -93,13 +94,14 @@ function useFirstAccessibleRoute(): string | null {
 // ── No-access screen (staff with all pages disabled) ─────────────────────────
 function NoAccessScreen() {
   const { logout } = useAuth();
+  const { t } = useI18n();
   return (
     <div className="min-h-[100dvh] flex items-center justify-center bg-slate-50 dark:bg-slate-950">
       <div className="flex flex-col items-center gap-4 text-center px-6">
-        <div className="h-12 w-12 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-500 text-2xl">🔒</div>
-        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">No pages accessible</h2>
-        <p className="text-sm text-slate-500 max-w-xs">Your account doesn't have access to any pages. Contact your administrator to enable permissions.</p>
-        <button onClick={logout} className="mt-2 text-sm text-indigo-600 hover:underline">Sign out</button>
+        <div className="h-12 w-12 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-600 dark:text-red-400"><Lock className="h-6 w-6" aria-hidden="true" /></div>
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{t("app.noAccessTitle")}</h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400 max-w-xs">{t("app.noAccessDesc")}</p>
+        <button type="button" onClick={logout} className="mt-2 min-h-11 rounded-md px-3 text-sm text-indigo-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-indigo-400">{t("app.signOut")}</button>
       </div>
     </div>
   );
@@ -155,11 +157,12 @@ function ProtectedMemberProfile({ id }: { id: number }) {
 
 // ── Loading screen ────────────────────────────────────────────────────────────
 function LoadingScreen() {
+  const { t } = useI18n();
   return (
     <div className="min-h-[100dvh] flex items-center justify-center bg-slate-50 dark:bg-slate-950">
       <div className="flex flex-col items-center gap-3">
         <div className="h-10 w-10 rounded-xl bg-indigo-600 flex items-center justify-center animate-pulse" />
-        <p className="text-sm text-slate-400">Loading…</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400" role="status">{t("common.loading")}</p>
       </div>
     </div>
   );

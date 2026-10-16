@@ -9,6 +9,8 @@
 export interface CashCard {
   balanceUsd: number;
   balanceCdf: number;
+  nativeUsd?: number;
+  nativeCdf?: number;
   todayInUsd: number;
   todayOutUsd: number;
   monthInUsd: number;

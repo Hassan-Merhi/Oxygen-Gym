@@ -7,6 +7,16 @@
  */
 
 export interface LedgerBalance {
+  /** USD and CDF notes valued at today's rate, in USD */
   balanceUsd: number;
+  /** USD and CDF notes valued at today's rate, in CDF */
   balanceCdf: number;
+  /** USD notes expected in the drawer */
+  nativeUsd?: number;
+  /** CDF notes expected in the drawer */
+  nativeCdf?: number;
+  /** Book value at the rates locked on each entry */
+  bookUsd?: number;
+  rate?: number;
+  lockedThrough?: string | null;
 }

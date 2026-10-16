@@ -66,11 +66,10 @@ router.post("/", async (req, res) => {
   }
 
   const resolvedRole = body.role ?? "staff";
-  const resolvedPermissions = body.permissions ?? (
-    resolvedRole === "admin" ? defaultAdminPermissions :
+  const roleDefaults = resolvedRole === "admin" ? defaultAdminPermissions :
     resolvedRole === "manager" ? defaultManagerPermissions :
-    defaultStaffPermissions
-  );
+    defaultStaffPermissions;
+  const resolvedPermissions = body.permissions ? { ...roleDefaults, ...body.permissions } : roleDefaults;
 
   try {
     const existing = await db.query.usersTable.findFirst({ where: eq(usersTable.username, username) });
@@ -211,7 +210,7 @@ router.patch("/:id/permissions", async (req, res) => {
 
   try {
     const [updated] = await db.update(usersTable)
-      .set({ permissions: body.permissions })
+      .set({ permissions: { approveCorrections: false, ...body.permissions } })
       .where(eq(usersTable.id, params.id))
       .returning();
     if (!updated) { res.status(404).json({ error: "User not found" }); return; }

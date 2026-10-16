@@ -3,7 +3,7 @@ import * as ApiContracts from "@workspace/api-zod";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { logActivity } from "../../lib/activity";
-import { getCurrentUser } from "../../shared/auth/permissions";
+import { getCurrentUser, hasPermission } from "../../shared/auth/permissions";
 import {
   asRecord,
   nonNegativeNumber,
@@ -80,7 +80,7 @@ router.patch("/:id/cancel", async (req, res) => {
   const id = parseId(contractParams(req, ApiContracts.CancelPayrollParams).id, "payroll id");
   const reason = requiredString(asRecord(contractBody(req, ApiContracts.CancelPayrollBody)).reason, "reason");
   const actor = getCurrentUser(req).name;
-  const record = await cancelPayroll(id, reason, actor);
+  const record = await cancelPayroll(id, reason, actor, { canReversePaid: hasPermission(req, "approveCorrections") });
   await logActivity(req, "payroll_cancelled", "payroll", id, {
     payrollNumber: record.payrollNumber,
     staffName: record.staffName,

@@ -9,7 +9,8 @@
     "authorization:audit": "tsx ./src/authorization-audit.ts",
     "contracts:check": "tsx ./src/check-contract-drift.ts",
     "test:critical": "tsx --test ../tests/critical-behavior.test.ts ../tests/mobile-navigation-i18n.test.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:ledger": "tsx --test ../tests/ledger-integration.test.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",

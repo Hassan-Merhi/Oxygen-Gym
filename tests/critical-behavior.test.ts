@@ -52,7 +52,18 @@ test("ledger and accounting reads require viewAccounting", () => {
 test("payments remain permission-gated", () => {
   assert.equal(evaluateEndpointAccess("POST", "/payments", user(1)).status, 403);
   assert.equal(evaluateEndpointAccess("POST", "/payments", user(1, ["payments"])).allowed, true);
-  assert.equal(evaluateEndpointAccess("PATCH", "/payments/42", user(1, ["payments"])).allowed, true);
+  // Corrections are maker-checker: recording a payment does not allow editing or cancelling one.
+  assert.equal(evaluateEndpointAccess("PATCH", "/payments/42", user(1, ["payments"])).status, 403);
+  assert.equal(evaluateEndpointAccess("PATCH", "/payments/42", user(1, ["payments", "approveCorrections"])).allowed, true);
+  assert.equal(evaluateEndpointAccess("DELETE", "/vouchers/42", user(1, ["vouchers"])).status, 403);
+  assert.equal(evaluateEndpointAccess("PATCH", "/sales/42/void", user(1, ["sales"])).status, 403);
+  assert.equal(evaluateEndpointAccess("PATCH", "/sales/42/void", user(1, ["sales", "approveCorrections"])).allowed, true);
+});
+
+test("closing the books is admin-only", () => {
+  assert.equal(evaluateEndpointAccess("POST", "/accounts/periods/close", user(1, ["viewAccounting", "approveCorrections"])).status, 403);
+  assert.equal(evaluateEndpointAccess("POST", "/accounts/periods/close", user(1, [], "admin")).allowed, true);
+  assert.equal(evaluateEndpointAccess("GET", "/accounts/trial-balance", user(1, ["viewAccounting"])).allowed, true);
 });
 
 test("member reads and mutations use separate permissions", () => {

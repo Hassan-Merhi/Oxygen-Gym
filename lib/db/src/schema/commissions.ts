@@ -13,6 +13,8 @@ export const commissionsTable = pgTable("commissions", {
   currency: text("currency").notNull().default("USD"),
   status: text("status").notNull().default("pending"),
   payrollId: integer("payroll_id"),
+  // The membership payment that earned this commission (cancelled with it).
+  paymentId: integer("payment_id"),
   note: text("note"),
   paidAt: timestamp("paid_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

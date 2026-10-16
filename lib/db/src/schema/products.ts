@@ -48,6 +48,30 @@ export const stockPurchasesTable = pgTable("stock_purchases", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
+/**
+ * Manual stock corrections (count differences, damage, cost re-valuation).
+ * Each adjustment posts Inventory against Inventory Adjustments so the ledger's
+ * Inventory balance always equals quantity x average cost.
+ */
+export const stockAdjustmentsTable = pgTable("stock_adjustments", {
+  id: serial("id").primaryKey(),
+  adjustmentNumber: text("adjustment_number").unique(),
+  productId: integer("product_id").notNull(),
+  productName: text("product_name"),
+  quantityBefore: integer("quantity_before").notNull(),
+  quantityAfter: integer("quantity_after").notNull(),
+  costBefore: money("cost_before").notNull(),
+  costAfter: money("cost_after").notNull(),
+  currency: text("currency").notNull().default("USD"),
+  exchangeRate: fx("exchange_rate").notNull().default(1),
+  valueChangeUsd: money("value_change_usd").notNull().default(0),
+  reason: text("reason"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type StockAdjustment = typeof stockAdjustmentsTable.$inferSelect;
+
 export const insertProductSchema = createInsertSchema(productsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type Product = typeof productsTable.$inferSelect;

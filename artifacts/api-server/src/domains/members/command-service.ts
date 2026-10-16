@@ -6,13 +6,11 @@ import {
   membersTable,
   paymentsTable,
   plansTable,
-  vouchersTable,
 } from "@workspace/db/schema";
 import { and, between, desc, eq, gte, isNull, lte } from "drizzle-orm";
-import { appendLedgerEntry } from "../../lib/ledger";
-import { ACCOUNTS, postDoubleEntry, reverseEntries } from "../../lib/accounting";
+import { ACCOUNTS, getBooksLockedThrough, newJournalId, postDoubleEntry, reverseEntries } from "../../lib/accounting";
 import { getNextNumber } from "../../lib/numbering";
-import { lubumbashiTodayEnd, lubumbashiTodayStart } from "../../lib/timezone";
+import { businessDateKey, lubumbashiTodayEnd, lubumbashiTodayStart } from "../../lib/timezone";
 import { getExchangeRate, toUsdCdf } from "../../shared/accounting/currency";
 import { fxRate, money } from "../../shared/accounting/decimal";
 import { withTransaction, type DatabaseTransaction } from "../../shared/db/transaction";
@@ -83,8 +81,23 @@ async function cashAccountName(tx: DatabaseTransaction, accountId?: number | nul
   return account?.name ?? ACCOUNTS.CASH;
 }
 
+/**
+ * When the money for a membership was received: the start date when that is in
+ * the past (a backdated registration), otherwise now. A plan that starts next
+ * month is still cash in the drawer today. A start date inside a closed period
+ * is received now, since closed books cannot change.
+ */
+async function receiptDate(tx: DatabaseTransaction, startDate?: Date | null): Promise<Date> {
+  const now = new Date();
+  if (!startDate || startDate.getTime() >= now.getTime()) return now;
+  const lockedThrough = await getBooksLockedThrough(tx);
+  if (lockedThrough && startDate.getTime() <= lockedThrough.getTime()) return now;
+  return startDate;
+}
+
 async function postMembershipAccounting(params: {
   tx: DatabaseTransaction;
+  journalId?: string;
   paymentId: number;
   paymentNumber?: string | null;
   memberName: string;
@@ -101,6 +114,7 @@ async function postMembershipAccounting(params: {
   const rate = fxRate(params.rate);
   const { amountUsd, amountCdf } = toUsdCdf(amount, params.currency, rate);
   await postDoubleEntry({
+    journalId: params.journalId,
     entryDate: params.entryDate,
     sourceType: params.sourceType ?? "payment",
     sourceId: params.paymentId,
@@ -168,10 +182,11 @@ export async function createMember(input: CreateMemberInput) {
       commissionAmount,
     }).returning();
 
+    let membershipPaymentId: number | null = null;
     if (input.planId && paymentNumber && (amountPaid > 0 || (planPrice ?? 0) > 0)) {
       const converted = toUsdCdf(amountPaid, currency, rate);
       const account = await cashAccountName(tx, input.cashAccountId);
-      const paymentDate = input.startDate ?? new Date();
+      const paymentDate = await receiptDate(tx, input.startDate);
       const [payment] = await tx.insert(paymentsTable).values({
         paymentNumber,
         memberId: member.id,
@@ -192,18 +207,8 @@ export async function createMember(input: CreateMemberInput) {
         status: "completed",
       }).returning();
 
+      membershipPaymentId = payment!.id;
       if (amountPaid > 0) {
-        await appendLedgerEntry({
-          sourceType: "payment",
-          sourceNumber: paymentNumber,
-          sourceId: payment.id,
-          direction: "in",
-          amount: amountPaid,
-          currency,
-          exchangeRate: rate,
-          description: `Membership — ${planName ?? ""} (${member.name})`,
-          entryDate: paymentDate,
-        }, tx);
         await postMembershipAccounting({
           tx,
           paymentId: payment.id,
@@ -227,6 +232,7 @@ export async function createMember(input: CreateMemberInput) {
         amount: money(member.commissionAmount ?? 0),
         currency: member.currency,
         status: "pending",
+        paymentId: membershipPaymentId,
         note: `Commission — ${member.name} (membership payment)`,
       });
     }
@@ -321,31 +327,18 @@ export async function updateMember(id: number, input: UpdateMemberInput) {
         }).where(eq(paymentsTable.id, existingPayment.id));
 
         if (amountActuallyChanged) {
-          if (oldAmount > 0) {
-            await appendLedgerEntry({
-              sourceType: "payment_correction",
-              sourceId: existingPayment.id,
-              direction: "out",
-              amount: oldAmount,
-              currency: existingPayment.currency,
-              exchangeRate: paymentRate,
-              description: `Correction: membership payment reversed — ${member.name}`,
-            }, tx);
-          }
-          if (amountPaid > 0) {
-            await appendLedgerEntry({
-              sourceType: "payment_correction",
-              sourceId: existingPayment.id,
-              direction: "in",
-              amount: amountPaid,
-              currency,
-              exchangeRate: paymentRate,
-              description: `Correction: membership payment updated — ${member.name}`,
-            }, tx);
-          }
-          await reverseEntries("payment", existingPayment.id, "payment_correction", member.name, tx);
+          // Restate the original receipt when its day is still open; otherwise correct today.
+          const correctionDate = await receiptDate(tx, existingPayment.paymentDate);
+          const journalId = newJournalId();
+          await reverseEntries("payment", existingPayment.id, "payment_correction", member.name, tx, {
+            journalId,
+            entryDate: correctionDate,
+            description: `Correction: membership payment reversed — ${member.name}`,
+          });
           await postMembershipAccounting({
             tx,
+            journalId,
+            entryDate: correctionDate,
             paymentId: existingPayment.id,
             paymentNumber: existingPayment.paymentNumber,
             memberName: member.name,
@@ -360,7 +353,7 @@ export async function updateMember(id: number, input: UpdateMemberInput) {
       } else if (effectivePlanId) {
         const paymentRate = currentRate;
         const paymentNumber = await getNextNumber("PAY", tx);
-        const effectiveDate = input.startDate ?? existing.startDate ?? new Date();
+        const effectiveDate = await receiptDate(tx, input.startDate ?? existing.startDate);
         const converted = toUsdCdf(amountPaid, currency, paymentRate);
         const [payment] = await tx.insert(paymentsTable).values({
           paymentNumber,
@@ -381,17 +374,6 @@ export async function updateMember(id: number, input: UpdateMemberInput) {
           status: "completed",
         }).returning();
         if (amountPaid > 0) {
-          await appendLedgerEntry({
-            sourceType: "payment",
-            sourceNumber: paymentNumber,
-            sourceId: payment.id,
-            direction: "in",
-            amount: amountPaid,
-            currency,
-            exchangeRate: paymentRate,
-            description: `Membership payment — ${effectivePlanName} (${member.name})`,
-            entryDate: effectiveDate,
-          }, tx);
           await postMembershipAccounting({
             tx,
             paymentId: payment.id,
@@ -406,35 +388,16 @@ export async function updateMember(id: number, input: UpdateMemberInput) {
           });
         }
       }
-
-      const [existingVoucher] = await tx.select().from(vouchersTable).where(and(
-        eq(vouchersTable.linkedEntity, "member"),
-        eq(vouchersTable.linkedEntityId, id),
-        eq(vouchersTable.voucherType, "cash_receipt"),
-        eq(vouchersTable.status, "recorded"),
-        isNull(vouchersTable.deletedAt),
-      )).orderBy(desc(vouchersTable.id)).limit(1).for("update");
-
-      if (existingVoucher) {
-        const voucherRate = fxRate(Number(existingVoucher.exchangeRate ?? currentRate));
-        const converted = toUsdCdf(amountPaid, currency, voucherRate);
-        const effectiveDate = input.startDate ?? existing.startDate ?? new Date();
-        await tx.update(vouchersTable).set({
-          amount: amountPaid,
-          currency,
-          exchangeRate: voucherRate,
-          ...converted,
-          account,
-          description: `Membership payment — ${member.planName ?? ""}`,
-          voucherDate: effectiveDate,
-        }).where(eq(vouchersTable.id, existingVoucher.id));
-      }
     }
 
     return { member, previousPhone: existing.phone };
   });
 }
 
+/**
+ * Archive a member. Their receipts stay in the books: archiving someone does
+ * not mean the money they paid was never received.
+ */
 export async function archiveMember(id: number) {
   return withTransaction(async (tx) => {
     const [member] = await tx.update(membersTable)
@@ -442,13 +405,6 @@ export async function archiveMember(id: number) {
       .where(eq(membersTable.id, id))
       .returning();
     if (!member) throw notFound("Member not found");
-
-    await tx.update(vouchersTable).set({ status: "cancelled", deletedAt: new Date() }).where(and(
-      eq(vouchersTable.linkedEntity, "member"),
-      eq(vouchersTable.linkedEntityId, id),
-      eq(vouchersTable.status, "recorded"),
-      isNull(vouchersTable.deletedAt),
-    ));
     return member;
   });
 }
@@ -494,32 +450,30 @@ export async function renewMember(id: number, input: RenewMemberInput) {
     const currency = normalizeCurrency(input.currency);
     const amountPaid = money(input.amountPaid);
     const discount = money(input.discount);
-    const sameDayStart = new Date(input.startDate);
-    sameDayStart.setHours(0, 0, 0, 0);
-    const sameDayEnd = new Date(input.startDate);
-    sameDayEnd.setHours(23, 59, 59, 999);
-    const sameDayPayments = await tx.select().from(paymentsTable).where(and(
+    const paymentDate = await receiptDate(tx, input.startDate);
+    // A renewal entered twice the same business day (for example to change the
+    // plan) replaces the earlier one. Older renewals are real receipts and stay.
+    const todayKey = businessDateKey(new Date());
+    const sameDayRenewals = (await tx.select().from(paymentsTable).where(and(
       eq(paymentsTable.memberId, id),
       eq(paymentsTable.category, "membership"),
-      gte(paymentsTable.paymentDate, sameDayStart),
-      lte(paymentsTable.paymentDate, sameDayEnd),
+      eq(paymentsTable.type, "renewal"),
       eq(paymentsTable.status, "completed"),
-    )).for("update");
+      gte(paymentsTable.createdAt, lubumbashiTodayStart()),
+      lte(paymentsTable.createdAt, lubumbashiTodayEnd()),
+    )).for("update")).filter((payment) => businessDateKey(payment.paymentDate) === businessDateKey(paymentDate)
+      && businessDateKey(payment.createdAt) === todayKey);
 
-    for (const payment of sameDayPayments) {
+    for (const payment of sameDayRenewals) {
       await tx.update(paymentsTable).set({ status: "cancelled" }).where(eq(paymentsTable.id, payment.id));
+      await tx.update(commissionsTable)
+        .set({ status: "cancelled" })
+        .where(and(eq(commissionsTable.paymentId, payment.id), eq(commissionsTable.status, "pending")));
       if (money(payment.amount ?? 0) > 0) {
-        const paymentRate = fxRate(Number(payment.exchangeRate ?? rate));
-        await appendLedgerEntry({
-          sourceType: "payment_correction",
-          sourceId: payment.id,
-          direction: "out",
-          amount: money(payment.amount ?? 0),
-          currency: payment.currency,
-          exchangeRate: paymentRate,
-          description: `Reversal: plan changed same-day — ${existing.name}`,
-        }, tx);
-        await reverseEntries("payment", payment.id, "payment_correction", existing.name, tx);
+        await reverseEntries("payment", payment.id, "payment_correction", existing.name, tx, {
+          entryDate: payment.paymentDate,
+          description: `Reversal: renewal replaced the same day — ${existing.name}`,
+        });
       }
     }
 
@@ -557,22 +511,11 @@ export async function renewMember(id: number, input: RenewMemberInput) {
       category: "membership",
       direction: "in",
       notes: input.notes ?? `Renewal: ${input.startDate.toISOString()} → ${input.expiryDate.toISOString()}`,
-      paymentDate: input.startDate,
+      paymentDate,
       status: "completed",
     }).returning();
 
     if (amountPaid > 0) {
-      await appendLedgerEntry({
-        sourceType: "payment",
-        sourceNumber: paymentNumber,
-        sourceId: payment.id,
-        direction: "in",
-        amount: amountPaid,
-        currency,
-        exchangeRate: rate,
-        description: `Renewal — ${plan.name} (${existing.name})`,
-        entryDate: input.startDate,
-      }, tx);
       await postMembershipAccounting({
         tx,
         paymentId: payment.id,
@@ -583,7 +526,7 @@ export async function renewMember(id: number, input: RenewMemberInput) {
         currency,
         rate,
         account,
-        entryDate: input.startDate,
+        entryDate: paymentDate,
       });
     }
 
@@ -595,6 +538,7 @@ export async function renewMember(id: number, input: RenewMemberInput) {
         amount: money(member.commissionAmount ?? 0),
         currency: member.currency,
         status: "pending",
+        paymentId: payment!.id,
         note: `Commission — ${member.name} (renewal: ${plan.name})`,
       });
     }
