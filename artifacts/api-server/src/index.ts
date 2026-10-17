@@ -82,6 +82,35 @@ async function ensureProductionLedgerSchema(): Promise<void> {
   logger.info("Production accounting schema and journal protections verified");
 }
 
+/**
+ * Older Oxygen Gym databases may have source receipts in payments/sales and
+ * cash_ledger but no matching double-entry journal. Restore ONLY records
+ * independently corroborated by matching legacy cash movements, and only
+ * after the versioned migration has completed its own cutover.
+ *
+ * A skipped/failed recovery must not take the gym offline; ledger-health
+ * continues to expose missing source journals until they are resolved.
+ */
+async function recoverVerifiedHistoricalCash(): Promise<void> {
+  if (!env.isProduction) return;
+
+  const script = path.resolve(process.cwd(), "lib/db/scripts/restore-verifiable-legacy-cash.mjs");
+  logger.info("Checking historical membership/POS cash journals against legacy evidence");
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(process.execPath, [script], {
+      cwd: process.cwd(),
+      env: process.env,
+      stdio: "inherit",
+    });
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      if (code === 0) resolve();
+      else reject(new Error(`Historical cash recovery failed (exit ${code ?? "none"}, signal ${signal ?? "none"})`));
+    });
+  });
+}
+
 function closeHttpServer(server: Server): Promise<void> {
   return new Promise((resolve, reject) => {
     server.close((error) => {
@@ -141,6 +170,14 @@ async function startServer(): Promise<void> {
   // Financial mutation routes use the idempotency table before their domain
   // writes run. Repair legacy production databases before accepting traffic.
   await ensureFinancialIdempotencyInfrastructure();
+
+  // Idempotent, evidence-gated, append-only journals. Never synthesize a cash
+  // balance or block the API when historical cash evidence is insufficient.
+  try {
+    await recoverVerifiedHistoricalCash();
+  } catch (error) {
+    logger.error({ err: error }, "Historical cash recovery did not complete; accounting health will retain unresolved discrepancies");
+  }
 
   const server = app.listen(env.port);
   // Render recommends longer keep-alive/header windows for Node services behind
