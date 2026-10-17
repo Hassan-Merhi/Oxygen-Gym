@@ -58,7 +58,7 @@ export interface HealthCheck {
  */
 export async function getLedgerHealth(executor: DbExecutor = db) {
   const rate = await getExchangeRate(executor);
-  const [trial, unbalanced, cash, stockValue, inventoryBook, payables, payablesBook] = await Promise.all([
+  const [trial, unbalanced, cash, stockValue, inventoryBook, payables, payablesBook, missingMemberships, missingSales] = await Promise.all([
     getTrialBalance(undefined, executor),
     executor.execute(sql`
       SELECT journal_id FROM accounting_entries GROUP BY journal_id
@@ -70,8 +70,39 @@ export async function getLedgerHealth(executor: DbExecutor = db) {
     accountBalance("Inventory", "debit", executor),
     getOpenPayables(rate, executor),
     accountBalance("Supplier Payables", "credit", executor),
+    // Reconciled journals can be balanced yet still omit completed receipts.
+    // Check source documents against all members of their posting/reversal family.
+    executor.execute(sql`
+      SELECT COUNT(*) AS total FROM payments p
+      WHERE p.status = 'completed' AND p.category = 'membership'
+        AND p.direction = 'in' AND p.amount > 0
+        AND lower(replace(trim(COALESCE(NULLIF(p.account, ''), 'cash')), '_', ' '))
+            IN ('cash', 'cash account', 'physical cash')
+        AND NOT EXISTS (
+          SELECT 1 FROM accounting_entries e
+          WHERE e.source_id = p.id
+            AND e.source_type IN (
+              'payment', 'payment_correction', 'payment_reversal',
+              'payment_void', 'void_payment'
+            )
+        )
+    `),
+    executor.execute(sql`
+      SELECT COUNT(*) AS total FROM sales s
+      WHERE s.status = 'completed' AND s.total_amount > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM accounting_entries e
+          WHERE e.source_id = s.id
+            AND e.source_type IN (
+              'sale', 'sale_correction', 'sale_reversal',
+              'sale_void', 'void_sale'
+            )
+        )
+    `),
   ]);
   const unbalancedJournals = (unbalanced.rows as Array<{ journal_id: string }>).map((row) => row.journal_id);
+  const unpostedMemberships = Number((missingMemberships.rows[0] as { total?: unknown } | undefined)?.total ?? 0);
+  const unpostedSales = Number((missingSales.rows[0] as { total?: unknown } | undefined)?.total ?? 0);
 
   const checks: HealthCheck[] = [
     {
@@ -89,6 +120,26 @@ export async function getLedgerHealth(executor: DbExecutor = db) {
       actual: unbalancedJournals.length,
       difference: unbalancedJournals.length,
       message: unbalancedJournals.length === 0 ? "Every journal balances." : `Unbalanced journals: ${unbalancedJournals.join(", ")}`,
+    },
+    {
+      key: "membership_receipts_posted",
+      ok: unpostedMemberships === 0,
+      expected: 0,
+      actual: unpostedMemberships,
+      difference: unpostedMemberships,
+      message: unpostedMemberships === 0
+        ? "All completed cash membership receipts have matching journal entries."
+        : `${unpostedMemberships} completed cash membership receipts have no payment journal. Run the cash reconciliation before making adjustments.`,
+    },
+    {
+      key: "pos_sales_posted",
+      ok: unpostedSales === 0,
+      expected: 0,
+      actual: unpostedSales,
+      difference: unpostedSales,
+      message: unpostedSales === 0
+        ? "All completed POS sales have matching journal entries."
+        : `${unpostedSales} completed POS sales have no sale journal. Run the cash reconciliation before making adjustments.`,
     },
     {
       key: "cash_usd_not_negative",
