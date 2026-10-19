@@ -3,7 +3,7 @@ import { whatsappChatsTable, salesTable, productsTable } from "@workspace/db/sch
 import { eq, and, gte, lte, not, isNull } from "drizzle-orm";
 import { logger } from "./logger";
 import { ACCOUNTS } from "./accounting";
-import { getCashMovements, summarizeMovements } from "./ledger";
+import { getCashMovements, getCurrentBalance, summarizeMovements } from "./ledger";
 import { businessDateKey, lubumbashiTodayEnd, lubumbashiTodayStart } from "./timezone";
 import { getProfitAndLoss } from "../domains/accounting/ledger-reports";
 
@@ -242,7 +242,7 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const dayEnd = lubumbashiTodayEnd();
   const lubDateStr = businessDateKey(new Date());
 
-  const [pnl, cashToday, todaySales] = await Promise.all([
+  const [pnl, cashToday, todaySales, drawerBalance] = await Promise.all([
     getProfitAndLoss({ from: dayStart, to: dayEnd }),
     getCashMovements({ dateFrom: dayStart, dateTo: dayEnd }),
     // Full sale rows with JSONB items (for product breakdown display only)
@@ -253,6 +253,7 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
         gte(salesTable.saleDate, dayStart),
         lte(salesTable.saleDate, dayEnd),
       )),
+    getCurrentBalance(),
   ]);
 
   // ── Memberships: Membership Revenue posted today ──────────────────────────
@@ -287,8 +288,11 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
   const sales    = productLines.filter(p => p.currency === "USD").reduce((a, p) => a + p.total, 0);
   const salesCdf = productLines.filter(p => p.currency === "CDF").reduce((a, p) => a + p.total, 0);
 
-  // ── Remaining = cash in − cash out today (matches Net Today in the Cash Book)
-  const remaining = cashSummary.netBookUsd;
+  // ── Remaining cash is the running drawer balance, not today’s net flow. ──
+  // The business day resets at 21:00, but cash carried forward (including
+  // opening/cutover entries) must still appear in the morning WhatsApp report.
+  // Match the Accounts page USD-equivalent drawer balance at the current FX rate.
+  const remaining = drawerBalance.balanceUsd;
 
   const [year, month, day] = lubDateStr.split("-");
   const friendlyDate = `${day}/${month}/${year}`;
