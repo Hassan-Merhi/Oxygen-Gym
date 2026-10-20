@@ -23,7 +23,9 @@ export function scheduleBackgroundJobs(): void {
       if (lubumbashiHour !== configuredHour) return;
 
       logger.info({ lubumbashiHour }, "Running daily cash summary WhatsApp job");
-      await sendDailySummaryNow();
+      // At exactly 21:00 the business-day helpers roll over. Send the full
+      // period that just closed, not the empty period beginning now.
+      await sendDailySummaryNow({ lastCompletedBusinessDay: true });
     } catch (err) {
       logger.error({ err }, "Daily cash summary job failed");
     }
