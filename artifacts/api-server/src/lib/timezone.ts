@@ -32,6 +32,24 @@ export function lubumbashiBusinessDayBounds(now: Date = new Date()): { start: Da
   return { start, end };
 }
 
+/**
+ * The scheduled 21:00 WhatsApp closeout belongs to the business day that JUST
+ * ended. At 21:00 the normal "today" helpers have already moved to the next
+ * business day, so using them directly would show zero for the closeout.
+ *
+ * Manual/on-demand previews can still use the ongoing business day.
+ */
+export function dailySummaryBusinessDay(
+  now: Date = new Date(),
+  lastCompleted = false,
+): { start: Date; end: Date; dateKey: string } {
+  const reportAt = lastCompleted
+    ? new Date(lubumbashiBusinessDayBounds(now).start.getTime() - 1)
+    : now;
+  const { start, end } = lubumbashiBusinessDayBounds(reportAt);
+  return { start, end, dateKey: businessDateKey(reportAt) };
+}
+
 /** Start of the current business day (21:00 local), as a UTC instant. */
 export function lubumbashiTodayStart(now: Date = new Date()): Date {
   return lubumbashiBusinessDayBounds(now).start;

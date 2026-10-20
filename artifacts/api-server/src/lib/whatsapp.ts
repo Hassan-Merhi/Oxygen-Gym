@@ -4,7 +4,7 @@ import { eq, and, gte, lte, not, isNull } from "drizzle-orm";
 import { logger } from "./logger";
 import { ACCOUNTS } from "./accounting";
 import { getCashMovements, getCurrentBalance, summarizeMovements } from "./ledger";
-import { businessDateKey, lubumbashiTodayEnd, lubumbashiTodayStart } from "./timezone";
+import { dailySummaryBusinessDay } from "./timezone";
 import { getProfitAndLoss } from "../domains/accounting/ledger-reports";
 
 const GREEN_API_BASE = "https://api.greenapi.com";
@@ -228,7 +228,7 @@ export async function getLowStockProducts(): Promise<LowStockItem[]> {
 interface ProductLine { name: string; qty: number; total: number; currency: string }
 interface ExpenseLine { desc: string; amount: number; currency: string }
 
-export async function sendDailySummaryNow(): Promise<{ memberships: number; expenses: number; sales: number; remaining: number }> {
+export async function sendDailySummaryNow(options: { lastCompletedBusinessDay?: boolean } = {}): Promise<{ memberships: number; expenses: number; sales: number; remaining: number }> {
   const settings = await db.query.settingsTable.findFirst();
   if (!settings?.greenApiInstanceId || !settings?.greenApiToken) {
     throw new Error("Green API credentials not configured");
@@ -236,11 +236,11 @@ export async function sendDailySummaryNow(): Promise<{ memberships: number; expe
 
   const { greenApiInstanceId: instanceId, greenApiToken: token } = settings;
 
-  // The report covers today's business day (21:00 → 21:00 Lubumbashi), the
-  // same day boundary as the Cash Book, Dashboard and Profit & Loss.
-  const dayStart = lubumbashiTodayStart();
-  const dayEnd = lubumbashiTodayEnd();
-  const lubDateStr = businessDateKey(new Date());
+  // At the scheduled 21:00 close, "today" already refers to tomorrow's
+  // empty business day. Report the day just closed instead.
+  // Manual requests still report the ongoing business day by default.
+  const { start: dayStart, end: dayEnd, dateKey: lubDateStr } =
+    dailySummaryBusinessDay(new Date(), options.lastCompletedBusinessDay ?? false);
 
   const [pnl, cashToday, todaySales, drawerBalance] = await Promise.all([
     getProfitAndLoss({ from: dayStart, to: dayEnd }),

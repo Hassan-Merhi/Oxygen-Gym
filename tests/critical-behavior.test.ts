@@ -16,6 +16,7 @@ import {
   subtractMoney,
 } from "../artifacts/api-server/src/shared/accounting/decimal";
 import { AddStockPurchaseBody, CreatePaymentBody, UpdatePaymentBody } from "../lib/api-zod/src/generated/api";
+import { dailySummaryBusinessDay } from "../artifacts/api-server/src/lib/timezone";
 
 function user(id: number, permissions: FeaturePermission[] = [], role = "manager"): AuthorizationUser {
   return {
@@ -147,3 +148,25 @@ test("payment contract allows the server to own the exchange rate", () => {
   );
 });
 
+
+test("scheduled 21:00 WhatsApp closeout covers the business day that just ended", () => {
+  // 19:00 UTC is 21:00 in Lubumbashi: the previous business day
+  // is 20/10/2026, NOT the just-opened 21/10/2026.
+  const cutoff = new Date("2026-10-20T19:00:00.000Z");
+  const closed = dailySummaryBusinessDay(cutoff, true);
+  assert.equal(closed.dateKey, "2026-10-20");
+  assert.equal(closed.start.toISOString(), "2026-10-19T19:00:00.000Z");
+  assert.equal(closed.end.toISOString(), "2026-10-20T18:59:59.999Z");
+
+  const current = dailySummaryBusinessDay(cutoff);
+  assert.equal(current.dateKey, "2026-10-21");
+  assert.equal(current.start.toISOString(), "2026-10-20T19:00:00.000Z");
+  assert.equal(current.end.toISOString(), "2026-10-21T18:59:59.999Z");
+});
+
+test("manual WhatsApp summary keeps the ongoing business day before cutoff", () => {
+  const beforeCutoff = new Date("2026-10-20T18:59:59.999Z");
+  const current = dailySummaryBusinessDay(beforeCutoff);
+  assert.equal(current.dateKey, "2026-10-20");
+  assert.equal(current.end.toISOString(), "2026-10-20T18:59:59.999Z");
+});
