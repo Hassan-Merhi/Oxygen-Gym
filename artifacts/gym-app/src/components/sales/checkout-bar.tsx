@@ -70,10 +70,12 @@ export function CheckoutBar({
           "sticky bottom-0 z-20 -mx-4 border-t border-border/60 bg-card/95 px-4 pt-3 shadow-[0_-8px_24px_-12px_rgb(0_0_0/0.25)] backdrop-blur",
           "pb-[max(0.75rem,env(safe-area-inset-bottom))]",
           "md:mx-0 md:rounded-2xl md:border md:pb-[max(1rem,env(safe-area-inset-bottom))] md:pt-4 md:px-4 md:bottom-2",
-          "lg:static lg:bg-card lg:shadow-sm lg:backdrop-blur-none",
+          // iPads in landscape (1024px) still need the pay button in view.
+          "xl:static xl:bg-card xl:shadow-sm xl:backdrop-blur-none",
         )}
         aria-label={t("sales.checkout")}
         role="region"
+        data-pos-checkout=""
       >
         <div className="@container">
         <div className="grid grid-cols-2 gap-3 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] @2xl:items-end">
