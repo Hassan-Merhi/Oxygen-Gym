@@ -77,7 +77,6 @@ jobs:
       UI_PASSWORD: admin123
       UI_LANGS: en,fr,ar
       UI_SHOTS_DIR: ${{ github.workspace }}/ui-shots
-      NODE_PATH: ${{ runner.temp }}/playwright/node_modules
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -92,8 +91,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Playwright and Chromium
         run: |
-          npm install --prefix "${{ runner.temp }}/playwright" --no-save playwright@1.56.1
-          "${{ runner.temp }}/playwright/node_modules/.bin/playwright" install --with-deps chromium
+          npm install --prefix "$RUNNER_TEMP/playwright" --no-save playwright@1.56.1
+          "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install --with-deps chromium
       - name: Apply migrations to fresh PostgreSQL
         run: pnpm run db:migrate
       - name: Build the web app and API
@@ -108,7 +107,7 @@ jobs:
       - name: Seed demo data through the API
         run: node tests/ui-seed.mjs
       - name: Phone, iPad and desktop layout checks (en, fr, ar)
-        run: node tests/ui-responsive.mjs
+        run: NODE_PATH="$RUNNER_TEMP/playwright/node_modules" node tests/ui-responsive.mjs
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
