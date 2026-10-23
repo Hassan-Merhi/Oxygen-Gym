@@ -370,8 +370,17 @@ export async function cancelPayment(id: number, actor: string) {
       .set({ status: "cancelled" })
       .where(and(eq(commissionsTable.paymentId, id), eq(commissionsTable.status, "pending")));
 
+    // Cancelling the only receipt of a membership undoes the registration.
+    // A member with another completed membership receipt stays active.
     if (existing.category === "membership" && existing.memberId) {
-      await tx.update(membersTable).set({ status: "archived", deletedAt: new Date() }).where(eq(membersTable.id, existing.memberId));
+      const [remaining] = await tx.select({ total: count() }).from(paymentsTable).where(and(
+        eq(paymentsTable.memberId, existing.memberId),
+        eq(paymentsTable.category, "membership"),
+        eq(paymentsTable.status, "completed"),
+      ));
+      if (Number(remaining?.total ?? 0) === 0) {
+        await tx.update(membersTable).set({ status: "archived", deletedAt: new Date() }).where(eq(membersTable.id, existing.memberId));
+      }
     }
     return payment;
   });
