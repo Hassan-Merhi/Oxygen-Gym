@@ -10,7 +10,6 @@ import { badRequest, notFound } from "../../shared/http/errors";
 import {
   asRecord,
   nonNegativeNumber,
-  optionalDate,
   optionalString,
   parseId,
   parseLimit,
@@ -26,6 +25,7 @@ import {
   voidSale,
   type SaleLineInput,
 } from "./service";
+import { rangeEnd, rangeStart } from "../accounting/report-dates";
 
 const router = Router();
 router.use(requireAuth());
@@ -42,15 +42,15 @@ router.get("/lookup-barcode", async (req, res) => {
 
 router.get("/", async (req, res) => {
   const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListSalesQueryParams);
-  const dateTo = optionalDate(query.dateTo, "dateTo");
-  if (dateTo) dateTo.setHours(23, 59, 59, 999);
+  // Business days run 21:00 to 21:00 Lubumbashi, like every report.
+  const dateTo = rangeEnd(query.dateTo);
   const result = await listSales({
     page: parsePage(query.page),
     limit: parseLimit(query.limit),
     search: optionalString(query.search),
     status: optionalString(query.status),
     currency: optionalString(query.currency),
-    dateFrom: optionalDate(query.dateFrom, "dateFrom"),
+    dateFrom: rangeStart(query.dateFrom),
     dateTo,
   });
   res.json(redactFinancialFieldsForRequest(req, result));

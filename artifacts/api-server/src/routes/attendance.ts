@@ -7,6 +7,7 @@ import { checkInsTable, membersTable } from "@workspace/db/schema";
 import { eq, and, gte, lte, desc, count, sql } from "drizzle-orm";
 import { lubumbashiTodayStart, lubumbashiTodayEnd } from "../lib/timezone";
 import { sqlRows } from "../lib/sql-rows";
+import { rangeEnd, rangeStart } from "../domains/accounting/report-dates";
 
 const router = Router();
 router.use(requireAuth());
@@ -213,8 +214,8 @@ router.get("/list", async (req: Request, res: Response) => {
   const limitNum = Math.min(200, Math.max(1, parseInt(q.limit ?? "50")));
   const offset = (pageNum - 1) * limitNum;
 
-  const fromDate = q.from ? new Date(q.from) : daysAgo(30);
-  const toDate = q.to ? (() => { const d = new Date(q.to!); d.setHours(23, 59, 59, 999); return d; })() : lubumbashiTodayEnd();
+  const fromDate = rangeStart(q.from, "from") ?? daysAgo(30);
+  const toDate = rangeEnd(q.to, "to") ?? lubumbashiTodayEnd();
 
   const memberSearch = q.memberSearch?.trim() || null;
   const planName = q.planName?.trim() || null;

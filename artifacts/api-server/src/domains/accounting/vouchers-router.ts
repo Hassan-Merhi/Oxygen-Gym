@@ -17,6 +17,7 @@ import {
   requiredString,
 } from "../../shared/http/validation";
 import { cancelVoucher, createVoucher, getVoucher, listVouchers, updateVoucher, type UpdateVoucherInput } from "./voucher-service";
+import { rangeEnd, rangeStart } from "./report-dates";
 
 const router = Router();
 router.use(requireAuth());
@@ -35,8 +36,8 @@ function nullablePositiveInt(value: unknown, field: string): number | null | und
 
 router.get("/", async (req, res) => {
   const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListVouchersQueryParams);
-  const dateTo = optionalDate(query.dateTo, "dateTo");
-  if (dateTo) dateTo.setHours(23, 59, 59, 999);
+  // Business days run 21:00 to 21:00 Lubumbashi, like every report.
+  const dateTo = rangeEnd(query.dateTo);
   const [result, rate] = await Promise.all([
     listVouchers({
       page: parsePage(query.page),
@@ -44,7 +45,7 @@ router.get("/", async (req, res) => {
       search: optionalString(query.search),
       voucherType: optionalString(query.voucherType),
       currency: optionalString(query.currency),
-      dateFrom: optionalDate(query.dateFrom, "dateFrom"),
+      dateFrom: rangeStart(query.dateFrom),
       dateTo,
     }),
     getExchangeRate(),
