@@ -372,7 +372,7 @@ export async function cancelPayment(id: number, actor: string) {
 
     // Cancelling the only receipt of a membership undoes the registration.
     // A member with another completed membership receipt stays active.
-    if (existing.category === "membership" && existing.memberId) {
+    if (existing.category === "membership" && existing.status === "completed" && existing.memberId) {
       const [remaining] = await tx.select({ total: count() }).from(paymentsTable).where(and(
         eq(paymentsTable.memberId, existing.memberId),
         eq(paymentsTable.category, "membership"),
