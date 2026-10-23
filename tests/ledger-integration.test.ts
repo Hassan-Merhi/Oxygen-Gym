@@ -97,6 +97,26 @@ test("payments post, correct and cancel through balanced journals", { skip }, as
   await assertBooksAgree("after payments");
 });
 
+test("cancelling one membership receipt keeps a member who has another", { skip }, async () => {
+  const { db, membersTable, pool } = m.dbModule;
+  const memberRow = async (id: number) =>
+    (await pool.query("SELECT status, deleted_at FROM members WHERE id = $1", [id])).rows[0] as { status: string; deleted_at: Date | null };
+  const [member] = await db.insert(membersTable).values({ name: "Receipt Test Member", status: "active" }).returning();
+  const receipt = { direction: "in" as const, category: "membership", currency: "USD", memberId: member!.id, memberName: member!.name };
+  const first = await m.payments.createPayment({ ...receipt, amount: 30 }, ACTOR);
+  const duplicate = await m.payments.createPayment({ ...receipt, amount: 30 }, ACTOR);
+
+  await m.payments.cancelPayment(duplicate!.id, ACTOR);
+  let row = await memberRow(member!.id);
+  assert.equal(row.status, "active", "a duplicate receipt's cancel leaves the member active");
+  assert.equal(row.deleted_at, null);
+
+  await m.payments.cancelPayment(first!.id, ACTOR);
+  row = await memberRow(member!.id);
+  assert.equal(row.status, "archived", "cancelling the last receipt undoes the registration");
+  await assertBooksAgree("after membership receipt cancels");
+});
+
 test("stock, sales and supplier balances stay in step with the ledger", { skip }, async () => {
   const { product } = await m.inventory.createProduct({ name: `Test bar ${Date.now()}`, quantity: 10, costPrice: 2, sellingPrice: 5, currency: "USD" }, ACTOR);
   const purchase = await m.inventory.addStockPurchase(product.id, { quantityAdded: 5, costPerUnit: 2, supplier: "Acme", paidFromCash: false }, ACTOR);

@@ -441,9 +441,9 @@ function MonthSection({ month, locale, t }: { month: FinancialMonth; locale: str
               <p className="truncate font-medium">{transaction.description || accountLabel(transaction.category, t)}</p>
               <p className="truncate text-xs text-muted-foreground">{formatDateKey(transaction.dateKey, locale)} · {accountLabel(transaction.category, t)}{transaction.reference ? ` · ${transaction.reference}` : ""}</p>
             </div>
-            <div className={`shrink-0 text-end tabular-nums ${transaction.kind === "expense" ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-              <p className="font-semibold">{transaction.kind === "expense" ? "−" : "+"}${fmtUsd(transaction.amountUsd)}</p>
-              <p className="text-xs">{transaction.kind === "expense" ? "−" : "+"}FC {fmtFc(transaction.amountCdf)}</p>
+            <div className={`shrink-0 text-end tabular-nums ${effectClass(transaction)}`}>
+              <p className="font-semibold"><span dir="ltr">{profitEffectText(transaction, "amountUsd", "$", fmtUsd)}</span></p>
+              <p className="text-xs"><span dir="ltr">{profitEffectText(transaction, "amountCdf", "FC ", fmtFc)}</span></p>
             </div>
           </li>
         ))}
@@ -490,10 +490,7 @@ function DayRows({
         </td>
       </tr>
       {transactions.map((transaction) => {
-        const sign = transaction.kind === "expense" ? "-" : "+";
-        const amountClass = transaction.kind === "expense"
-          ? "text-rose-600 dark:text-rose-400"
-          : "text-emerald-600 dark:text-emerald-400";
+        const amountClass = effectClass(transaction);
         return (
           <tr key={transaction.id} className="border-t border-border/40 hover:bg-muted/15">
             <td className="px-5 py-3 text-xs text-muted-foreground">{transaction.reference}</td>
@@ -508,10 +505,10 @@ function DayRows({
               )}
             </td>
             <td className={`px-4 py-3 text-end font-semibold tabular-nums ${amountClass}`}>
-              {sign}${fmtUsd(transaction.amountUsd)}
+              <span dir="ltr">{profitEffectText(transaction, "amountUsd", "$", fmtUsd)}</span>
             </td>
             <td className={`px-5 py-3 text-end tabular-nums ${amountClass}`}>
-              {sign}FC {fmtFc(transaction.amountCdf)}
+              <span dir="ltr">{profitEffectText(transaction, "amountCdf", "FC ", fmtFc)}</span>
             </td>
           </tr>
         );
@@ -561,6 +558,32 @@ function formatDateKey(dateKey: string, locale: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+/**
+ * A line's effect on profit: revenue adds, expense subtracts. A reversal is
+ * stored as a negative amount, so a voided sale shows as a minus on revenue
+ * and a voided cost as a plus, never as "+$-12.00".
+ */
+function profitEffect(transaction: FinancialTransaction, field: "amountUsd" | "amountCdf"): number {
+  const amount = Number(transaction[field] ?? 0);
+  return transaction.kind === "expense" ? -amount : amount;
+}
+
+function profitEffectText(
+  transaction: FinancialTransaction,
+  field: "amountUsd" | "amountCdf",
+  prefix: string,
+  formatter: (value: number) => string,
+): string {
+  const effect = profitEffect(transaction, field);
+  return `${effect < 0 ? "−" : "+"}${prefix}${formatter(Math.abs(effect))}`;
+}
+
+function effectClass(transaction: FinancialTransaction): string {
+  return profitEffect(transaction, "amountUsd") < 0
+    ? "text-rose-600 dark:text-rose-400"
+    : "text-emerald-600 dark:text-emerald-400";
 }
 
 function formatSignedMoney(value: number, prefix: string, formatter: (value: number) => string): string {

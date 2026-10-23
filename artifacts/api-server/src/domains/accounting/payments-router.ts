@@ -26,6 +26,7 @@ import {
   updatePayment,
   type UpdatePaymentInput,
 } from "./payment-service";
+import { rangeEnd, rangeStart } from "./report-dates";
 
 const router = Router();
 router.use(requireAuth());
@@ -63,8 +64,8 @@ router.get("/summary", async (_req, res) => {
 
 router.get("/", async (req, res) => {
   const query = contractQueryAs<Record<string, string | undefined>>(req, ApiContracts.ListPaymentsQueryParams);
-  const dateTo = optionalDate(query.dateTo, "dateTo");
-  if (dateTo) dateTo.setHours(23, 59, 59, 999);
+  // Business days run 21:00 to 21:00 Lubumbashi, like every report.
+  const dateTo = rangeEnd(query.dateTo);
   const [result, rate] = await Promise.all([
     listPayments({
       page: parsePage(query.page),
@@ -73,7 +74,7 @@ router.get("/", async (req, res) => {
       direction: optionalString(query.direction),
       category: optionalString(query.category),
       currency: optionalString(query.currency),
-      dateFrom: optionalDate(query.dateFrom, "dateFrom"),
+      dateFrom: rangeStart(query.dateFrom),
       dateTo,
       sortOrder: query.sortOrder === "asc" ? "asc" : "desc",
     }),

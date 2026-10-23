@@ -10,7 +10,7 @@
     "contracts:check": "tsx ./src/check-contract-drift.ts",
     "test:critical": "tsx --test ../tests/critical-behavior.test.ts ../tests/mobile-navigation-i18n.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:ledger": "tsx --test ../tests/ledger-integration.test.ts"
+    "test:ledger": "tsx --test ../tests/ledger-integration.test.ts ../tests/legacy-restore.test.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",

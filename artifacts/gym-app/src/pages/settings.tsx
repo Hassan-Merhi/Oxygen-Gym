@@ -790,16 +790,17 @@ export default function Settings() {
                 <CardHeader><CardTitle className="text-base">{t("settings.backup")}</CardTitle></CardHeader>
                 <CardContent className="space-y-5">
                   <FormField control={form.control} name="backupEnabled" render={({ field }) => (
-                    <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                      <div>
-                        <FormLabel className="text-sm font-medium">{t("settings.backupEnabled")}</FormLabel>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value === "true"}
-                          onCheckedChange={(v) => field.onChange(v ? "true" : "false")}
-                        />
-                      </FormControl>
+                    <FormItem className="space-y-0">
+                      {/* The whole row is the switch's label, so it is a full-size touch target. */}
+                      <label className="flex min-h-11 cursor-pointer items-center justify-between rounded-lg border p-3">
+                        <span className="text-sm font-medium">{t("settings.backupEnabled")}</span>
+                        <FormControl>
+                          <Switch
+                            checked={field.value === "true"}
+                            onCheckedChange={(v) => field.onChange(v ? "true" : "false")}
+                          />
+                        </FormControl>
+                      </label>
                     </FormItem>
                   )} />
                   {backupEnabled === "true" && (

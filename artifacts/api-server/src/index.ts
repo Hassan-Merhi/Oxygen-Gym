@@ -31,7 +31,6 @@ async function ensureProductionLedgerSchema(): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(process.execPath, [migrationScript], {
       cwd: process.cwd(),
-      env: process.env,
       stdio: "inherit",
     });
     child.once("error", reject);
@@ -100,7 +99,6 @@ async function recoverVerifiedHistoricalCash(): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(process.execPath, [script], {
       cwd: process.cwd(),
-      env: process.env,
       stdio: "inherit",
     });
     child.once("error", reject);

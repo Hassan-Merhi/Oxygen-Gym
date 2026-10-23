@@ -170,3 +170,22 @@ test("manual WhatsApp summary keeps the ongoing business day before cutoff", () 
   assert.equal(current.dateKey, "2026-10-20");
   assert.equal(current.end.toISOString(), "2026-10-20T18:59:59.999Z");
 });
+
+test("list date filters use the 21:00 Lubumbashi business day like the reports", async () => {
+  const { rangeEnd, rangeStart } = await import("../artifacts/api-server/src/domains/accounting/report-dates");
+  // 23/10/2026 runs from 22/10 21:00 to 23/10 21:00 Lubumbashi (UTC+2).
+  assert.equal(rangeStart("2026-10-23")!.toISOString(), "2026-10-22T19:00:00.000Z");
+  assert.equal(rangeEnd("2026-10-23")!.toISOString(), "2026-10-23T18:59:59.999Z");
+
+  const { readFileSync } = await import("node:fs");
+  for (const file of [
+    "artifacts/api-server/src/domains/accounting/payments-router.ts",
+    "artifacts/api-server/src/domains/accounting/vouchers-router.ts",
+    "artifacts/api-server/src/domains/sales/router.ts",
+    "artifacts/api-server/src/domains/payroll/router.ts",
+    "artifacts/api-server/src/routes/attendance.ts",
+  ]) {
+    const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /setHours\(23/, `${file} must not end a filter at server midnight`);
+  }
+});

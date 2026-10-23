@@ -4,7 +4,8 @@
  *
  * Visits every main page at phone / tablet / desktop widths in several languages,
  * saves a screenshot, and fails when the page scrolls horizontally, when visible
- * text is smaller than 12px, or (on touch viewports) when controls are under 44px.
+ * text is smaller than 12px, (on touch viewports) when controls are under 44px,
+ * or when the POS checkout is out of view below 1280px with a product in the cart.
  *
  * Needs a running API serving the built UI and the `playwright` package resolvable
  * through NODE_PATH (it is not a workspace dependency):
@@ -12,6 +13,8 @@
  *   NODE_PATH=/opt/node-tools/node_modules \
  *   UI_BASE_URL=http://localhost:8090 UI_USER=admin UI_PASSWORD=admin123 \
  *   UI_SHOTS_DIR=/tmp/ui-shots node tests/ui-responsive.mjs
+ *
+ * Seed a fresh database first with `node tests/ui-seed.mjs` (CI does) so pages have data.
  *
  * Optional: UI_LANGS=en,ar,fr  UI_PAGES=/dashboard,/sales  UI_VIEWPORTS=390x844,1024x768  UI_THEME=dark
  *           CHROMIUM_PATH=/opt/pw-browsers/chromium/chrome-linux/chrome
@@ -40,7 +43,8 @@ const VIEWPORTS = (process.env.UI_VIEWPORTS ?? "390x844,768x1024,1024x768,1440x9
   return { width, height, touch: width < 1280 };
 });
 const PAGES = (process.env.UI_PAGES ??
-  "/dashboard,/members,/members-overview,/members/1,/plans,/staff,/stock,/supplements,/sales,/attendance,/notifications,/settings,/does-not-exist")
+  "/dashboard,/members,/members-overview,/members/1,/plans,/staff,/stock,/supplements,/sales,/attendance,/notifications,/settings," +
+  "/payments,/accounts,/financials,/audit,/period-reset,/does-not-exist")
   .split(",").filter(Boolean);
 
 mkdirSync(SHOTS, { recursive: true });
@@ -52,6 +56,15 @@ const login = await fetch(`${BASE}/api/auth/login`, {
 }).then((r) => r.json());
 if (!login?.token) {
   console.error("Login failed", login);
+  process.exit(2);
+}
+
+// A product in stock, so the POS check can put something in the cart.
+const stock = await fetch(`${BASE}/api/stock`, { headers: { authorization: `Bearer ${login.token}` } }).then((r) => r.json());
+const stockRows = Array.isArray(stock) ? stock : (stock?.items ?? []);
+const cartProduct = process.env.UI_SALES_PRODUCT ?? stockRows.find((row) => Number(row.quantity) > 0)?.name;
+if (PAGES.includes("/sales") && !cartProduct) {
+  console.error("No product in stock: the POS cart cannot be exercised. Run tests/ui-seed.mjs first.");
   process.exit(2);
 }
 
@@ -77,13 +90,16 @@ for (const lang of LANGS) {
     for (const route of PAGES) {
       await page.goto(`${BASE}${route}`, { waitUntil: "networkidle" });
       await page.waitForTimeout(400);
-      if (route === "/sales" && process.env.UI_SALES_BARCODE !== "") {
-        // Put something in the cart so the POS layout is exercised.
-        const barcode = page.locator("input.font-mono").first();
-        if (await barcode.count()) {
-          await barcode.fill(process.env.UI_SALES_BARCODE ?? "1234567890123");
-          await barcode.press("Enter");
-          await page.waitForTimeout(600);
+      let checkoutOutOfView = false;
+      if (route === "/sales" && cartProduct) {
+        // Put a real product in the cart so the cart and checkout layouts are exercised.
+        await page.locator('input[type=search][role=combobox]').first().fill(cartProduct);
+        await page.locator('[role=listbox] [role=option] button').first().click();
+        await page.waitForTimeout(400);
+        // Below 1280px the checkout stays pinned to the bottom of the screen.
+        if (vp.width < 1280) {
+          const box = await page.locator("[data-pos-checkout]").boundingBox();
+          checkoutOutOfView = !box || box.y + box.height > vp.height + 1 || box.y < 0;
         }
       }
       const metrics = await page.evaluate(() => {
@@ -134,10 +150,10 @@ for (const lang of LANGS) {
       });
       const name = `${THEME === "dark" ? "dark-" : ""}${lang}-${vp.width}x${vp.height}-${route.replace(/\W+/g, "_").replace(/^_/, "") || "root"}.png`;
       await page.screenshot({ path: path.join(SHOTS, name), fullPage: true });
-      const ok = metrics.rendered && metrics.overflow <= 0;
+      const ok = metrics.rendered && metrics.overflow <= 0 && metrics.tiny.length === 0 && metrics.smallCount === 0 && !checkoutOutOfView;
       results.push({ lang, viewport: `${vp.width}x${vp.height}`, route, ...metrics, ok, shot: name });
-      console.log(`${ok ? "ok  " : "FAIL"} ${lang} ${vp.width}x${vp.height} ${route} overflow=${metrics.overflow}${metrics.rendered ? "" : " NOT-RENDERED"}${metrics.tiny.length ? ` tiny=${metrics.tiny.length}` : ""}${metrics.smallCount ? ` small=${metrics.smallCount}` : ""}`);
-      if (!ok) console.log("     ", metrics.offenders.join("\n      "));
+      console.log(`${ok ? "ok  " : "FAIL"} ${lang} ${vp.width}x${vp.height} ${route} overflow=${metrics.overflow}${metrics.rendered ? "" : " NOT-RENDERED"}${checkoutOutOfView ? " CHECKOUT-OUT-OF-VIEW" : ""}${metrics.tiny.length ? ` tiny=${metrics.tiny.length}` : ""}${metrics.smallCount ? ` small=${metrics.smallCount}` : ""}`);
+      if (!ok) console.log("     ", [...metrics.offenders, ...metrics.tiny, ...metrics.small].join("\n      "));
     }
     await context.close();
   }
@@ -145,5 +161,5 @@ for (const lang of LANGS) {
 await browser.close();
 writeFileSync(path.join(SHOTS, "results.json"), JSON.stringify(results, null, 2));
 const failed = results.filter((r) => !r.ok);
-console.log(`\n${results.length - failed.length}/${results.length} page/viewport/language combinations without horizontal scroll.`);
+console.log(`\n${results.length - failed.length}/${results.length} page/viewport/language combinations pass (no sideways scroll, no tiny text, touch-size controls, POS checkout in view).`);
 process.exit(failed.length ? 1 : 0);
